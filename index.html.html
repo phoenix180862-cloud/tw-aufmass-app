@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Aufmaß-App · Willwacher Fliesenlegermeister</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════
+   DESIGN SYSTEM – Construction Industry
+   Industrial dark · Safety orange · Blueprint
+   ═══════════════════════════════════════ */
+:root {
+  --bg-base: #0d1117;
+  --bg-surface: #161b22;
+  --bg-elevated: #1c2333;
+  --bg-card: #1a2030;
+  --border: #2a3444;
+  --border-focus: #f06820;
+  --accent: #f06820;
+  --accent-bright: #ff7e33;
+  --accent-glow: rgba(240,104,32,0.25);
+  --accent-subtle: rgba(240,104,32,0.08);
+  --red: #e63312;
+  --red-glow: rgba(230,51,18,0.3);
+  --green: #34d399;
+  --green-dim: #059669;
+  --blue: #38bdf8;
+  --yellow: #fbbf24;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --danger: #f85149;
+  --r: 10px;
+  --r-lg: 14px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:16px;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:var(--bg-base);
+  color:var(--text);
+  min-height:100vh;
+  min-height:100dvh;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+input,select,button,textarea{font-family:inherit}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+
+/* ═══ APP SHELL ═══ */
+#app{
+  max-width:440px;
+  margin:0 auto;
+  min-height:100vh;min-height:100dvh;
+  position:relative;
+  background:var(--bg-base);
+  /* Blueprint grid subtle background */
+  background-image:
+    linear-gradient(rgba(56,189,248,0.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(56,189,248,0.02) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+
+/* ═══ TOPBAR NAV ═══ */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  background:var(--bg-surface);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:90;
+  backdrop-filter:blur(12px);
+  min-height:50px;
+}
+.topbar-btn{
+  width:38px;height:38px;border:none;border-radius:8px;
+  background:var(--bg-elevated);color:var(--text);
+  font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+.topbar-btn:hover{background:var(--border)}
+.topbar-btn:disabled{opacity:.25;cursor:default}
+.topbar-title{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:600;font-size:13px;
+  text-transform:uppercase;letter-spacing:2px;
+  color:var(--text-secondary);
+}
+.topbar-live{display:flex;gap:3px;align-items:center}
+.live-dot{
+  width:8px;height:8px;border-radius:50%;
+  border:1.5px solid var(--bg-surface);
+}
+.live-dot.on{background:var(--green)}
+.live-dot.idle{background:var(--yellow)}
+.live-dot.off{background:var(--text-muted)}
+
+/* ═══ PAGE CONTAINER ═══ */
+.page-wrap{
+  padding:16px 14px 32px;
+  animation:pgSlide .3s ease-out;
+  min-height:calc(100vh - 50px);
+  min-height:calc(100dvh - 50px);
+}
+@keyframes pgSlide{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* ═══ HOMEPAGE ═══ */
+.homepage{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:calc(100vh - 50px);
+  padding:30px 16px 40px;
+  position:relative;
+}
+.homepage::before{
+  content:'';position:absolute;
+  top:-30%;left:-20%;width:140%;height:80%;
+  background:radial-gradient(ellipse at center,var(--red-glow) 0%,transparent 65%);
+  opacity:.12;pointer-events:none;
+}
+
+/* Logo Recreation */
+.logo-wrap{text-align:center;position:relative;z-index:1;margin-bottom:6px}
+.logo-thomas{
+  font-family:'DM Sans',sans-serif;
+  font-size:15px;font-weight:600;font-style:italic;
+  color:var(--text);letter-spacing:3px;
+  display:inline-flex;align-items:center;gap:7px;
+}
+.logo-diamond{
+  width:12px;height:12px;background:var(--red);
+  transform:rotate(45deg);border-radius:1.5px;
+  display:inline-block;
+}
+.logo-name{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800;font-size:54px;line-height:1;
+  letter-spacing:-0.5px;
+  margin-top:-2px;
+}
+.logo-name .ll{
+  font-size:72px;position:relative;top:5px;
+  text-shadow:3px 3px 0 var(--red);
+}
+.logo-sub{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:600;font-size:17px;
+  color:var(--red);letter-spacing:4px;
+  margin-top:1px;
+}
+.logo-desc{
+  font-size:11.5px;color:var(--text-secondary);
+  margin-top:6px;letter-spacing:.8px;
+}
+.logo-addr{
+  font-size:11px;color:var(--text-muted);
+  margin-top:14px;line-height:1.7;
+}
+
+/* KUNDE BUTTON – the centerpiece */
+.kunde-btn{
+  margin-top:36px;width:210px;height:210px;
+  border-radius:50%;cursor:pointer;
+  border:2.5px solid var(--red);
+  background:radial-gradient(circle at 40% 35%,var(--bg-elevated) 0%,var(--bg-base) 100%);
+  color:var(--text);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;
+  position:relative;z-index:1;
+  box-shadow:0 0 50px var(--red-glow),inset 0 0 40px rgba(0,0,0,.4);
+  transition:all .25s cubic-bezier(.4,0,.2,1);
+}
+.kunde-btn:hover{
+  transform:scale(1.06);
+  box-shadow:0 0 70px var(--red-glow),inset 0 0 40px rgba(0,0,0,.4);
+}
+.kunde-btn:active{transform:scale(.96)}
+.kunde-btn .k-icon{font-size:44px}
+.kunde-btn .k-label{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;font-size:28px;letter-spacing:5px;
+  text-transform:uppercase;
+}
+.kunde-btn .k-sub{font-size:10.5px;color:var(--text-secondary);letter-spacing:1px}
+.kunde-pulse{
+  position:absolute;width:210px;height:210px;
+  border-radius:50%;border:1.5px solid var(--red);
+  animation:kpulse 2.2s ease-out infinite;
+  pointer-events:none;
+}
+@keyframes kpulse{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.45);opacity:0}}
+
+.home-footer{
+  margin-top:36px;display:flex;gap:20px;
+  align-items:center;font-size:10.5px;color:var(--text-muted);
+  position:relative;z-index:1;
+}
+.home-footer .hf-dot{
+  width:6px;height:6px;border-radius:50%;
+  display:inline-block;margin-right:5px;
+}
+
+/* ═══ AUTH MODAL ═══ */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.82);
+  display:flex;align-items:center;justify-content:center;
+  z-index:500;animation:fadeIn .25s ease;
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.auth-box{
+  background:var(--bg-surface);border-radius:var(--r-lg);
+  padding:28px;width:88%;max-width:340px;text-align:center;
+  border:1px solid var(--border);box-shadow:var(--shadow-lg);
+}
+.auth-box h3{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;margin-bottom:10px}
+.auth-box p{color:var(--text-secondary);font-size:13.5px;margin-bottom:20px;line-height:1.55}
+.g-btn{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  width:100%;padding:13px;border:none;border-radius:8px;
+  background:#4285f4;color:#fff;font-size:15px;font-weight:600;
+  cursor:pointer;transition:all .2s;
+}
+.g-btn:hover{background:#3367d6}
+.spinner{
+  width:36px;height:36px;
+  border:3px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;
+  margin:18px auto;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ═══ SECTION HELPERS ═══ */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sec-head h2{font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:700;letter-spacing:.5px}
+.badge{
+  background:var(--accent);color:#fff;font-size:10.5px;
+  font-weight:700;padding:3px 9px;border-radius:20px;
+}
+.path-bar{
+  display:flex;align-items:center;gap:6px;
+  font-size:11.5px;color:var(--text-muted);
+  padding:7px 11px;background:var(--bg-surface);
+  border-radius:7px;margin-bottom:14px;
+}
+.path-bar .hi{color:var(--accent)}
+
+/* Search */
+.search-box{position:relative;margin-bottom:14px}
+.search-box input{
+  width:100%;padding:11px 14px 11px 38px;
+  border:1px solid var(--border);border-radius:8px;
+  background:var(--bg-surface);color:var(--text);
+  font-size:13.5px;transition:all .2s;
+}
+.search-box input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.search-box .si{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:14px}
+
+/* ═══ CUSTOMER LIST ═══ */
+.cust-list{display:flex;flex-direction:column;gap:7px}
+.cust-card{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 14px;background:var(--bg-card);
+  border:1px solid var(--border);border-radius:var(--r);
+  cursor:pointer;transition:all .2s;
+}
+.cust-card:hover{border-color:var(--accent);background:var(--bg-elevated);transform:translateX(3px)}
+.cust-icon{
+  width:42px;height:42px;background:var(--accent-subtle);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;
+}
+.cust-info{flex:1;min-width:0}
+.cust-name{font-weight:600;font-size:13.5px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cust-proj{font-size:11.5px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cust-arr{color:var(--text-muted);font-size:16px}
+
+/* ═══ IMPORT SCREEN ═══ */
+.import-center{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:calc(100vh - 90px);text-align:center;
+}
+.prog-wrap{width:100%;max-width:280px;margin:20px 0}
+.prog-bar{height:5px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;margin-bottom:10px}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--accent));border-radius:3px;transition:width .5s ease}
+.imp-list{text-align:left;width:100%;max-width:280px}
+.imp-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12.5px;color:var(--text-muted)}
+.imp-item.done{color:var(--green)}
+.imp-item.now{color:var(--text)}
+
+/* ═══ PROJECT HEADER CARD ═══ */
+.proj-card{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:14px;margin-bottom:14px;
+  border:1px solid var(--border);
+  border-left:3px solid var(--accent);
+}
+.proj-name{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;margin-bottom:3px}
+.proj-det{font-size:11.5px;color:var(--text-secondary);line-height:1.5}
+.stats-row{display:flex;gap:7px;margin-top:10px}
+.stat-box{
+  flex:1;padding:8px 6px;background:var(--bg-base);
+  border-radius:7px;text-align:center;
+}
+.stat-val{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--accent)}
+.stat-lbl{font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* ═══ PARTICIPANTS ═══ */
+.part-panel{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:12px;margin-bottom:14px;border:1px solid var(--border);
+}
+.part-title{
+  font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;
+  color:var(--text-muted);text-transform:uppercase;letter-spacing:1.5px;
+  margin-bottom:8px;
+}
+.part-row{display:flex;align-items:center;gap:9px;padding:6px 0}
+.part-av{
+  width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;flex-shrink:0;
+}
+.part-info{flex:1}
+.part-name{font-size:12.5px;font-weight:600}
+.part-role{font-size:10.5px;color:var(--text-muted)}
+.part-st{font-size:9.5px;padding:2px 7px;border-radius:8px;font-weight:600}
+.st-on{background:rgba(52,211,153,.15);color:var(--green)}
+.st-idle{background:rgba(251,191,36,.15);color:var(--yellow)}
+
+/* ═══ ROOM CARDS ═══ */
+.room-card{
+  display:flex;align-items:center;gap:11px;
+  padding:12px;background:var(--bg-card);
+  border:1px solid var(--border);border-radius:var(--r);
+  cursor:pointer;transition:all .2s;margin-bottom:7px;
+}
+.room-card:hover{border-color:var(--accent);transform:translateX(3px)}
+.room-card.done{border-left:3px solid var(--green)}
+.room-ic{
+  width:40px;height:40px;background:var(--bg-base);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:18px;
+}
+.room-info{flex:1}
+.room-nm{font-weight:600;font-size:13.5px}
+.room-st{font-size:11.5px;color:var(--text-secondary)}
+.room-ct{font-size:10.5px;color:var(--text-muted);margin-top:1px}
+
+.add-room-btn{
+  width:100%;padding:13px;
+  border:2px dashed var(--border);border-radius:var(--r);
+  background:transparent;color:var(--text-secondary);
+  font-size:13.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  margin-top:7px;transition:all .2s;
+}
+.add-room-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ═══ ACTION BUTTONS ═══ */
+.btn-accent{
+  width:100%;padding:13px;border:none;border-radius:var(--r);
+  background:linear-gradient(135deg,var(--red) 0%,var(--accent) 100%);
+  color:#fff;font-family:'Barlow Condensed',sans-serif;
+  font-size:15px;font-weight:700;letter-spacing:2.5px;
+  text-transform:uppercase;cursor:pointer;
+  transition:all .2s;box-shadow:0 3px 14px var(--accent-glow);
+}
+.btn-accent:hover{transform:translateY(-1.5px);box-shadow:0 5px 20px var(--accent-glow)}
+.btn-accent:active{transform:translateY(0)}
+.btn-accent.green{
+  background:linear-gradient(135deg,var(--green-dim),var(--green));
+  box-shadow:0 3px 14px rgba(52,211,153,.25);
+}
+.btn-outline{
+  width:100%;padding:13px;border:1.5px solid var(--accent);
+  border-radius:var(--r);background:transparent;
+  color:var(--accent);font-family:'Barlow Condensed',sans-serif;
+  font-size:15px;font-weight:700;letter-spacing:2.5px;
+  text-transform:uppercase;cursor:pointer;transition:all .2s;
+}
+.btn-outline:hover{background:var(--accent-subtle)}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.btn-row>*{flex:1}
+
+/* ═══ ROOM SHEET ═══ */
+.room-hdr{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:12px;margin-bottom:10px;border:1px solid var(--border);
+}
+.room-hdr-row{display:flex;align-items:center;justify-content:space-between}
+.room-title-inp{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:20px;font-weight:700;background:transparent;
+  border:none;color:var(--text);width:65%;
+}
+.room-title-inp:focus{outline:none;border-bottom:2px solid var(--accent)}
+.room-shape-tag{font-size:11px;color:var(--text-muted);padding:3px 8px;background:var(--bg-base);border-radius:5px}
+
+/* Drawing */
+.room-dwg{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:14px;margin-bottom:10px;
+  border:1px solid var(--border);position:relative;
+}
+.dwg-label{position:absolute;top:7px;left:10px;font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
+
+/* Photos */
+.photo-row{
+  display:flex;gap:7px;overflow-x:auto;
+  padding:10px 0;margin-bottom:10px;
+  -webkit-overflow-scrolling:touch;
+}
+.photo-th{
+  width:66px;height:66px;border-radius:8px;
+  background:var(--bg-card);border:1px solid var(--border);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:10px;color:var(--text-muted);cursor:pointer;
+  transition:all .2s;overflow:hidden;
+}
+.photo-th:hover{border-color:var(--accent)}
+.photo-th.taken{border-color:var(--green);background:rgba(52,211,153,.05)}
+.photo-th.add-ph{border:1.5px dashed var(--border);font-size:20px}
+
+/* Mic */
+.mic-strip{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;background:var(--bg-card);
+  border-radius:var(--r);margin-bottom:10px;
+  border:1px solid var(--border);
+}
+.mic-btn{
+  width:46px;height:46px;border-radius:50%;
+  border:2px solid var(--border);background:var(--bg-base);
+  color:var(--text);font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;position:relative;flex-shrink:0;
+}
+.mic-btn.on{
+  border-color:var(--red);background:var(--red);color:#fff;
+  animation:micPulse 1.4s ease-in-out infinite;
+}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 0 var(--red-glow)}50%{box-shadow:0 0 0 10px transparent}}
+.mic-txt{flex:1;font-size:12.5px;color:var(--text-secondary)}
+.mic-txt.on{color:var(--red);font-weight:600}
+.mic-wave{display:flex;gap:2px;align-items:center;height:22px}
+.mic-wave .wb{width:3px;background:var(--red);border-radius:2px;animation:wv .55s ease-in-out infinite}
+.mic-wave .wb:nth-child(2){animation-delay:.08s}
+.mic-wave .wb:nth-child(3){animation-delay:.16s}
+.mic-wave .wb:nth-child(4){animation-delay:.24s}
+.mic-wave .wb:nth-child(5){animation-delay:.12s}
+@keyframes wv{0%,100%{height:5px}50%{height:18px}}
+
+/* Measure Section */
+.m-sec{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:12px;margin-bottom:10px;
+  border:1px solid var(--border);
+}
+.m-title{
+  font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:600;
+  color:var(--text-muted);text-transform:uppercase;letter-spacing:1.5px;
+  margin-bottom:10px;display:flex;align-items:center;gap:7px;
+}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.m-field{display:flex;flex-direction:column;gap:3px}
+.m-field.full{grid-column:1/-1}
+.m-field label{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px}
+.m-field input,.m-field select{
+  padding:9px 10px;border:1px solid var(--border);
+  border-radius:7px;background:var(--bg-base);color:var(--text);
+  font-size:14.5px;font-family:'IBM Plex Mono',monospace;
+  transition:all .2s;
+}
+.m-field input:focus,.m-field select:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 2.5px var(--accent-glow);
+}
+
+/* Deduction rows */
+.ded-row{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 10px;background:var(--bg-base);
+  border-radius:7px;margin-bottom:6px;
+}
+.ded-row .ded-sign{font-size:15px;font-weight:800;min-width:14px;text-align:center}
+.ded-row .ded-sign.minus{color:var(--danger)}
+.ded-row .ded-sign.plus{color:var(--green)}
+.ded-row .ded-type{font-size:11px;font-weight:600;min-width:58px;color:var(--text-secondary)}
+.ded-row input{
+  flex:1;padding:7px;border:1px solid var(--border);
+  border-radius:5px;background:var(--bg-surface);color:var(--text);
+  font-size:13px;font-family:'IBM Plex Mono',monospace;min-width:0;
+}
+.ded-row input:focus{outline:none;border-color:var(--accent)}
+.ded-row .ded-val{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;
+  color:var(--accent);min-width:58px;text-align:right;
+}
+.ded-x{font-size:11px;color:var(--text-muted)}
+.del-btn{
+  width:24px;height:24px;border:none;border-radius:50%;
+  background:rgba(248,81,73,.12);color:var(--danger);
+  font-size:12px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.del-btn:hover{background:rgba(248,81,73,.25)}
+.add-btn{
+  width:100%;padding:7px;
+  border:1px dashed var(--border);border-radius:6px;
+  background:transparent;color:var(--text-muted);
+  font-size:11.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:all .2s;margin-top:3px;
+}
+.add-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Completed positions */
+.cp-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 10px;background:var(--bg-base);
+  border-radius:7px;margin-bottom:3px;
+  border-left:2.5px solid var(--green);
+}
+.cp-num{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);min-width:40px}
+.cp-name{flex:1;font-size:11.5px;color:var(--text-secondary)}
+.cp-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600}
+
+/* Calc section */
+.calc-sec{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:12px;margin-bottom:10px;
+  border:1px solid var(--border);
+  border-top:2px solid var(--accent);
+}
+.calc-head{
+  font-family:'Barlow Condensed',sans-serif;font-size:12px;
+  color:var(--accent);text-transform:uppercase;
+  letter-spacing:1.5px;margin-bottom:8px;font-weight:700;
+}
+.calc-desc{font-size:11.5px;color:var(--text-secondary);margin-bottom:8px;font-style:italic}
+.calc-line{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:3px 0;font-family:'IBM Plex Mono',monospace;font-size:12px;
+}
+.calc-line .cl-label{color:var(--text-secondary);flex:1}
+.calc-line .cl-formula{color:var(--text);font-size:11px;margin-right:8px}
+.calc-line .cl-val{min-width:72px;text-align:right;color:var(--text)}
+.calc-line.sub .cl-val{color:var(--danger)}
+.calc-line.add .cl-val{color:var(--green)}
+.calc-hr{border:none;border-top:1px solid var(--border);margin:7px 0}
+.calc-total{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:7px 0;font-family:'IBM Plex Mono',monospace;
+  font-size:15px;font-weight:700;
+}
+.calc-total .ct-label{color:var(--text)}
+.calc-total .ct-val{color:var(--accent)}
+
+/* Position modal */
+.pos-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.82);
+  z-index:200;display:flex;align-items:flex-end;justify-content:center;
+  animation:fadeIn .2s ease;
+}
+.pos-sheet{
+  background:var(--bg-base);width:100%;max-width:440px;
+  max-height:78vh;border-radius:var(--r-lg) var(--r-lg) 0 0;
+  overflow:hidden;animation:sheetUp .3s ease;
+}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.pos-sheet-hdr{
+  padding:14px;background:var(--bg-surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.pos-sheet-hdr h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700}
+.pos-close{
+  width:30px;height:30px;border:none;border-radius:50%;
+  background:var(--bg-base);color:var(--text);
+  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.pos-list{overflow-y:auto;max-height:calc(78vh - 56px);padding:6px}
+.pos-item{
+  display:flex;align-items:center;gap:10px;padding:11px;
+  border-radius:8px;cursor:pointer;transition:all .15s;
+  border:1px solid transparent;
+}
+.pos-item:hover{background:var(--bg-surface);border-color:var(--border)}
+.pos-item.sel{background:var(--accent-subtle);border-color:var(--accent)}
+.pos-item .pn{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--accent);min-width:40px}
+.pos-item .pi{flex:1}
+.pos-item .pi-name{font-size:12.5px;font-weight:500}
+.pos-item .pi-sub{font-size:10.5px;color:var(--text-muted)}
+.pos-item .pi-check{font-size:14px;color:var(--green)}
+
+/* Summary */
+.sum-card{
+  background:var(--bg-card);border-radius:var(--r);
+  padding:12px;margin-bottom:8px;border:1px solid var(--border);
+}
+.sum-card h4{font-family:'Barlow Condensed',sans-serif;font-size:14px;margin-bottom:6px;font-weight:700}
+.sum-pos{
+  display:flex;justify-content:space-between;padding:5px 0;
+  font-size:12px;border-bottom:1px solid rgba(255,255,255,.03);
+}
+.sum-pos:last-child{border:none}
+.sum-pos .sn{font-family:'IBM Plex Mono',monospace;color:var(--accent);min-width:44px}
+.sum-pos .sl{flex:1;color:var(--text-secondary)}
+.sum-pos .sv{font-family:'IBM Plex Mono',monospace;font-weight:600;min-width:72px;text-align:right}
+
+/* Export */
+.exp-opt{
+  display:flex;align-items:center;gap:12px;
+  padding:14px;background:var(--bg-card);
+  border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:8px;transition:all .2s;
+}
+.exp-opt:hover{border-color:var(--accent);transform:translateX(3px)}
+.exp-ic{
+  width:44px;height:44px;background:var(--accent-subtle);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:22px;
+}
+.exp-info{flex:1}
+.exp-title{font-weight:600;font-size:13px}
+.exp-desc{font-size:11px;color:var(--text-secondary);margin-top:1px}
+
+/* Modal */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.78);
+  z-index:300;display:flex;align-items:center;justify-content:center;
+  animation:fadeIn .2s ease;
+}
+.modal-box{
+  background:var(--bg-surface);border-radius:var(--r-lg);
+  padding:22px;width:88%;max-width:340px;
+  border:1px solid var(--border);
+}
+.modal-box h3{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;margin-bottom:14px}
+.modal-box input,.modal-box select{
+  width:100%;padding:11px;border:1px solid var(--border);
+  border-radius:7px;background:var(--bg-base);color:var(--text);
+  font-size:14px;margin-bottom:12px;
+}
+.modal-box input:focus,.modal-box select:focus{outline:none;border-color:var(--accent)}
+
+/* Toast */
+.toast-msg{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--green);color:#000;padding:10px 22px;
+  border-radius:var(--r);font-size:13.5px;font-weight:600;
+  z-index:999;animation:toastUp .3s ease;
+  box-shadow:0 4px 18px rgba(0,0,0,.4);max-width:88%;
+  white-space:nowrap;
+}
+@keyframes toastUp{from{transform:translateX(-50%) translateY(50px);opacity:0}}
+
+/* Wall seg */
+.wseg-row{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.wseg-label{font-size:11px;color:var(--text-muted);min-width:52px}
+.wseg-inp{
+  flex:1;padding:7px;border:1px solid var(--border);border-radius:5px;
+  background:var(--bg-base);color:var(--text);font-size:13px;
+  font-family:'IBM Plex Mono',monospace;
+}
+.wseg-inp:focus{outline:none;border-color:var(--accent)}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script>
+window.onerror=function(msg,src,line,col,err){
+  var el=document.getElementById('err-display');
+  if(!el){el=document.createElement('div');el.id='err-display';el.style.cssText='color:#ff6b6b;font-family:monospace;padding:30px;white-space:pre-wrap;font-size:13px;max-width:90vw;word-break:break-all;position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;z-index:99999;overflow:auto';document.body.appendChild(el);}
+  el.innerHTML+='<h3 style="color:#f06820;margin:10px 0 5px">Fehler</h3>'
+    +'<b>Msg:</b> '+String(msg).substring(0,500)+'\n'
+    +'<b>Src:</b> '+String(src).substring(0,200)+'\n'
+    +'<b>Line:</b> '+line+':'+col+'\n'
+    +'<b>Stack:</b> '+(err&&err.stack?String(err.stack).substring(0,800):'---')+'\n\n';
+  return true;
+};
+window.addEventListener('unhandledrejection',function(e){
+  var el=document.getElementById('err-display');
+  if(!el){el=document.createElement('div');el.id='err-display';el.style.cssText='color:#ff6b6b;font-family:monospace;padding:30px;white-space:pre-wrap;font-size:13px;max-width:90vw;word-break:break-all;position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;z-index:99999;overflow:auto';document.body.appendChild(el);}
+  el.innerHTML+='<h3 style="color:#f06820">Unhandled Promise</h3><pre>'+String(e.reason).substring(0,500)+'</pre>\n';
+});
+setTimeout(function(){
+  var app=document.getElementById('app');
+  if(app&&(!app.innerHTML||app.innerHTML.length<50)){
+    var el=document.getElementById('err-display');
+    if(!el){el=document.createElement('div');el.id='err-display';el.style.cssText='color:#ff6b6b;font-family:monospace;padding:30px;white-space:pre-wrap;font-size:13px;position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;z-index:99999;overflow:auto';document.body.appendChild(el);}
+    el.innerHTML+='<h3 style="color:#fbbf24">App nicht gerendert nach 5s</h3>'
+      +'<p>Babel hat moeglicherweise einen Kompilierungsfehler. Bitte Browser-Konsole pruefen (F12 > Console).</p>'
+      +'<p>App-Container innerHTML: ['+app.innerHTML.substring(0,200)+']</p>';
+  }
+},5000);
+</script>
+<script id="app-source" type="text/plain">
+const {useState,useEffect,useRef,useCallback} = React;
+
+/* ══════════════════════════════════════════
+   DEMO DATA – Realistic construction projects
+   ══════════════════════════════════════════ */
+const KUNDEN = [
+  {id:1,name:"Heinrich Haus gGmbH",projekt:"Neubau Wohnanlage, Neuwieder Str. 23a/b, 56566 Neuwied",kontakt:"Herr Müller",tel:"0261-12345",bauleitung:"Dipl.-Ing. Schmidt",architekt:"Architekturbüro Weber",dateien:8},
+  {id:2,name:"Stadt Montabaur",projekt:"Sanierung Hallenbad, Schwimmbadstr. 5, 56410 Montabaur",kontakt:"Frau Becker",tel:"02602-67890",bauleitung:"Ing. Hoffmann",architekt:"Planungsbüro Krämer",dateien:12},
+  {id:3,name:"VG Hachenburg",projekt:"Erweiterungsbau Grundschule, Schulstr. 12, 57627 Hachenburg",kontakt:"Herr Fischer",tel:"02662-54321",bauleitung:"Bauamt VG Hachenburg",architekt:"Architekten Braun & Partner",dateien:6},
+  {id:4,name:"Caritasverband Westerwald",projekt:"Umbau Seniorenheim, Am Park 8, 56457 Westerburg",kontakt:"Frau Schneider",tel:"02663-98765",bauleitung:"Ing. Wolf",architekt:"Büro Schäfer Architekten",dateien:9},
+  {id:5,name:"Kreisverwaltung Altenkirchen",projekt:"Neubau Verwaltungsgebäude, Parkstr. 1, 57610 Altenkirchen",kontakt:"Herr Wagner",tel:"02681-11223",bauleitung:"Dipl.-Ing. Braun",architekt:"Architekturbüro Hartmann",dateien:11},
+];
+
+const LV_POS = [
+  {nr:"01.01",name:"Bodenfliesen 30×60",desc:"Feinsteinzeug 30×60 cm, rutschhemmend R10, Dünnbett",einheit:"m²",menge:245,kat:"boden"},
+  {nr:"01.02",name:"Bodenfliesen 60×60",desc:"Feinsteinzeug 60×60 cm, poliert, Dünnbett",einheit:"m²",menge:180,kat:"boden"},
+  {nr:"02.01",name:"Wandfliesen 30×60",desc:"Steingut 30×60 cm, glasiert, Dünnbett",einheit:"m²",menge:520,kat:"wand"},
+  {nr:"02.02",name:"Wandfliesen 20×40",desc:"Steingut 20×40 cm, matt glasiert, Dünnbett",einheit:"m²",menge:85,kat:"wand"},
+  {nr:"03.01",name:"Sockelfliesen",desc:"Sockelfliesen 10×30 cm, passend zu Bodenfliese",einheit:"m",menge:320,kat:"laenge"},
+  {nr:"04.01",name:"Fliesenspiegel Küche",desc:"Wandfliesen 60 cm hoch, inkl. Abschlussprofil",einheit:"m²",menge:35,kat:"wand"},
+  {nr:"05.01",name:"Abdichtung Boden",desc:"Verbundabdichtung DIN 18534 Nassbereich",einheit:"m²",menge:95,kat:"boden"},
+  {nr:"05.02",name:"Abdichtung Wand",desc:"Verbundabdichtung Dusch-/Wannenbereich",einheit:"m²",menge:120,kat:"wand"},
+  {nr:"06.01",name:"Verfugung Boden",desc:"Epoxidharzmörtel, Fugenbreite 3 mm",einheit:"m²",menge:245,kat:"boden"},
+  {nr:"06.02",name:"Verfugung Wand",desc:"Zementfugmörtel, Fugenbreite 2 mm",einheit:"m²",menge:520,kat:"wand"},
+  {nr:"07.01",name:"Silikon-Dehnfugen",desc:"Dauerelastische Verfugung, Sanitärsilikon",einheit:"m",menge:185,kat:"laenge"},
+  {nr:"08.01",name:"Gefälleestrich Dusche",desc:"Gefälle 2% zum Ablauf",einheit:"m²",menge:12,kat:"boden"},
+  {nr:"09.01",name:"Entkopplungsmatte",desc:"Rissüberbrückung unter Fliesen",einheit:"m²",menge:180,kat:"boden"},
+  {nr:"10.01",name:"Naturstein Fensterbänke",desc:"Poliert, inkl. Aufmaß und Montage",einheit:"Stk",menge:24,kat:"stueck"},
+];
+
+/* ══════════════════════════════════════════
+   MAIN APP
+   ══════════════════════════════════════════ */
+function App(){
+  // === STATE ===
+  const [pg,setPg]=useState('home');
+  const [hist,setHist]=useState([]);
+  const [toast,setToast]=useState(null);
+  // Auth
+  const [authShow,setAuthShow]=useState(false);
+  const [authSt,setAuthSt]=useState('ask');
+  const [authed,setAuthed]=useState(false);
+  // Customer
+  const [kunde,setKunde]=useState(null);
+  const [suche,setSuche]=useState('');
+  const [impProg,setImpProg]=useState(0);
+  const [impSt,setImpSt]=useState(0);
+  // Rooms
+  const [raeume,setRaeume]=useState([]);
+  const [aktRaum,setAktRaum]=useState(null);
+  const [neuModal,setNeuModal]=useState(false);
+  const [neuName,setNeuName]=useState('');
+  const [neuForm,setNeuForm]=useState('rechteck');
+  // Measurements
+  const [mass,setMass]=useState({l:'',b:'',h:'',fh:'',segs:[]});
+  const [polyPts,setPolyPts]=useState(null); // draggable polygon points [{x,y},...]
+  const dragRef=React.useRef({idx:-1,svgRect:null});
+  const svgRef=React.useRef(null);
+  const [abz,setAbz]=useState([]);
+  const [zur,setZur]=useState([]);
+  // Positions
+  const [posShow,setPosShow]=useState(false);
+  const [selPos,setSelPos]=useState(null);
+  const [fertigPos,setFertigPos]=useState([]);
+  // Mic
+  const [micAn,setMicAn]=useState(false);
+  const [micTxt,setMicTxt]=useState('');
+  const recRef=useRef(null);
+  // Photos
+  const [fotos,setFotos]=useState([]);
+  // Overall
+  const [gesamt,setGesamt]=useState([]);
+
+  // === ENTER-TASTE → NÄCHSTES EINGABEFELD (global) ===
+  useEffect(()=>{
+    const handler=(e)=>{
+      if(e.key!=='Enter')return;
+      const tag=e.target.tagName.toLowerCase();
+      if(tag!=='input'&&tag!=='select')return;
+      // Nicht bei Buttons oder Suche in Modals
+      if(e.target.type==='button'||e.target.type==='submit')return;
+      e.preventDefault();
+      const container=document.getElementById('app');
+      const felder=[...container.querySelectorAll(
+        'input[type="number"],input[type="text"],input:not([type]),select'
+      )].filter(el=>!el.disabled&&el.offsetParent!==null&&!el.closest('.modal-bg')&&!el.closest('.overlay'));
+      const idx=felder.indexOf(e.target);
+      if(idx>=0&&idx<felder.length-1){
+        felder[idx+1].focus();
+        if(felder[idx+1].type==='number'||felder[idx+1].type==='text'||!felder[idx+1].type){
+          felder[idx+1].select();
+        }
+      } else if(idx===felder.length-1){
+        // Letztes Feld: Blur um Tastatur zu schließen
+        e.target.blur();
+      }
+    };
+    document.addEventListener('keydown',handler);
+    return()=>document.removeEventListener('keydown',handler);
+  },[]);
+
+  // === NAVIGATION ===
+  const nav=useCallback(p=>{setHist(h=>[...h,pg]);setPg(p)},[pg]);
+  const back=useCallback(()=>{if(hist.length){setPg(hist.at(-1));setHist(h=>h.slice(0,-1))}},[hist]);
+  const msg=m=>{setToast(m);setTimeout(()=>setToast(null),2800)};
+
+  // === AUTH ===
+  const startAuth=()=>{setAuthShow(true);setAuthSt('ask')};
+  const doAuth=()=>{
+    setAuthSt('wait');
+    setTimeout(()=>{setAuthSt('ok');setAuthed(true);
+      setTimeout(()=>{setAuthShow(false);nav('kunden')},700);
+    },1800);
+  };
+
+  // === CUSTOMER ===
+  const pickKunde=k=>{
+    setKunde(k);nav('import');
+    setImpProg(0);setImpSt(0);
+    [500,1100,1700,2300,2800].forEach((d,i)=>setTimeout(()=>{setImpProg([18,42,68,88,100][i]);setImpSt(i+1)},d));
+    setTimeout(()=>{nav('raumliste');msg('✓ Kundenakte vollständig geladen')},3400);
+  };
+
+  // === ROOM ===
+  const neuerRaum=()=>{
+    if(!neuName.trim())return;
+    const r={id:Date.now(),name:neuName,form:neuForm,fertig:false,positionen:[]};
+    setRaeume(p=>[...p,r]);setNeuModal(false);setNeuName('');setNeuForm('rechteck');
+    raumOeffnen(r);
+  };
+  const raumOeffnen=r=>{
+    setAktRaum(r);
+    setMass({l:'',b:'',h:'',fh:'',segs:[]});
+    setAbz([]);setZur([]);setFertigPos([]);setSelPos(null);setFotos([]);
+    nav('raumblatt');
+  };
+
+  // === MIC ===
+  const toggleMic=()=>{
+    if(micAn){setMicAn(false);recRef.current&&recRef.current.stop();return}
+    setMicAn(true);
+    try{
+      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      if(!SR){setMicTxt('Nicht verfügbar im Browser');return}
+      const r=new SR();r.lang='de-DE';r.continuous=true;r.interimResults=true;
+      r.onresult=e=>{let t='';for(let i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;setMicTxt(t)};
+      r.onerror=()=>setMicAn(false);
+      r.start();recRef.current=r;
+    }catch(e){setMicTxt('Mikrofon-Zugriff verweigert');setMicAn(false)}
+  };
+
+  // === ABZÜGE / ZURECHNUNGEN ===
+  const addAbz=t=>setAbz(p=>[...p,{id:Date.now(),typ:t,b:'',h:'',boden:false,bez:''}]);
+  const addZur=t=>{
+    let vb='',vh='';
+    if(t==='Fensterlaibung'){
+      // Fenstermaße aus dem letzten unbenutzten Fenster-Abzug übernehmen
+      const fenster=abz.filter(d=>d.typ==='Fenster');
+      const bereitsVerknuepft=zur.filter(z=>z.typ==='Fensterlaibung').length;
+      const quellFenster=fenster[bereitsVerknuepft]||fenster[fenster.length-1];
+      if(quellFenster){vb=quellFenster.b;vh=quellFenster.h}
+    }
+    setZur(p=>[...p,{id:Date.now(),typ:t,b:vb,h:vh,t:''}]);
+  };
+  const updAbz=(id,f,v)=>setAbz(p=>p.map(x=>x.id===id?{...x,[f]:v}:x));
+  const updZur=(id,f,v)=>setZur(p=>p.map(x=>x.id===id?{...x,[f]:v}:x));
+
+  // Auto-Sync: Fenstermaße → Fensterlaibungen aktualisieren
+  useEffect(()=>{
+    const fenster=abz.filter(d=>d.typ==='Fenster');
+    const laibungen=zur.filter(z=>z.typ==='Fensterlaibung');
+    if(!fenster.length||!laibungen.length)return;
+    let changed=false;
+    const neueZur=zur.map(z=>{
+      if(z.typ!=='Fensterlaibung')return z;
+      const idx=laibungen.indexOf(z);
+      const quelle=fenster[idx]||fenster[fenster.length-1];
+      if(quelle&&(z.b!==quelle.b||z.h!==quelle.h)){
+        changed=true;
+        return{...z,b:quelle.b,h:quelle.h};
+      }
+      return z;
+    });
+    if(changed)setZur(neueZur);
+  },[abz]);
+
+  // === VOB-KONFORME BERECHNUNGEN (DIN 18352:2019-09) ===
+  // Schwellenwerte
+  const VOB_FLAECHE_GRENZE = 0.1;  // m² – Aussparungen ≤ 0,1 m² übermessen
+  const VOB_LAENGE_GRENZE = 1.0;   // m – Unterbrechungen ≤ 1,0 m übermessen
+
+  // Zusätzliche Wandlängen aus Segmenten
+  const segsSum=()=>mass.segs.reduce((s,v)=>s+(+v||0),0);
+
+  const wandF=()=>{
+    const L=+mass.l||0,B=+mass.b||0,H=+(mass.fh||mass.h)||0;
+    const grundUmfang=2*(L+B);
+    const zusatz=segsSum();
+    return (grundUmfang+zusatz)*H;
+  };
+  const bodenF=()=>{
+    // Bei Sonderformen: Grundfläche L×B als Annäherung
+    // (exakte Polygonberechnung erfordert Koordinaten, hier pragmatisch)
+    return (+mass.l||0)*(+mass.b||0);
+  };
+  const umfang=()=>{
+    const grundUmfang=2*((+mass.l||0)+(+mass.b||0));
+    return grundUmfang+segsSum();
+  };
+
+  // VOB-konformer Abzug für Flächenmaß: nur Abzüge > 0,1 m²
+  const abzSumFlaecheWand=()=>abz.reduce((s,d)=>{
+    const flaeche=(+d.b||0)*(+d.h||0);
+    return s+(flaeche>VOB_FLAECHE_GRENZE?flaeche:0); // ≤ 0,1 m² wird übermessen
+  },0);
+
+  // Boden: Türen und Fenster werden grundsätzlich NICHT abgezogen!
+  // Nur echte Bodenöffnungen (Schächte, Abläufe) > 0,1 m² werden abgezogen
+  const abzSumFlaecheBoden=()=>abz.reduce((s,d)=>{
+    if(d.typ==='Tür'||d.typ==='Fenster') return s; // KEIN Abzug bei Boden!
+    const flaeche=(+d.b||0)*(+d.h||0);
+    return s+(flaeche>VOB_FLAECHE_GRENZE?flaeche:0);
+  },0);
+
+  // Sockel/Längenmaß: Unterbrechungen ≤ 1,0 m werden übermessen
+  // Fenster: grundsätzlich KEIN Abzug beim Sockel, AUSSER bodenstehend
+  const abzSumLaenge=()=>abz.reduce((s,d)=>{
+    if(d.typ==='Fenster'&&!d.boden) return s; // Fenster nicht bodenstehend → kein Abzug
+    const breite=+d.b||0;
+    return s+(breite>VOB_LAENGE_GRENZE?breite:0); // ≤ 1,0 m wird übermessen
+  },0);
+
+  // Zurechnungen (Laibungen) – gelten nur für WAND-Positionen
+  const zurSumWand=()=>zur.reduce((s,a)=>{
+    const b=+a.b||0,h=+a.h||0,t=+a.t||0;
+    return s+(a.typ==='Fensterlaibung'||a.typ==='Türlaibung'?2*t*h+2*t*b:b*h);
+  },0);
+
+  // VOB-konformes Gesamtergebnis je nach Positionskategorie
+  const posErgebnis=()=>{
+    if(!selPos)return 0;
+    const kat=selPos.kat;
+    let base=0;
+
+    if(kat==='wand'){
+      base=wandF();
+      return Math.max(0, base - abzSumFlaecheWand() + zurSumWand());
+    }
+    if(kat==='boden'){
+      base=bodenF();
+      return Math.max(0, base - abzSumFlaecheBoden()); // KEINE Tür/Fenster-Abzüge!
+    }
+    if(kat==='laenge'){
+      base=umfang();
+      return Math.max(0, base - abzSumLaenge()); // Nur Unterbrechungen > 1,0 m
+    }
+    if(kat==='stueck'){
+      return 1; // manuell
+    }
+    return 0;
+  };
+
+  // Hilfs-Funktion: Prüft ob ein Abzug bei dieser Kategorie wirksam ist
+  const istAbzugWirksam=(d, kat)=>{
+    const flaeche=(+d.b||0)*(+d.h||0);
+    const breite=+d.b||0;
+    // BODEN: Türen und Fenster nie abziehen
+    if(kat==='boden'&&(d.typ==='Tür'||d.typ==='Fenster')) return {wirksam:false,grund:'Türen/Fenster: kein Abzug bei Boden'};
+    // WAND Flächenmaß
+    if(kat==='wand'&&flaeche<=VOB_FLAECHE_GRENZE) return {wirksam:false,grund:`≤ ${VOB_FLAECHE_GRENZE} m² → übermessen`};
+    if(kat==='wand'&&flaeche>VOB_FLAECHE_GRENZE) return {wirksam:true,grund:`> ${VOB_FLAECHE_GRENZE} m² → Abzug`};
+    // BODEN Flächenmaß (nur Sonstige)
+    if(kat==='boden'&&flaeche<=VOB_FLAECHE_GRENZE) return {wirksam:false,grund:`≤ ${VOB_FLAECHE_GRENZE} m² → übermessen`};
+    if(kat==='boden'&&flaeche>VOB_FLAECHE_GRENZE) return {wirksam:true,grund:`> ${VOB_FLAECHE_GRENZE} m² → Abzug`};
+    // SOCKEL/LÄNGE: Fenster nur wenn bodenstehend
+    if(kat==='laenge'&&d.typ==='Fenster'&&!d.boden) return {wirksam:false,grund:'Fenster nicht bodenstehend → kein Abzug'};
+    if(kat==='laenge'&&breite<=VOB_LAENGE_GRENZE) return {wirksam:false,grund:`≤ ${VOB_LAENGE_GRENZE} m → übermessen`};
+    if(kat==='laenge'&&breite>VOB_LAENGE_GRENZE) return {wirksam:true,grund:`> ${VOB_LAENGE_GRENZE} m → Abzug`};
+    return {wirksam:false,grund:'nicht relevant'};
+  };
+
+  // === POS FERTIG ===
+  const posFertig=()=>{
+    if(!selPos)return;
+    const erg=posErgebnis();
+    setFertigPos(p=>[...p,{...selPos,ergebnis:erg,raum:aktRaum.name}]);
+    setSelPos(null);
+    msg(`✓ Pos. ${selPos.nr} abgeschlossen: ${erg.toFixed(2)} ${selPos.einheit}`);
+    setTimeout(()=>setPosShow(true),350);
+  };
+
+  // === RAUM FERTIG ===
+  const raumFertig=()=>{
+    if(!aktRaum)return;
+    const res={id:aktRaum.id,name:aktRaum.name,positionen:[...fertigPos],fotos:fotos.length};
+    setGesamt(p=>[...p,res]);
+    setRaeume(p=>p.map(r=>r.id===aktRaum.id?{...r,fertig:true,positionen:fertigPos}:r));
+    setAktRaum(null);
+    msg(`✓ Raum „${res.name}" abgeschlossen – ${fertigPos.length} Positionen`);
+    nav('raumliste');
+  };
+
+  // === EXPORT ===
+  const doExport=()=>{
+    nav('exporting');
+    setTimeout(()=>{nav('exportdone');msg('✓ Aufmaß exportiert → Google Drive')},2800);
+  };
+
+  // === RESET ===
+  const resetApp=()=>{
+    setPg('home');setHist([]);setKunde(null);setRaeume([]);setGesamt([]);
+    setFertigPos([]);setSelPos(null);
+    msg('✓ App zurückgesetzt – bereit für nächstes Projekt');
+  };
+
+  /* ══════════════════════════════════════════
+     COMPONENTS
+     ══════════════════════════════════════════ */
+
+  // Logo
+  const Logo=()=>(
+    <div className="logo-wrap">
+      <div className="logo-thomas">Thomas <span className="logo-diamond"/></div>
+      <div className="logo-name"><span>wi</span><span className="ll">LL</span><span>wacher</span></div>
+      <div className="logo-sub">Fliesenlegermeister e.K.</div>
+    </div>
+  );
+
+  // TopBar
+  const TopBar=({title})=>(
+    <div className="topbar">
+      <button className="topbar-btn" onClick={back} disabled={!hist.length}>◂</button>
+      <span className="topbar-title">{title}</span>
+      <div className="topbar-live">
+        <div className="live-dot on" title="Du"/>
+        <div className="live-dot on" title="Büro"/>
+        <div className="live-dot idle" title="Bauleitung"/>
+        <div className="live-dot on" title="Architekt"/>
+      </div>
+    </div>
+  );
+
+  // === INTERACTIVE DRAGGABLE ROOM SVG ===
+  const SVG_W=300,SVG_H=200,SVG_PAD=30;
+
+  const buildInitPoly=()=>{
+    try{
+      const L=+mass.l||4,B=+mass.b||3;
+      const form=(aktRaum&&aktRaum.form)||'rechteck';
+      const segs=(mass.segs||[]).map(function(s){return +s||0}).filter(function(s){return s>0});
+      const sc=Math.min((SVG_W-2*SVG_PAD)/L,(SVG_H-2*SVG_PAD)/B)*0.6;
+      var cx=SVG_W/2,cy=SVG_H/2;
+      var hw=L*sc/2,hh=B*sc/2;
+      var pts;
+      if(form==='fuenfeck'&&segs.length>=1){
+        var c=segs[0]*sc*0.9;
+        pts=[{x:cx-hw,y:cy-hh},{x:cx+hw-c,y:cy-hh},{x:cx+hw,y:cy-hh+c},{x:cx+hw,y:cy+hh},{x:cx-hw,y:cy+hh}];
+      }else if(form==='sechseck'&&segs.length>=2){
+        var c1=segs[0]*sc*0.9,c2=segs[1]*sc*0.9;
+        pts=[{x:cx-hw,y:cy-hh},{x:cx+hw-c1,y:cy-hh},{x:cx+hw,y:cy-hh+c1},{x:cx+hw,y:cy+hh-c2},{x:cx+hw-c2,y:cy+hh},{x:cx-hw,y:cy+hh}];
+      }else if(form==='lform'){
+        var cw=(segs[0]||L*0.4)*sc,ch=(segs[1]||B*0.4)*sc;
+        pts=[{x:cx-hw,y:cy-hh},{x:cx+hw,y:cy-hh},{x:cx+hw,y:cy-hh+ch},{x:cx-hw+cw,y:cy-hh+ch},{x:cx-hw+cw,y:cy+hh},{x:cx-hw,y:cy+hh}];
+      }else{
+        pts=[{x:cx-hw,y:cy-hh},{x:cx+hw,y:cy-hh},{x:cx+hw,y:cy+hh},{x:cx-hw,y:cy+hh}];
+      }
+      return pts;
+    }catch(err){
+      console.error('buildInitPoly error:',err);
+      return [{x:60,y:40},{x:240,y:40},{x:240,y:160},{x:60,y:160}];
+    }
+  };
+
+  const segsKey=(mass.segs||[]).join(',');
+  React.useEffect(function(){
+    if(page==='raumblatt') setPolyPts(buildInitPoly());
+  },[page,mass.l,mass.b,segsKey]);
+
+  const edgeLen=function(a,b){
+    var L=+mass.l||4,B=+mass.b||3;
+    var sc=Math.min((SVG_W-2*SVG_PAD)/L,(SVG_H-2*SVG_PAD)/B)*0.6;
+    if(sc===0)return 0;
+    var dx=a.x-b.x,dy=a.y-b.y;
+    return Math.sqrt(dx*dx+dy*dy)/sc;
+  };
+
+  const startDrag=function(idx,e){
+    e.preventDefault();e.stopPropagation();
+    var svg=svgRef.current;if(!svg)return;
+    dragRef.current={idx:idx,svgRect:svg.getBoundingClientRect()};
+  };
+  const onDrag=function(e){
+    var d=dragRef.current;if(d.idx<0||!polyPts)return;
+    e.preventDefault();
+    var touch=e.touches?e.touches[0]:e;
+    var r=d.svgRect;
+    var px=(touch.clientX-r.left)/r.width*SVG_W;
+    var py=(touch.clientY-r.top)/r.height*SVG_H;
+    var cx2=Math.max(10,Math.min(SVG_W-10,px));
+    var cy2=Math.max(10,Math.min(SVG_H-10,py));
+    setPolyPts(function(prev){
+      if(!prev)return prev;
+      var np=prev.slice();np[d.idx]={x:cx2,y:cy2};return np;
+    });
+  };
+  const endDrag=function(){dragRef.current={idx:-1,svgRect:null}};
+
+  const RaumSVG=function(){
+    var pts=(polyPts&&polyPts.length>2)?polyPts:buildInitPoly();
+    var nPts=pts.length;
+
+    var edges=[];
+    for(var i=0;i<nPts;i++){
+      var a=pts[i],b=pts[(i+1)%nPts];
+      var mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      var dx=b.x-a.x,dy=b.y-a.y;
+      var len=Math.sqrt(dx*dx+dy*dy);
+      var nx=len>0?-dy/len*14:0,ny=len>0?dx/len*14:0;
+      edges.push({mx:mx,my:my,nx:nx,ny:ny,mLen:edgeLen(a,b)});
+    }
+
+    var centX=pts.reduce(function(s,p){return s+p.x},0)/nPts;
+    var centY=pts.reduce(function(s,p){return s+p.y},0)/nPts;
+    var polyStr=pts.map(function(p){return p.x+','+p.y}).join(' ');
+    var rName=(aktRaum&&aktRaum.name)||'Raum';
+
+    return React.createElement('svg',{
+      ref:svgRef,
+      viewBox:'0 0 '+SVG_W+' '+SVG_H,
+      style:{width:'100%',height:SVG_H+'px',touchAction:'none'},
+      onMouseMove:onDrag,onMouseUp:endDrag,onMouseLeave:endDrag,
+      onTouchMove:onDrag,onTouchEnd:endDrag,onTouchCancel:endDrag
+    },
+      React.createElement('defs',null,
+        React.createElement('pattern',{id:'bp',width:18,height:18,patternUnits:'userSpaceOnUse'},
+          React.createElement('path',{d:'M18 0L0 0 0 18',fill:'none',stroke:'rgba(56,189,248,.04)',strokeWidth:'.5'})
+        )
+      ),
+      React.createElement('rect',{width:SVG_W,height:SVG_H,fill:'url(#bp)'}),
+      React.createElement('polygon',{points:polyStr,fill:'rgba(240,104,32,.06)',stroke:'var(--accent)',strokeWidth:1.5,strokeLinejoin:'round'}),
+      edges.map(function(e,i){
+        var label=e.mLen>0.01?e.mLen.toFixed(2)+' m':'';
+        var wallLabel=i<2?['L','B'][i]:'S'+(i-1);
+        return React.createElement('g',{key:'e'+i},
+          React.createElement('text',{x:e.mx+e.nx,y:e.my+e.ny,textAnchor:'middle',dominantBaseline:'middle',fill:'#e6edf3',fontSize:8.5,fontFamily:'IBM Plex Mono'},label),
+          React.createElement('text',{x:e.mx+e.nx*1.7,y:e.my+e.ny*1.7,textAnchor:'middle',dominantBaseline:'middle',fill:'var(--accent)',fontSize:6.5,fontFamily:'Barlow Condensed',fontWeight:600,opacity:.5},wallLabel)
+        );
+      }),
+      pts.map(function(p,i){
+        return React.createElement('g',{key:'c'+i},
+          React.createElement('circle',{cx:p.x,cy:p.y,r:14,fill:'transparent',style:{cursor:'grab'},onMouseDown:function(e){startDrag(i,e)},onTouchStart:function(e){startDrag(i,e)}}),
+          React.createElement('circle',{cx:p.x,cy:p.y,r:5,fill:'var(--accent)',stroke:'#fff',strokeWidth:1.5,opacity:.8,style:{cursor:'grab'}}),
+          React.createElement('text',{x:p.x,y:p.y+1,textAnchor:'middle',dominantBaseline:'middle',fill:'#fff',fontSize:6,fontWeight:700,style:{pointerEvents:'none'}},i+1)
+        );
+      }),
+      abz.filter(function(d){return d.typ==='Tür'}).map(function(d,i,arr){
+        var p1=pts[nPts-1],p2=pts[0];
+        var t=(i+1)/(arr.length+1);
+        var dx2=p1.x+t*(p2.x-p1.x),dy2=p1.y+t*(p2.y-p1.y);
+        return React.createElement('g',{key:'t'+d.id},
+          React.createElement('rect',{x:dx2-8,y:dy2-2.5,width:16,height:5,fill:'var(--bg-base)',stroke:'var(--danger)',strokeWidth:1,rx:1}),
+          React.createElement('text',{x:dx2,y:dy2+11,textAnchor:'middle',fill:'var(--danger)',fontSize:7.5,fontWeight:600},'T'+(i+1))
+        );
+      }),
+      abz.filter(function(d){return d.typ==='Fenster'}).map(function(d,i,arr){
+        var p1=pts[0],p2=pts[Math.min(1,nPts-1)];
+        var t=(i+1)/(arr.length+1);
+        var wx=p1.x+t*(p2.x-p1.x),wy=p1.y+t*(p2.y-p1.y);
+        return React.createElement('g',{key:'f'+d.id},
+          React.createElement('rect',{x:wx-8,y:wy-2.5,width:16,height:5,fill:'var(--bg-base)',stroke:'var(--blue)',strokeWidth:1,rx:1}),
+          React.createElement('text',{x:wx,y:wy-7,textAnchor:'middle',fill:'var(--blue)',fontSize:7.5,fontWeight:600},'F'+(i+1)+(d.boden?' ▼':''))
+        );
+      }),
+      React.createElement('text',{x:centX,y:centY-2,textAnchor:'middle',fill:'rgba(255,255,255,.15)',fontSize:11,fontFamily:'Barlow Condensed',fontWeight:600},rName),
+      React.createElement('text',{x:centX,y:centY+10,textAnchor:'middle',fill:'rgba(255,255,255,.1)',fontSize:7,fontFamily:'IBM Plex Mono'},'h='+(mass.fh||mass.h||'?')+'m · '+nPts+'-Eck'),
+      React.createElement('text',{x:SVG_W-5,y:SVG_H-4,textAnchor:'end',fill:'rgba(255,255,255,.08)',fontSize:6.5},'Ecken ziehen zum Anpassen')
+    );
+  };
+
+  /* ══════════════════════════════════════════
+     PAGE RENDERS
+     ══════════════════════════════════════════ */
+
+  const titles={home:'Aufmaß-App',kunden:'Google Drive · Baustellen',import:'Datenimport',raumliste:'Projektübersicht',raumblatt:(aktRaum&&aktRaum.name)||'Raumblatt',uebersicht:'Gesamtübersicht',exporting:'Export läuft',exportdone:'Abgeschlossen'};
+
+  return(
+    <div id="app">
+      {pg!=='home'&&<TopBar title={titles[pg]||''}/>}
+
+      <div className={pg==='home'?'':'page-wrap'} key={pg}>
+
+      {/* ═══ HOME ═══ */}
+      {pg==='home'&&(
+        <div className="homepage">
+          <Logo/>
+          <div className="logo-desc">Verkauf und Verlegung von Fliesen und Naturstein</div>
+          <div className="logo-addr">Flurweg 14a · 56472 Nisterau<br/>Tel: 02661-63101 · Mobil: 0170-2024161<br/>info@thomas-willwacher.de</div>
+          <button className="kunde-btn" onClick={authed?()=>nav('kunden'):startAuth}>
+            <div className="kunde-pulse"/>
+            <span className="k-icon">📋</span>
+            <span className="k-label">Kunde</span>
+            <span className="k-sub">Aufmaß starten</span>
+          </button>
+          <div className="home-footer">
+            <span><span className="hf-dot" style={{background:authed?'var(--green)':'var(--text-muted)'}}/>{authed?'Drive verbunden':'Offline'}</span>
+            <span>v1.0 · Feb 2026</span>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ KUNDEN ═══ */}
+      {pg==='kunden'&&(<>
+        <div className="sec-head"><h2>Kundenauswahl</h2><span className="badge">{KUNDEN.length} Projekte</span></div>
+        <div className="path-bar">📁 Google Drive / <span className="hi">Baustellen</span></div>
+        <div className="search-box">
+          <span className="si">🔍</span>
+          <input placeholder="Kunde oder Baustelle suchen…" value={suche} onChange={e=>setSuche(e.target.value)}/>
+        </div>
+        <div className="cust-list">
+          {KUNDEN.filter(k=>k.name.toLowerCase().includes(suche.toLowerCase())||k.projekt.toLowerCase().includes(suche.toLowerCase())).map(k=>(
+            <div key={k.id} className="cust-card" onClick={()=>pickKunde(k)}>
+              <div className="cust-icon">📁</div>
+              <div className="cust-info">
+                <div className="cust-name">{k.name}</div>
+                <div className="cust-proj">{k.projekt}</div>
+              </div>
+              <span className="cust-arr">›</span>
+            </div>
+          ))}
+        </div>
+      </>)}
+
+      {/* ═══ IMPORT ═══ */}
+      {pg==='import'&&(
+        <div className="import-center">
+          <div style={{fontSize:'44px',marginBottom:'14px'}}>📥</div>
+          <h2 style={{fontFamily:'Barlow Condensed',fontSize:'19px',fontWeight:700,marginBottom:'6px'}}>Kundenakte wird geladen</h2>
+          <p style={{color:'var(--text-secondary)',fontSize:'12.5px'}}>{(kunde&&kunde.name)}</p>
+          <p style={{color:'var(--text-muted)',fontSize:'11px',marginTop:'2px'}}>{(kunde&&kunde.dateien)} Dateien im Ordner</p>
+          <div className="prog-wrap">
+            <div className="prog-bar"><div className="prog-fill" style={{width:`${impProg}%`}}/></div>
+            <div style={{fontSize:'12px',color:'var(--text-secondary)',textAlign:'center'}}>{impProg}%</div>
+          </div>
+          <div className="imp-list">
+            {['Kundenstammdaten & Kontakte','Leistungsverzeichnis (14 Positionen)','Zeichnungen, Grundrisse & Fliesenspiegel','Baustellenordner-Template (XLSX)','Daten validiert – alles bereit'].map((t,i)=>(
+              <div key={i} className={`imp-item ${impSt>i?'done':impSt===i?'now':''}`}>
+                <span>{impSt>i?'✅':impSt===i?'⏳':'⬜'}</span>{t}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ RAUMLISTE ═══ */}
+      {pg==='raumliste'&&(<>
+        <div className="proj-card">
+          <div className="proj-name">{(kunde&&kunde.name)}</div>
+          <div className="proj-det">{(kunde&&kunde.projekt)}</div>
+          <div className="proj-det" style={{marginTop:'4px'}}>
+            Bauleitung: {(kunde&&kunde.bauleitung)}<br/>
+            Architekt: {(kunde&&kunde.architekt)}<br/>
+            Kontakt: {(kunde&&kunde.kontakt)} · {(kunde&&kunde.tel)}
+          </div>
+          <div className="stats-row">
+            <div className="stat-box"><div className="stat-val">{raeume.length}</div><div className="stat-lbl">Räume</div></div>
+            <div className="stat-box"><div className="stat-val">{raeume.filter(r=>r.fertig).length}</div><div className="stat-lbl">Fertig</div></div>
+            <div className="stat-box"><div className="stat-val">{LV_POS.length}</div><div className="stat-lbl">LV-Pos.</div></div>
+          </div>
+        </div>
+
+        <div className="part-panel">
+          <div className="part-title">👥 Teilnehmer · Live-Verbindung</div>
+          {[
+            {n:'Thomas Willwacher',r:'Baustelle (Du)',c:'#e63312',s:'on'},
+            {n:'Büro Willwacher',r:'Aufmaß-Prüfung / Rechnung',c:'#34d399',s:'on'},
+            {n:(kunde&&kunde.bauleitung)||'Bauleitung',r:'Baufortschritt / Freigaben',c:'#38bdf8',s:'on'},
+            {n:(kunde&&kunde.architekt)||'Architekt',r:'Techn. Rückfragen / Pläne',c:'#fbbf24',s:'idle'},
+          ].map((p,i)=>(
+            <div key={i} className="part-row">
+              <div className="part-av" style={{background:p.c}}>{p.n[0]}</div>
+              <div className="part-info"><div className="part-name">{p.n}</div><div className="part-role">{p.r}</div></div>
+              <span className={`part-st ${p.s==='on'?'st-on':'st-idle'}`}>{p.s==='on'?'● Online':'○ Abwesend'}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="sec-head"><h2>Räume</h2></div>
+        {raeume.map(r=>(
+          <div key={r.id} className={`room-card ${r.fertig?'done':''}`} onClick={()=>!r.fertig&&raumOeffnen(r)}>
+            <div className="room-ic">{r.fertig?'✅':'🏠'}</div>
+            <div className="room-info">
+              <div className="room-nm">{r.name}</div>
+              <div className="room-st">{r.fertig?'Abgeschlossen':'In Bearbeitung'}</div>
+              {r.fertig&&<div className="room-ct">{(r.positionen&&r.positionen.length)||0} Positionen erfasst</div>}
+            </div>
+            {!r.fertig&&<span className="cust-arr">›</span>}
+          </div>
+        ))}
+        <button className="add-room-btn" onClick={()=>setNeuModal(true)}>＋ Neuen Raum anlegen</button>
+
+        {raeume.some(r=>r.fertig)&&<div style={{marginTop:'14px'}}>
+          <button className="btn-outline" onClick={()=>nav('uebersicht')} style={{marginBottom:'8px'}}>📊 Gesamtübersicht anzeigen</button>
+          {raeume.length>0&&raeume.every(r=>r.fertig)&&
+            <button className="btn-accent green" onClick={doExport}>📤 AUFMASS BEENDEN · EXPORTIEREN</button>
+          }
+        </div>}
+      </>)}
+
+      {/* ═══ RAUMBLATT ═══ */}
+      {pg==='raumblatt'&&(<>
+        {/* Header */}
+        <div className="room-hdr">
+          <div className="room-hdr-row">
+            <input className="room-title-inp" value={(aktRaum&&aktRaum.name)||''} onChange={e=>setAktRaum(p=>({...p,name:e.target.value}))} placeholder="Raumbezeichnung"/>
+            <span className="room-shape-tag">
+              {(aktRaum&&aktRaum.form)==='rechteck'?'▭ Rechteck':(aktRaum&&aktRaum.form)==='fuenfeck'?'⬠ 5-Eck':(aktRaum&&aktRaum.form)==='sechseck'?'⬡ 6-Eck':(aktRaum&&aktRaum.form)==='lform'?'⌐ L-Form':'◇ Sonder'}
+            </span>
+          </div>
+        </div>
+
+        {/* Grundriss */}
+        <div className="room-dwg">
+          <span className="dwg-label">📐 Grundriss</span>
+          <RaumSVG/>
+        </div>
+
+        {/* Fotos */}
+        <div className="photo-row">
+          {fotos.map((f,i)=><div key={i} className="photo-th taken"><span style={{fontSize:'9px'}}>📸{f}</span></div>)}
+          {['N','O','S','W'].filter(w=>!fotos.includes(w)).map(w=>(
+            <div key={w} className="photo-th" onClick={()=>{setFotos(p=>[...p,w]);msg(`📸 Wand ${w} erfasst`)}}>
+              <span style={{fontSize:'9px'}}>📷 {w}</span>
+            </div>
+          ))}
+          <div className="photo-th add-ph" onClick={()=>{setFotos(p=>[...p,`X${p.length+1}`]);msg('📸 Foto')}}>＋</div>
+        </div>
+
+        {/* Mikrofon */}
+        <div className="mic-strip">
+          <button className={`mic-btn ${micAn?'on':''}`} onClick={toggleMic}>🎤</button>
+          <div className={`mic-txt ${micAn?'on':''}`}>{micAn?'● AUFNAHME LÄUFT – Tippe zum Stoppen':'Mikrofon inaktiv – Tippe zum Starten'}</div>
+          {micAn&&<div className="mic-wave">{[1,2,3,4,5].map(i=><div key={i} className="wb" style={{animationDelay:`${i*.07}s`}}/>)}</div>}
+        </div>
+        {micTxt&&<div style={{padding:'7px 10px',background:'var(--bg-card)',borderRadius:'7px',marginBottom:'10px',fontSize:'12px',color:'var(--accent)',fontStyle:'italic',border:'1px solid var(--border)'}}>Erkannt: „{micTxt}"</div>}
+
+        {/* Raummaße */}
+        <div className="m-sec">
+          <div className="m-title">📏 Raummaße</div>
+          <div className="m-grid">
+            <div className="m-field"><label>Länge (m)</label><input type="number" step="0.01" value={mass.l} onChange={e=>setMass(p=>({...p,l:e.target.value}))} placeholder="0,00"/></div>
+            <div className="m-field"><label>Breite (m)</label><input type="number" step="0.01" value={mass.b} onChange={e=>setMass(p=>({...p,b:e.target.value}))} placeholder="0,00"/></div>
+            <div className="m-field"><label>Raumhöhe (m)</label><input type="number" step="0.01" value={mass.h} onChange={e=>setMass(p=>({...p,h:e.target.value}))} placeholder="0,00"/></div>
+            <div className="m-field"><label>Fliesenhöhe (m)</label><input type="number" step="0.01" value={mass.fh} onChange={e=>setMass(p=>({...p,fh:e.target.value}))} placeholder="= Raumhöhe"/></div>
+          </div>
+          {(aktRaum&&aktRaum.form)!=='rechteck'&&<div style={{marginTop:'10px'}}>
+            <div className="m-title">🔷 Zusätzliche Wandabschnitte</div>
+            {mass.segs.map((s,i)=>(
+              <div key={i} className="wseg-row">
+                <span className="wseg-label">Wand {i+3}</span>
+                <input className="wseg-inp" type="number" step="0.01" placeholder="Länge (m)" value={s} onChange={e=>{const ss=[...mass.segs];ss[i]=e.target.value;setMass(p=>({...p,segs:ss}))}}/>
+                <button className="del-btn" onClick={()=>setMass(p=>({...p,segs:p.segs.filter((_,j)=>j!==i)}))}>✕</button>
+              </div>
+            ))}
+            <button className="add-btn" onClick={()=>setMass(p=>({...p,segs:[...p.segs,'']}))}>＋ Wandabschnitt</button>
+          </div>}
+        </div>
+
+        {/* Abzüge */}
+        <div className="m-sec">
+          <div className="m-title">➖ Abzüge (Türen, Fenster, Öffnungen)</div>
+          {abz.map(d=>(
+            <div key={d.id} style={{padding:'8px 10px',background:'var(--bg-base)',borderRadius:'7px',marginBottom:'6px',border:'1px solid var(--border)'}}>
+              {/* Zeile 1: Typ + Bezeichnung bei Sonstige */}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:d.typ==='Sonstige'?'6px':'0'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                  <span className="ded-sign minus">−</span>
+                  <span style={{fontSize:'12px',fontWeight:700,color:'var(--text)'}}>{d.typ}{d.typ==='Sonstige'&&d.bez?` · ${d.bez}`:''}</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                  {d.typ==='Fenster'&&<label style={{display:'flex',alignItems:'center',gap:'4px',cursor:'pointer',fontSize:'9.5px',color:d.boden?'var(--yellow)':'var(--text-muted)',padding:'2px 6px',borderRadius:'4px',background:d.boden?'rgba(251,191,36,.1)':'transparent',border:`1px solid ${d.boden?'var(--yellow)':'var(--border)'}`}} onClick={()=>updAbz(d.id,'boden',!d.boden)}>
+                    <span>{d.boden?'☑':'☐'}</span> bodenstehend
+                  </label>}
+                  <button className="del-btn" onClick={()=>setAbz(p=>p.filter(x=>x.id!==d.id))}>✕</button>
+                </div>
+              </div>
+              {/* Bezeichnung für Sonstige */}
+              {d.typ==='Sonstige'&&<div style={{marginBottom:'6px'}}>
+                <input placeholder="Bezeichnung (z.B. Ablage, Schacht, Nische…)" value={d.bez||''} onChange={e=>updAbz(d.id,'bez',e.target.value)}
+                  style={{width:'100%',padding:'7px 9px',border:'1px solid var(--border)',borderRadius:'5px',background:'var(--bg-surface)',color:'var(--text)',fontSize:'12.5px'}}
+                />
+              </div>}
+              {/* Zeile 2: Maße */}
+              <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                <div style={{flex:1,display:'flex',flexDirection:'column',gap:'2px'}}>
+                  <label style={{fontSize:'9px',color:'var(--text-muted)'}}>BREITE (m)</label>
+                  <input placeholder="0,00" type="number" step="0.01" value={d.b} onChange={e=>updAbz(d.id,'b',e.target.value)}
+                    style={{padding:'8px',border:'1px solid var(--border)',borderRadius:'5px',background:'var(--bg-surface)',color:'var(--text)',fontSize:'14px',fontFamily:'IBM Plex Mono',width:'100%'}}/>
+                </div>
+                <span style={{color:'var(--text-muted)',marginTop:'14px',fontSize:'13px'}}>×</span>
+                <div style={{flex:1,display:'flex',flexDirection:'column',gap:'2px'}}>
+                  <label style={{fontSize:'9px',color:'var(--text-muted)'}}>HÖHE (m)</label>
+                  <input placeholder="0,00" type="number" step="0.01" value={d.h} onChange={e=>updAbz(d.id,'h',e.target.value)}
+                    style={{padding:'8px',border:'1px solid var(--border)',borderRadius:'5px',background:'var(--bg-surface)',color:'var(--text)',fontSize:'14px',fontFamily:'IBM Plex Mono',width:'100%'}}/>
+                </div>
+                <span style={{color:'var(--text-muted)',marginTop:'14px',fontSize:'13px'}}>=</span>
+                <div style={{minWidth:'68px',textAlign:'right',marginTop:'14px',fontFamily:'IBM Plex Mono',fontSize:'13px',fontWeight:600,color:'var(--danger)'}}>
+                  {((+d.b||0)*(+d.h||0)).toFixed(2)} m²
+                </div>
+              </div>
+              {d.typ==='Fenster'&&d.boden&&<div style={{marginTop:'5px',padding:'3px 7px',background:'rgba(251,191,36,.06)',borderRadius:'4px',fontSize:'9.5px',color:'var(--yellow)'}}>
+                ⚠ Bodenstehend: wird beim Sockel als Unterbrechung berücksichtigt (Abzug wenn {'>'} 1,0 m)
+              </div>}
+            </div>
+          ))}
+          <div style={{display:'flex',gap:'5px',marginTop:'3px'}}>
+            <button className="add-btn" onClick={()=>addAbz('Tür')} style={{flex:1}}>＋ Tür</button>
+            <button className="add-btn" onClick={()=>addAbz('Fenster')} style={{flex:1}}>＋ Fenster</button>
+            <button className="add-btn" onClick={()=>addAbz('Sonstige')} style={{flex:1}}>＋ Sonstige</button>
+          </div>
+        </div>
+
+        {/* Zurechnungen */}
+        <div className="m-sec">
+          <div className="m-title">➕ Zurechnungen (Laibungen, Zusatzflächen)</div>
+          {zur.map(a=>{
+            const istLaibung=a.typ==='Fensterlaibung'||a.typ==='Türlaibung';
+            const laibErg=istLaibung
+              ?2*(+a.t||0)*(+a.h||0)+2*(+a.t||0)*(+a.b||0)
+              :(+a.b||0)*(+a.h||0);
+            if(istLaibung){
+              // Spezial-Layout für Laibungen – größer und übersichtlicher
+              return(
+                <div key={a.id} style={{padding:'10px',background:'var(--bg-base)',borderRadius:'8px',marginBottom:'8px',border:'1px solid var(--border)'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+                    <span style={{fontSize:'12px',fontWeight:700,color:'var(--green)'}}>+ {a.typ}</span>
+                    <button className="del-btn" onClick={()=>setZur(p=>p.filter(x=>x.id!==a.id))}>✕</button>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px'}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+                      <label style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase'}}>Breite (m){a.b?' ✓':''}</label>
+                      <input type="number" step="0.01" value={a.b} onChange={e=>updZur(a.id,'b',e.target.value)}
+                        placeholder="0,00"
+                        style={{padding:'10px',border:'1px solid var(--border)',borderRadius:'6px',background:a.b?'rgba(52,211,153,.06)':'var(--bg-surface)',color:'var(--text)',fontSize:'15px',fontFamily:'IBM Plex Mono',width:'100%'}}
+                      />
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+                      <label style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase'}}>Höhe (m){a.h?' ✓':''}</label>
+                      <input type="number" step="0.01" value={a.h} onChange={e=>updZur(a.id,'h',e.target.value)}
+                        placeholder="0,00"
+                        style={{padding:'10px',border:'1px solid var(--border)',borderRadius:'6px',background:a.h?'rgba(52,211,153,.06)':'var(--bg-surface)',color:'var(--text)',fontSize:'15px',fontFamily:'IBM Plex Mono',width:'100%'}}
+                      />
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+                      <label style={{fontSize:'10px',color:'var(--accent)',textTransform:'uppercase',fontWeight:600}}>Tiefe (m) ←</label>
+                      <input type="number" step="0.01" value={a.t} onChange={e=>updZur(a.id,'t',e.target.value)}
+                        placeholder="Tiefe"
+                        autoFocus={!a.t}
+                        style={{padding:'10px',border:'1.5px solid var(--accent)',borderRadius:'6px',background:'var(--bg-surface)',color:'var(--text)',fontSize:'15px',fontFamily:'IBM Plex Mono',width:'100%',boxShadow:'0 0 0 2px var(--accent-glow)'}}
+                      />
+                    </div>
+                  </div>
+                  {(a.b&&a.h)&&<div style={{marginTop:'6px',fontSize:'10.5px',color:'var(--text-muted)'}}>
+                    Fenstermaße übernommen: {a.b}×{a.h} m → Nur Tiefe eingeben
+                  </div>}
+                  <div style={{marginTop:'8px',display:'flex',justifyContent:'space-between',alignItems:'baseline',fontFamily:'IBM Plex Mono',fontSize:'13px'}}>
+                    <span style={{color:'var(--text-secondary)',fontSize:'11px'}}>
+                      2×{a.t||'?'}×{a.h||'?'} + 2×{a.t||'?'}×{a.b||'?'}
+                    </span>
+                    <span style={{fontWeight:700,color:'var(--green)',fontSize:'14px'}}>+ {laibErg.toFixed(2)} m²</span>
+                  </div>
+                </div>
+              );
+            }
+            // Normales Layout für sonstige Zurechnungen
+            return(
+              <div key={a.id} className="ded-row">
+                <span className="ded-sign plus">+</span>
+                <span className="ded-type">{a.typ}</span>
+                <input placeholder="B" type="number" step="0.01" value={a.b} onChange={e=>updZur(a.id,'b',e.target.value)}/>
+                <span className="ded-x">×</span>
+                <input placeholder="H" type="number" step="0.01" value={a.h} onChange={e=>updZur(a.id,'h',e.target.value)}/>
+                <span className="ded-val" style={{color:'var(--green)'}}>
+                  {((+a.b||0)*(+a.h||0)).toFixed(2)} m²
+                </span>
+                <button className="del-btn" onClick={()=>setZur(p=>p.filter(x=>x.id!==a.id))}>✕</button>
+              </div>
+            );
+          })}
+          <div style={{display:'flex',gap:'5px',marginTop:'3px'}}>
+            <button className="add-btn" onClick={()=>addZur('Fensterlaibung')} style={{flex:1}}>＋ Fensterlaibung</button>
+            <button className="add-btn" onClick={()=>addZur('Türlaibung')} style={{flex:1}}>＋ Türlaibung</button>
+            <button className="add-btn" onClick={()=>addZur('Sonstige')} style={{flex:1}}>＋ Sonstige</button>
+          </div>
+        </div>
+
+        {/* Fertige Positionen */}
+        {fertigPos.length>0&&<div className="m-sec">
+          <div className="m-title">✅ Abgeschlossene Positionen ({fertigPos.length})</div>
+          {fertigPos.map((cp,i)=>(
+            <div key={i} className="cp-item">
+              <span className="cp-num">{cp.nr}</span>
+              <span className="cp-name">{cp.name}</span>
+              <span className="cp-val">{cp.ergebnis.toFixed(2)} {cp.einheit}</span>
+            </div>
+          ))}
+        </div>}
+
+        {/* Rechenweg – VOB-konform nach DIN 18352 */}
+        {selPos&&<div className="calc-sec">
+          <div className="calc-head">🔢 Rechenweg · Pos. {selPos.nr} · Kat: {selPos.kat.toUpperCase()}</div>
+          <div className="calc-desc">{selPos.name} – {selPos.desc}</div>
+
+          {/* VOB-Hinweis */}
+          <div style={{padding:'6px 10px',background:'rgba(56,189,248,.06)',borderRadius:'6px',marginBottom:'8px',fontSize:'10px',color:'var(--blue)',border:'1px solid rgba(56,189,248,.15)'}}>
+            📋 VOB/C DIN 18352 · {selPos.kat==='wand'?'Wandfläche: Aussparungen > 0,1 m² abziehen, ≤ 0,1 m² übermessen'
+              :selPos.kat==='boden'?'Bodenfläche: Türen/Fenster werden NICHT abgezogen'
+              :selPos.kat==='laenge'?'Längenmaß: Unterbrechungen > 1,0 m abziehen, ≤ 1,0 m übermessen'
+              :'Stückzahl – manuelle Eingabe'}
+          </div>
+
+          {/* Grundfläche */}
+          {selPos.kat==='wand'&&<div className="calc-line">
+            <span className="cl-label">Wandfläche</span>
+            <span className="cl-formula">{segsSum()>0?`(2×(${mass.l||0}+${mass.b||0})+${segsSum().toFixed(2)})×${mass.fh||mass.h||0}`:`2×(${mass.l||0}+${mass.b||0})×${mass.fh||mass.h||0}`}</span>
+            <span className="cl-val">= {wandF().toFixed(2)} m²</span>
+          </div>}
+          {selPos.kat==='wand'&&segsSum()>0&&<div style={{padding:'4px 8px',fontSize:'9.5px',color:'var(--blue)',background:'rgba(56,189,248,.05)',borderRadius:'4px',marginBottom:'4px'}}>
+            Zusatzwände: {mass.segs.filter(s=>+s>0).map((s,i)=>`S${i+1}=${s}m`).join(' + ')} = {segsSum().toFixed(2)} m
+          </div>}
+          {selPos.kat==='boden'&&<div className="calc-line">
+            <span className="cl-label">Bodenfläche</span>
+            <span className="cl-formula">{mass.l||0} × {mass.b||0}</span>
+            <span className="cl-val">= {bodenF().toFixed(2)} m²</span>
+          </div>}
+          {selPos.kat==='laenge'&&<div className="calc-line">
+            <span className="cl-label">Umfang</span>
+            <span className="cl-formula">{segsSum()>0?`2×(${mass.l||0}+${mass.b||0})+${segsSum().toFixed(2)}`:`2×(${mass.l||0}+${mass.b||0})`}</span>
+            <span className="cl-val">= {umfang().toFixed(2)} m</span>
+          </div>}
+          {selPos.kat==='laenge'&&segsSum()>0&&<div style={{padding:'4px 8px',fontSize:'9.5px',color:'var(--blue)',background:'rgba(56,189,248,.05)',borderRadius:'4px',marginBottom:'4px'}}>
+            Zusatzwände: {mass.segs.filter(s=>+s>0).map((s,i)=>`S${i+1}=${s}m`).join(' + ')} = {segsSum().toFixed(2)} m
+          </div>}
+          {selPos.kat==='stueck'&&<div className="calc-line">
+            <span className="cl-label">Stückzahl</span>
+            <span className="cl-formula">manuell</span>
+            <span className="cl-val">= 1 Stk</span>
+          </div>}
+
+          {/* Abzüge – VOB-geprüft */}
+          {abz.length>0&&<div style={{marginTop:'6px',fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'1px',fontWeight:600}}>Abzüge · VOB-Prüfung:</div>}
+          {abz.map(d=>{
+            const flaeche=(+d.b||0)*(+d.h||0);
+            const breite=+d.b||0;
+            const pruef=istAbzugWirksam(d,selPos.kat);
+            return <div key={d.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'3px 0',fontFamily:'IBM Plex Mono',fontSize:'12px'}}>
+              <span style={{flex:1,color:pruef.wirksam?'var(--text-secondary)':'var(--text-muted)',textDecoration:pruef.wirksam?'none':'line-through'}}>{pruef.wirksam?'−':'⊘'} {d.typ}{d.typ==='Sonstige'&&d.bez?` (${d.bez})`:''}{d.typ==='Fenster'&&d.boden?' ▼':''} {selPos.kat==='laenge'?`${breite} m`:`${d.b||0}×${d.h||0}`}</span>
+              <span style={{fontSize:'9px',color:pruef.wirksam?'var(--danger)':'var(--yellow)',padding:'1px 5px',borderRadius:'3px',background:pruef.wirksam?'rgba(248,81,73,.08)':'rgba(251,191,36,.08)',marginRight:'6px',whiteSpace:'nowrap'}}>{pruef.grund}</span>
+              <span style={{minWidth:'68px',textAlign:'right',color:pruef.wirksam?'var(--danger)':'var(--text-muted)',textDecoration:pruef.wirksam?'none':'line-through'}}>
+                {pruef.wirksam?(selPos.kat==='laenge'?`− ${breite.toFixed(2)} m`:`− ${flaeche.toFixed(2)} m²`):'0,00'}
+              </span>
+            </div>
+          })}
+
+          {/* Zurechnungen – nur bei WAND-Positionen */}
+          {selPos.kat==='wand'&&zur.length>0&&<>
+            <div style={{marginTop:'6px',fontSize:'10px',color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'1px',fontWeight:600}}>Zurechnungen (Laibungen):</div>
+            {zur.map(a=>{
+              const laibF=a.typ==='Fensterlaibung'||a.typ==='Türlaibung'
+                ?2*(+a.t||0)*(+a.h||0)+2*(+a.t||0)*(+a.b||0)
+                :(+a.b||0)*(+a.h||0);
+              return <div key={a.id} className="calc-line add">
+                <span className="cl-label">+ {a.typ}</span>
+                <span className="cl-formula">{a.typ.includes('laibung')?`2×${a.t||0}×${a.h||0} + 2×${a.t||0}×${a.b||0}`:`${a.b||0}×${a.h||0}`}</span>
+                <span className="cl-val" style={{color:'var(--green)'}}>+ {laibF.toFixed(2)} m²</span>
+              </div>
+            })}
+          </>}
+          {selPos.kat!=='wand'&&zur.length>0&&<div style={{padding:'5px 8px',background:'rgba(251,191,36,.06)',borderRadius:'5px',marginTop:'6px',fontSize:'10px',color:'var(--yellow)'}}>
+            ℹ️ Laibungen werden nur bei Wandpositionen zugerechnet – bei {selPos.kat==='boden'?'Boden':'Längen'}positionen nicht relevant
+          </div>}
+
+          <hr className="calc-hr"/>
+          <div className="calc-total">
+            <span className="ct-label">ERGEBNIS</span>
+            <span className="ct-val">{posErgebnis().toFixed(2)} {selPos.einheit}</span>
+          </div>
+          <button className="btn-accent" style={{marginTop:'10px'}} onClick={posFertig}>✓ POSITION {selPos.nr} FERTIGSTELLEN</button>
+        </div>}
+
+        {/* Buttons */}
+        <div style={{marginTop:'10px'}}>
+          <button className="btn-outline" onClick={()=>setPosShow(true)} style={{marginBottom:'8px'}}>📋 LV-POSITION AUSWÄHLEN</button>
+          {fertigPos.length>0&&<button className="btn-accent green" onClick={raumFertig}>✓ RAUMAUFMASS FERTIGSTELLEN</button>}
+        </div>
+      </>)}
+
+      {/* ═══ ÜBERSICHT ═══ */}
+      {pg==='uebersicht'&&(<>
+        <div className="sec-head"><h2>Gesamtübersicht</h2><span className="badge">{gesamt.length} Räume</span></div>
+        <div className="proj-card">
+          <div className="proj-name">{(kunde&&kunde.name)}</div>
+          <div className="proj-det">{(kunde&&kunde.projekt)}</div>
+        </div>
+        {gesamt.map(rm=>(
+          <div key={rm.id} className="sum-card">
+            <h4>🏠 {rm.name} ({rm.positionen.length} Pos. · {rm.fotos} Fotos)</h4>
+            {rm.positionen.map((p,i)=>(
+              <div key={i} className="sum-pos">
+                <span className="sn">{p.nr}</span>
+                <span className="sl">{p.name}</span>
+                <span className="sv">{p.ergebnis.toFixed(2)} {p.einheit}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className="sum-card" style={{borderColor:'var(--accent)',borderWidth:'1.5px'}}>
+          <h4 style={{color:'var(--accent)'}}>📊 Gesamtsumme pro LV-Position</h4>
+          {LV_POS.map(pos=>{
+            const total=gesamt.reduce((s,rm)=>s+rm.positionen.filter(p=>p.nr===pos.nr).reduce((ss,p)=>ss+p.ergebnis,0),0);
+            return total>0?<div key={pos.nr} className="sum-pos">
+              <span className="sn">{pos.nr}</span>
+              <span className="sl">{pos.name}</span>
+              <span className="sv" style={{color:'var(--accent)'}}>{total.toFixed(2)} {pos.einheit}</span>
+            </div>:null;
+          })}
+        </div>
+        <div style={{marginTop:'14px'}}>
+          <button className="btn-outline" onClick={back} style={{marginBottom:'8px'}}>← Zurück zur Raumliste</button>
+          {raeume.length>0&&raeume.every(r=>r.fertig)&&
+            <button className="btn-accent green" onClick={doExport}>📤 AUFMASS BEENDEN · EXPORTIEREN</button>
+          }
+        </div>
+      </>)}
+
+      {/* ═══ EXPORTING ═══ */}
+      {pg==='exporting'&&(
+        <div className="import-center">
+          <div style={{fontSize:'44px',marginBottom:'14px'}}>📤</div>
+          <h2 style={{fontFamily:'Barlow Condensed',fontSize:'19px',fontWeight:700}}>Aufmaß wird exportiert…</h2>
+          <p style={{color:'var(--text-secondary)',fontSize:'12.5px',marginTop:'6px'}}>Word-Dateien erstellen → Google Drive hochladen</p>
+          <div className="spinner" style={{marginTop:'24px'}}/>
+          <div className="imp-list" style={{marginTop:'18px'}}>
+            {['Deckblatt mit Projektinfos','Raumblätter mit Rechenwegen','Gesamtübersicht aller Positionen','Fotodokumentation als Anlage','Upload in Google Drive / Aufmaß'].map((t,i)=>(
+              <div key={i} className="imp-item now"><span>⏳</span>{t}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ EXPORT DONE ═══ */}
+      {pg==='exportdone'&&(
+        <div className="import-center">
+          <div style={{fontSize:'56px',marginBottom:'14px'}}>✅</div>
+          <h2 style={{fontFamily:'Barlow Condensed',fontSize:'23px',fontWeight:700,color:'var(--green)'}}>Aufmaß abgeschlossen!</h2>
+          <p style={{color:'var(--text-secondary)',fontSize:'13px',marginTop:'6px',maxWidth:'280px',lineHeight:'1.6',textAlign:'center'}}>
+            Alle Daten wurden als druckfertige DOCX-Dateien exportiert und auf Google Drive im Kundenordner gespeichert.
+          </p>
+          <div style={{width:'100%',maxWidth:'320px',marginTop:'20px'}}>
+            {[
+              {icon:'📄',title:'Aufmaß_Deckblatt.docx',desc:'Auftraggeber, Baustelle, Datum, Projektdaten'},
+              {icon:'📊',title:'Gesamtübersicht.docx',desc:`Alle ${gesamt.length} Räume · Alle Positionen mit Ergebnissen`},
+              {icon:'📐',title:'Raumblätter.docx',desc:'Grundrisse, Maße, vollständige Rechenwege'},
+              {icon:'📸',title:'Fotodokumentation.docx',desc:'Alle Wandfotos als nummerierte Anlage'},
+            ].map((f,i)=>(
+              <div key={i} className="exp-opt">
+                <div className="exp-ic">{f.icon}</div>
+                <div className="exp-info"><div className="exp-title">{f.title}</div><div className="exp-desc">{f.desc}</div></div>
+              </div>
+            ))}
+          </div>
+          <div className="path-bar" style={{marginTop:'16px',maxWidth:'320px',width:'100%'}}>
+            📁 Google Drive / Baustellen / <span className="hi">{(kunde&&kunde.name)}</span> / Aufmaß
+          </div>
+          <div style={{width:'100%',maxWidth:'320px',marginTop:'14px'}}>
+            <button className="btn-accent" onClick={resetApp}>🔄 NEUES AUFMASS STARTEN</button>
+          </div>
+        </div>
+      )}
+
+      </div>{/* end page-wrap */}
+
+      {/* ═══ OVERLAYS & MODALS ═══ */}
+
+      {/* Auth */}
+      {authShow&&<div className="overlay" onClick={()=>authSt==='ask'&&setAuthShow(false)}>
+        <div className="auth-box" onClick={e=>e.stopPropagation()}>
+          {authSt==='ask'&&<><h3>🔐 Google Drive verbinden</h3><p>Melde dich mit deinem Google-Konto an, um auf den Ordner „Baustellen" zuzugreifen.</p><button className="g-btn" onClick={doAuth}>G · Mit Google anmelden (OAuth 2.0)</button></>}
+          {authSt==='wait'&&<><h3>Authentifizierung…</h3><div className="spinner"/><p style={{fontSize:'12px'}}>OAuth 2.0 Verbindung wird hergestellt</p></>}
+          {authSt==='ok'&&<><h3 style={{color:'var(--green)'}}>✓ Verbunden!</h3><p>Google Drive erfolgreich verknüpft.</p></>}
+        </div>
+      </div>}
+
+      {/* Neuer Raum Modal */}
+      {neuModal&&<div className="modal-bg" onClick={()=>setNeuModal(false)}>
+        <div className="modal-box" onClick={e=>e.stopPropagation()}>
+          <h3>🏠 Neuen Raum anlegen</h3>
+          <input placeholder="Raumbezeichnung (z.B. Bad EG, Küche OG)" value={neuName} onChange={e=>setNeuName(e.target.value)} autoFocus onKeyDown={e=>e.key==='Enter'&&neuerRaum()}/>
+          <select value={neuForm} onChange={e=>setNeuForm(e.target.value)}>
+            <option value="rechteck">▭ Rechteckig (4 Ecken)</option>
+            <option value="fuenfeck">⬠ Fünfeck (5 Ecken)</option>
+            <option value="sechseck">⬡ Sechseck (6 Ecken)</option>
+            <option value="lform">⌐ L-Form</option>
+            <option value="sonder">◇ Sonderform (frei)</option>
+          </select>
+          <div className="btn-row">
+            <button className="btn-outline" onClick={()=>setNeuModal(false)}>Abbrechen</button>
+            <button className="btn-accent" onClick={neuerRaum}>Anlegen</button>
+          </div>
+        </div>
+      </div>}
+
+      {/* Position Auswahl */}
+      {posShow&&<div className="pos-overlay" onClick={()=>setPosShow(false)}>
+        <div className="pos-sheet" onClick={e=>e.stopPropagation()}>
+          <div className="pos-sheet-hdr">
+            <h3>📋 LV-Positionen auswählen</h3>
+            <button className="pos-close" onClick={()=>setPosShow(false)}>✕</button>
+          </div>
+          <div className="pos-list">
+            {LV_POS.map(pos=>{
+              const done=fertigPos.some(fp=>fp.nr===pos.nr);
+              return <div key={pos.nr} className={`pos-item ${(selPos&&selPos.nr)===pos.nr?'sel':''}`}
+                onClick={()=>{if(!done){setSelPos(pos);setPosShow(false)}}}>
+                <span className="pn">{pos.nr}</span>
+                <div className="pi">
+                  <div className="pi-name">{pos.name} <span style={{fontSize:'9px',padding:'1px 5px',borderRadius:'3px',marginLeft:'4px',background:pos.kat==='wand'?'rgba(240,104,32,.12)':pos.kat==='boden'?'rgba(52,211,153,.12)':pos.kat==='laenge'?'rgba(56,189,248,.12)':'rgba(251,191,36,.12)',color:pos.kat==='wand'?'var(--accent)':pos.kat==='boden'?'var(--green)':pos.kat==='laenge'?'var(--blue)':'var(--yellow)'}}>{pos.kat==='wand'?'WAND':pos.kat==='boden'?'BODEN':pos.kat==='laenge'?'LÄNGE':'STÜCK'}</span></div>
+                  <div className="pi-sub">{pos.einheit} · LV-Menge: {pos.menge.toFixed(2)} · {pos.desc}</div>
+                </div>
+                {done&&<span className="pi-check">✅</span>}
+              </div>
+            })}
+          </div>
+        </div>
+      </div>}
+
+      {/* Toast */}
+      {toast&&<div className="toast-msg">{toast}</div>}
+
+    </div>
+  );
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={error:null}}
+  static getDerivedStateFromError(e){return {error:e}}
+  componentDidCatch(e,info){console.error('APP ERROR:',e,info)}
+  render(){
+    if(this.state.error) return React.createElement('div',{style:{color:'red',padding:20,whiteSpace:'pre-wrap',fontFamily:'monospace',fontSize:12}},
+      'FEHLER: '+this.state.error.toString()+'\n\n'+((this.state.error.stack||'').substring(0,1000))
+    );
+    return this.props.children;
+  }
+}
+try{
+  ReactDOM.createRoot(document.getElementById('app')).render(<ErrorBoundary><App/></ErrorBoundary>);
+}catch(err){
+  document.body.style.background='#1a1a2e';
+  document.body.innerHTML='<div style="color:#ff6b6b;font-family:monospace;padding:30px;white-space:pre-wrap;font-size:14px">'
+    +'<h2 style="color:#f06820">Render-Fehler</h2>'
+    +'<pre>'+err.message+'\n\n'+err.stack+'</pre></div>';
+}
+</script>
+<script>
+try {
+  var sourceEl = document.getElementById('app-source');
+  var sourceCode = sourceEl.textContent;
+  
+  // Show loading indicator
+  document.getElementById('app').innerHTML = '<div style="color:#f06820;text-align:center;padding:60px;font-family:sans-serif"><div style="font-size:24px;margin-bottom:10px">⏳</div>App wird kompiliert...</div>';
+  
+  var compiled = Babel.transform(sourceCode, {
+    presets: ['env', 'react'],
+    plugins: []
+  });
+  
+  // Execute the compiled code
+  var script = document.createElement('script');
+  script.textContent = compiled.code;
+  document.body.appendChild(script);
+  
+} catch(err) {
+  var errDiv = document.createElement('div');
+  errDiv.style.cssText = 'color:#ff6b6b;font-family:monospace;padding:30px;white-space:pre-wrap;font-size:13px;max-width:95vw;word-break:break-all;position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;z-index:99999;overflow:auto';
+  errDiv.innerHTML = '<h2 style="color:#f06820;margin-bottom:15px">⚠️ Babel Kompilierungsfehler</h2>'
+    + '<div style="background:#2a1a1a;padding:15px;border-radius:8px;border:1px solid #ff6b6b33;margin-bottom:15px">'
+    + '<b>Fehler:</b> ' + String(err.message).substring(0,1000)
+    + '</div>'
+    + '<div style="background:#1a2a1a;padding:15px;border-radius:8px;border:1px solid #4ade8033">'
+    + '<b>Stack:</b>\n' + String(err.stack||'').substring(0,1500)
+    + '</div>'
+    + '<div style="margin-top:20px;color:#fbbf24;font-size:12px">Bitte Screenshot dieser Fehlermeldung an den Entwickler senden.</div>';
+  document.body.innerHTML = '';
+  document.body.style.background = '#1a1a2e';
+  document.body.appendChild(errDiv);
+}
+</script>
+</body>
+</html>
