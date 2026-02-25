@@ -1,0 +1,2932 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aufmaß-App – Thomas Willwacher Fliesenlegermeister e.K.</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
+    <style>
+        /* ═══════════════════════════════════════════
+           GLOBAL RESET & VARIABLES
+           ═══════════════════════════════════════════ */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a2332;
+            --bg-secondary: #243044;
+            --bg-card: #2a3a50;
+            --bg-hover: #324560;
+            --accent-red: #c41e1e;
+            --accent-red-light: #e63535;
+            --accent-orange: #e67e22;
+            --accent-orange-light: #f39c12;
+            --text-white: #f0f2f5;
+            --text-light: #b8c4d4;
+            --text-muted: #7a8a9e;
+            --border-color: #3a4d66;
+            --success: #27ae60;
+            --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
+            --shadow-md: 0 4px 20px rgba(0,0,0,0.3);
+            --radius-sm: 6px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Source Sans 3', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-white);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #root {
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ═══════════════════════════════════════════
+           LOGO STYLES
+           ═══════════════════════════════════════════ */
+        .logo-container {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: flex-start;
+            user-select: none;
+        }
+
+        .logo-thomas-row {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: -18px;
+            padding-left: 1px;
+            align-self: flex-start;
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo-thomas-text {
+            font-family: 'Source Sans 3', serif;
+            font-style: italic;
+            font-weight: 700;
+            color: var(--accent-red);
+            font-size: 14.5px;
+            letter-spacing: 0.3px;
+        }
+
+        .logo-word-row {
+            display: flex;
+            align-items: baseline;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            color: var(--text-white);
+            line-height: 1;
+        }
+
+        .logo-w {
+            font-size: 62px;
+        }
+
+        .logo-i-wrap {
+            position: relative;
+            font-size: 62px;
+            display: inline-block;
+        }
+
+        .logo-i-wrap .logo-i-char {
+            font-size: 62px;
+        }
+
+        .logo-i-dot {
+            position: absolute;
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 10px;
+            height: 10px;
+            background: var(--accent-red);
+        }
+
+        .logo-LL {
+            font-size: 84px;
+            letter-spacing: 1px;
+            line-height: 0.75;
+        }
+
+        .logo-wacher {
+            font-size: 62px;
+        }
+
+        .logo-subtitle-row {
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+            margin-top: 1px;
+        }
+
+        .logo-subtitle-text {
+            font-family: 'Source Sans 3', sans-serif;
+            font-weight: 600;
+            color: var(--accent-red);
+            font-size: 14.5px;
+            letter-spacing: 2.5px;
+        }
+
+        .logo-address {
+            font-family: 'Source Sans 3', sans-serif;
+            font-weight: 400;
+            color: var(--text-muted);
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            margin-top: 10px;
+            text-align: center;
+            width: 100%;
+        }
+
+        /* ═══════════════════════════════════════════
+           APP HEADER
+           ═══════════════════════════════════════════ */
+        .app-header {
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-light);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .header-version {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* ═══════════════════════════════════════════
+           NAV ARROWS (required on ALL pages)
+           ═══════════════════════════════════════════ */
+        .nav-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 18px;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background: var(--bg-hover);
+            border-color: var(--accent-orange);
+            color: var(--text-white);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* ═══════════════════════════════════════════
+           STARTSEITE (DASHBOARD)
+           ═══════════════════════════════════════════ */
+        .startseite {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Subtle tile pattern background */
+        .startseite::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(45deg, rgba(255,255,255,0.015) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(255,255,255,0.015) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.015) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.015) 75%);
+            background-size: 40px 40px;
+            background-position: 0 0, 0 20px, 20px -20px, -20px 0;
+            pointer-events: none;
+        }
+
+        .logo-section {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 50px;
+            animation: fadeInDown 0.8s ease-out;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.4); }
+            50% { box-shadow: 0 0 0 12px rgba(230, 126, 34, 0); }
+        }
+
+        /* ═══════════════════════════════════════════
+           KUNDE BUTTON
+           ═══════════════════════════════════════════ */
+        .kunde-btn-wrapper {
+            position: relative;
+            z-index: 1;
+            animation: fadeInUp 0.8s ease-out 0.3s both;
+        }
+
+        .kunde-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            width: 280px;
+            padding: 20px 32px;
+            border: 2px solid var(--accent-orange);
+            border-radius: var(--radius-lg);
+            background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-orange-light) 100%);
+            color: #fff;
+            font-family: 'Oswald', sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            animation: pulse 2.5s infinite;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .kunde-btn:hover {
+            transform: translateY(-2px) scale(1.02);
+            background: linear-gradient(135deg, var(--accent-orange-light) 0%, var(--accent-orange) 100%);
+            box-shadow: 0 14px 50px rgba(230, 126, 34, 0.35);
+        }
+
+        .kunde-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        .kunde-btn-icon {
+            font-size: 28px;
+        }
+
+        .kunde-btn-hint {
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 16px;
+            text-align: center;
+            font-weight: 400;
+            letter-spacing: 0.3px;
+            animation: fadeInUp 0.8s ease-out 0.6s both;
+        }
+
+        /* ═══════════════════════════════════════════
+           STATUS BAR (bottom)
+           ═══════════════════════════════════════════ */
+        .status-bar {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .status-dot.offline { background: var(--accent-red); }
+        .status-dot.online { background: var(--success); }
+        .status-dot.connecting {
+            background: var(--accent-orange);
+            animation: blink 1.2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* ═══════════════════════════════════════════
+           GOOGLE DRIVE AUTH MODAL
+           ═══════════════════════════════════════════ */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            animation: fadeIn 0.2s ease-out;
+            padding: 20px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 32px 28px;
+            max-width: 380px;
+            width: 100%;
+            box-shadow: var(--shadow-lg);
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-white);
+            margin-bottom: 8px;
+        }
+
+        .modal-text {
+            font-size: 14px;
+            color: var(--text-light);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .modal-steps {
+            margin-bottom: 24px;
+        }
+
+        .modal-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        .modal-step:last-child { border: none; }
+
+        .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent-orange);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step-num.done {
+            background: var(--success);
+        }
+
+        .step-num.active {
+            animation: blink 1s infinite;
+        }
+
+        .modal-btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            font-family: 'Oswald', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .modal-btn.primary {
+            background: var(--accent-orange);
+            color: #fff;
+        }
+
+        .modal-btn.primary:hover {
+            background: var(--accent-orange-light);
+        }
+
+        .modal-btn.secondary {
+            background: var(--bg-card);
+            color: var(--text-light);
+            border: 1px solid var(--border-color);
+        }
+
+        .modal-btn.secondary:hover {
+            background: var(--bg-hover);
+        }
+
+        /* ═══════════════════════════════════════════
+           KUNDENAUSWAHL (BAUSTELLEN ORDNER)
+           ═══════════════════════════════════════════ */
+        .page-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px;
+        }
+
+        .page-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-white);
+            margin-bottom: 4px;
+        }
+
+        .page-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .breadcrumb {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .breadcrumb-active {
+            color: var(--accent-orange);
+        }
+
+        .folder-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .folder-icon {
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+
+        .folder-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .folder-name {
+            font-family: 'Oswald', sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-white);
+            letter-spacing: 0.5px;
+        }
+
+        .folder-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .folder-arrow {
+            color: var(--text-muted);
+            font-size: 20px;
+            transition: color 0.2s;
+        }
+
+        .folder-item:hover .folder-arrow {
+            color: var(--accent-orange);
+        }
+
+        /* ═══════════════════════════════════════════
+           SEARCH INPUT - Baustellen Filter
+           ═══════════════════════════════════════════ */
+        .search-container {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 14px 16px 14px 44px;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-white);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.15), 0 4px 20px rgba(230, 126, 34, 0.1);
+            background: var(--bg-hover);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+            color: var(--text-muted);
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+
+        .search-input:focus ~ .search-icon {
+            color: var(--accent-orange);
+            transform: translateY(-50%) scale(1.15);
+        }
+
+        .search-count {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--bg-primary);
+            padding: 3px 10px;
+            border-radius: 20px;
+            transition: all 0.3s;
+        }
+
+        .search-count.has-filter {
+            color: var(--accent-orange);
+            background: rgba(230, 126, 34, 0.12);
+        }
+
+        .search-clear {
+            position: absolute;
+            right: 80px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 50%;
+            transition: all 0.2s;
+            display: none;
+        }
+
+        .search-clear.visible {
+            display: block;
+        }
+
+        .search-clear:hover {
+            color: var(--accent-red);
+            background: rgba(196, 30, 30, 0.1);
+        }
+
+        /* Folder item animations */
+        .folder-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            animation: slideIn 0.35s ease-out both;
+        }
+
+        .folder-item:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-orange);
+            transform: translateX(6px);
+            box-shadow: -4px 0 0 0 var(--accent-orange), 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Highlight matched text */
+        .highlight {
+            color: var(--accent-orange);
+            font-weight: 700;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .no-results-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .no-results-text {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            gap: 16px;
+        }
+
+        .spinner {
+            width: 44px;
+            height: 44px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-orange);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        /* ═══════════════════════════════════════════
+           FOLDER SELECTION / CHECKBOXES
+           ═══════════════════════════════════════════ */
+        .folder-select-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .select-all-btn {
+            font-size: 12px;
+            color: var(--accent-orange);
+            background: none;
+            border: 1px solid var(--accent-orange);
+            border-radius: 4px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-family: 'Source Sans 3', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .select-all-btn:hover {
+            background: rgba(230,126,34,0.15);
+        }
+
+        .folder-select-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .folder-select-item.selected {
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 0 1px rgba(230,126,34,0.2);
+        }
+
+        .folder-select-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .folder-select-head:hover {
+            background: var(--bg-hover);
+        }
+
+        .folder-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            font-size: 14px;
+            color: transparent;
+        }
+
+        .folder-checkbox.checked {
+            background: var(--accent-orange);
+            border-color: var(--accent-orange);
+            color: #fff;
+        }
+
+        .folder-select-info {
+            flex: 1;
+        }
+
+        .folder-select-name {
+            font-family: 'Oswald', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-white);
+            letter-spacing: 0.5px;
+        }
+
+        .folder-select-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        .folder-select-size {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .folder-files-preview {
+            padding: 0 14px 10px 48px;
+            display: none;
+        }
+
+        .folder-select-item.selected .folder-files-preview {
+            display: block;
+        }
+
+        .folder-file-row {
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 2px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .transfer-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(230,126,34,0.08);
+            border: 1px solid rgba(230,126,34,0.2);
+            border-radius: var(--radius-sm);
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        .transfer-summary-label {
+            color: var(--text-light);
+        }
+
+        .transfer-summary-value {
+            font-weight: 700;
+            color: var(--accent-orange);
+            font-size: 15px;
+        }
+
+        /* ═══════════════════════════════════════════
+           EDITABLE CONTACT FIELDS
+           ═══════════════════════════════════════════ */
+        .contact-section {
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding-bottom: 12px;
+        }
+
+        .contact-section:last-child { border: none; padding-bottom: 0; }
+
+        .contact-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .contact-add-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 1.5px solid var(--accent-orange);
+            background: rgba(230,126,34,0.08);
+            color: var(--accent-orange);
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .contact-add-btn:hover {
+            background: var(--accent-orange);
+            color: #fff;
+            transform: scale(1.1);
+        }
+
+        .contact-extra-notes {
+            margin-top: 6px;
+        }
+
+        .contact-extra-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .contact-extra-textarea {
+            flex: 1;
+            background: rgba(230, 126, 34, 0.08);
+            border: 1px dashed var(--accent-orange);
+            border-radius: 4px;
+            padding: 6px 8px;
+            color: var(--text-white);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 13px;
+            outline: none;
+            resize: vertical;
+            min-height: 32px;
+            line-height: 1.4;
+            transition: all 0.2s;
+        }
+
+        .contact-extra-textarea::placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .contact-extra-textarea:focus {
+            border-color: var(--accent-orange);
+            border-style: solid;
+            background: rgba(230, 126, 34, 0.12);
+            box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.1);
+        }
+
+        .contact-remove-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(196,30,30,0.1);
+            color: var(--accent-red);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            margin-top: 6px;
+            transition: all 0.2s;
+        }
+
+        .contact-remove-btn:hover {
+            background: var(--accent-red);
+            color: #fff;
+        }
+
+        .contact-role {
+            font-family: 'Oswald', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--accent-orange);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .contact-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-white);
+            margin-bottom: 6px;
+        }
+
+        .contact-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .contact-icon {
+            font-size: 14px;
+            width: 20px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .contact-value {
+            color: var(--text-light);
+        }
+
+        .contact-input {
+            flex: 1;
+            background: rgba(230, 126, 34, 0.08);
+            border: 1px dashed var(--accent-orange);
+            border-radius: 4px;
+            padding: 5px 8px;
+            color: var(--text-white);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .contact-input::placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .contact-input:focus {
+            border-color: var(--accent-orange);
+            border-style: solid;
+            background: rgba(230, 126, 34, 0.12);
+            box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.1);
+        }
+
+        .contact-missing-hint {
+            font-size: 11px;
+            color: var(--accent-orange);
+            font-style: italic;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        /* ═══════════════════════════════════════════
+           KUNDENDATEN-PREVIEW
+           ═══════════════════════════════════════════ */
+        .kunde-preview {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin-top: 16px;
+        }
+
+        .kunde-preview-header {
+            font-family: 'Oswald', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent-orange);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .kunde-detail {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 14px;
+        }
+
+        .kunde-detail:last-child { border: none; }
+
+        .kunde-detail-label {
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .kunde-detail-value {
+            color: var(--text-white);
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .files-list {
+            margin-top: 12px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: 13px;
+            color: var(--text-light);
+        }
+
+        .file-icon {
+            font-size: 16px;
+        }
+
+        .action-btn-full {
+            width: 100%;
+            padding: 16px;
+            border-radius: var(--radius-md);
+            background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-orange-light) 100%);
+            color: #fff;
+            font-family: 'Oswald', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+            box-shadow: var(--shadow-md);
+        }
+
+        .action-btn-full:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 30px rgba(230,126,34,0.3);
+        }
+
+        /* ═══════════════════════════════════════════
+           RAUMBLATT (Schritt 4)
+           ═══════════════════════════════════════════ */
+        .raum-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .raum-name-input {
+            flex: 1;
+            font-family: 'Oswald', sans-serif;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-white);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid var(--border-color);
+            padding: 6px 0;
+            outline: none;
+            letter-spacing: 0.5px;
+            transition: border-color 0.2s;
+        }
+
+        .raum-name-input:focus {
+            border-color: var(--accent-orange);
+        }
+
+        .raum-name-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .raum-nummer {
+            font-family: 'Oswald', sans-serif;
+            font-size: 14px;
+            color: var(--accent-orange);
+            background: rgba(230,126,34,0.12);
+            padding: 4px 12px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        /* Grundriss-Darstellung */
+        .grundriss-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .grundriss-card-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+        }
+
+        .grundriss-svg {
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            display: block;
+        }
+
+        /* Foto-Button */
+        .foto-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px;
+            background: var(--bg-card);
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-light);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+
+        .foto-btn:hover {
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
+            background: rgba(230,126,34,0.05);
+        }
+
+        .foto-count {
+            background: var(--accent-orange);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* Maßeingabe-Sektion */
+        .masse-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .masse-section-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--accent-orange);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .masse-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .masse-grid.three-col {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .masse-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .masse-field.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .masse-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .masse-input-wrap {
+            display: flex;
+            align-items: center;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .masse-input-wrap:focus-within {
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 0 2px rgba(230,126,34,0.1);
+        }
+
+        .masse-input {
+            flex: 1;
+            padding: 10px 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-white);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            outline: none;
+            text-align: right;
+            min-width: 0;
+        }
+
+        .masse-input::placeholder {
+            color: var(--text-muted);
+            font-weight: 400;
+            font-size: 14px;
+        }
+
+        .masse-unit {
+            padding: 10px 10px 10px 4px;
+            color: var(--text-muted);
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        /* Abzüge/Zurechnungen */
+        .abzug-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            margin-bottom: 6px;
+        }
+
+        .abzug-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .abzug-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .abzug-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-white);
+        }
+
+        .abzug-masse {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .abzug-result {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent-red-light);
+            white-space: nowrap;
+        }
+
+        .abzug-result.zurechnung {
+            color: var(--success);
+        }
+
+        .add-abzug-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+
+        .add-abzug-btn:hover {
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
+        }
+
+        /* Abzug-Modal */
+        .abzug-modal-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .abzug-modal-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .abzug-modal-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .abzug-modal-input {
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-white);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .abzug-modal-input:focus {
+            border-color: var(--accent-orange);
+        }
+
+        .abzug-type-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .abzug-type-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-light);
+            font-size: 14px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .abzug-type-btn.active {
+            border-color: var(--accent-orange);
+            background: rgba(230,126,34,0.12);
+            color: var(--accent-orange);
+        }
+
+        /* Positionsauswahl */
+        .pos-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-hover) 100%);
+            border: 2px solid var(--accent-orange);
+            border-radius: var(--radius-md);
+            color: var(--accent-orange);
+            font-family: 'Oswald', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+
+        .pos-btn:hover {
+            background: rgba(230,126,34,0.12);
+        }
+
+        /* Berechnungsbereich */
+        .berechnung-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .berechnung-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .berechnung-row:last-child { border: none; }
+
+        .berechnung-label {
+            color: var(--text-light);
+        }
+
+        .berechnung-formel {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .berechnung-wert {
+            font-weight: 700;
+            color: var(--text-white);
+        }
+
+        .berechnung-wert.abzug { color: var(--accent-red-light); }
+        .berechnung-wert.zurechnung { color: var(--success); }
+
+        .berechnung-total {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0 4px;
+            margin-top: 8px;
+            border-top: 2px solid var(--accent-orange);
+            font-family: 'Oswald', sans-serif;
+            font-size: 18px;
+        }
+
+        .berechnung-total-label {
+            color: var(--accent-orange);
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .berechnung-total-wert {
+            color: var(--text-white);
+            font-weight: 700;
+        }
+
+        /* Raumblatt Action Buttons */
+        .raum-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .raum-btn-finish {
+            width: 100%;
+            padding: 14px;
+            border-radius: var(--radius-md);
+            font-family: 'Oswald', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .raum-btn-finish.primary {
+            background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-orange-light) 100%);
+            color: #fff;
+            box-shadow: var(--shadow-md);
+        }
+
+        .raum-btn-finish.secondary {
+            background: var(--bg-card);
+            border: 2px solid var(--success);
+            color: var(--success);
+        }
+
+        .raum-btn-finish:hover {
+            transform: translateY(-1px);
+        }
+
+        /* ═══════════════════════════════════════════
+           RESPONSIVE
+           ═══════════════════════════════════════════ */
+        @media (min-width: 600px) {
+            .logo-thomas-text { font-size: 17px; }
+            .logo-w, .logo-i-wrap, .logo-i-wrap .logo-i-char, .logo-wacher { font-size: 76px; }
+            .logo-LL { font-size: 102px; }
+            .logo-i-dot { width: 12px; height: 12px; top: 7px; }
+            .logo-subtitle-text { font-size: 18px; letter-spacing: 3px; }
+            .kunde-btn { width: 320px; font-size: 28px; padding: 22px 40px; }
+            .modal { padding: 40px 36px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        /* ═══════════════════════════════════════════
+           DEMO DATA – Baustellen-Ordner
+           ═══════════════════════════════════════════ */
+        const DEMO_KUNDEN = [
+            {
+                id: 'k001',
+                name: 'Heinrich Haus gGmbH – Neubau Wohnanlage',
+                adresse: 'Neuwieder Str. 23a/b, 56566 Neuwied',
+                auftraggeber: 'Heinrich Haus gGmbH',
+                ag_adresse: 'Neuwieder Straße 21a, 56566 Neuwied',
+                ag_telefon: '02631-94520',
+                ag_email: 'info@heinrich-haus.de',
+                bauleitung: 'Dipl.-Ing. Markus Weber',
+                bl_adresse: '',
+                bl_telefon: '0171-5543890',
+                bl_email: '',
+                architekt: 'Planungsbüro Schneider & Partner',
+                arch_adresse: 'Rheinstraße 45, 56564 Neuwied',
+                arch_telefon: '',
+                arch_email: 'schneider@sp-architekten.de',
+                dateien: 12,
+                letzteAenderung: '21.02.2026',
+                files: [
+                    { name: 'Leistungsverzeichnis_Fliesen.pdf', type: 'pdf', size: '2.4 MB' },
+                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
+                    { name: 'Grundriss_EG.pdf', type: 'pdf', size: '5.1 MB' },
+                    { name: 'Grundriss_OG.pdf', type: 'pdf', size: '4.8 MB' },
+                    { name: 'Wandansichten_Bad_EG.pdf', type: 'pdf', size: '3.2 MB' },
+                    { name: 'Fliesenspiegel_Kueche.jpg', type: 'img', size: '1.7 MB' },
+                ],
+                folders: [
+                    { name: 'Leistungsverzeichnis', files: [
+                        { name: 'LV_Fliesen_komplett.pdf', type: 'pdf', size: '2.4 MB' },
+                        { name: 'LV_Nachtrag_01.pdf', type: 'pdf', size: '0.6 MB' },
+                    ]},
+                    { name: 'Zeichnungen', files: [
+                        { name: 'Grundriss_EG.pdf', type: 'pdf', size: '5.1 MB' },
+                        { name: 'Grundriss_OG.pdf', type: 'pdf', size: '4.8 MB' },
+                        { name: 'Wandansichten_Bad_EG.pdf', type: 'pdf', size: '3.2 MB' },
+                        { name: 'Fliesenspiegel_Kueche.jpg', type: 'img', size: '1.7 MB' },
+                    ]},
+                    { name: 'Stammdaten', files: [
+                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
+                        { name: 'Kontaktliste.pdf', type: 'pdf', size: '0.2 MB' },
+                    ]},
+                    { name: 'Fotos', files: [
+                        { name: 'Baustellenfoto_01.jpg', type: 'img', size: '3.5 MB' },
+                        { name: 'Baustellenfoto_02.jpg', type: 'img', size: '4.1 MB' },
+                        { name: 'Baustellenfoto_03.jpg', type: 'img', size: '3.8 MB' },
+                    ]},
+                ]
+            },
+            {
+                id: 'k002',
+                name: 'Kreisverwaltung Westerwaldkreis – Sanierung Hallenbad',
+                adresse: 'Schwimmbadstraße 5, 56410 Montabaur',
+                auftraggeber: 'Kreisverwaltung Westerwaldkreis',
+                ag_adresse: 'Peter-Altmeier-Platz 1, 56410 Montabaur',
+                ag_telefon: '02602-1240',
+                ag_email: 'info@westerwaldkreis.de',
+                bauleitung: 'Ing.-Büro Kraft GmbH',
+                bl_adresse: 'Bahnhofstr. 12, 56410 Montabaur',
+                bl_telefon: '02602-99880',
+                bl_email: 'kraft@ib-kraft.de',
+                architekt: 'Architekten Schmidt + Haas',
+                arch_adresse: '',
+                arch_telefon: '0261-1334500',
+                arch_email: '',
+                dateien: 18,
+                letzteAenderung: '19.02.2026',
+                files: [
+                    { name: 'LV_Schwimmbadfliesen.pdf', type: 'pdf', size: '3.1 MB' },
+                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.9 MB' },
+                    { name: 'Beckenplan_Gesamt.pdf', type: 'pdf', size: '6.2 MB' },
+                    { name: 'Detail_Rinnenausbau.pdf', type: 'pdf', size: '2.8 MB' },
+                    { name: 'Umkleiden_Grundriss.pdf', type: 'pdf', size: '3.4 MB' },
+                ],
+                folders: [
+                    { name: 'Leistungsverzeichnis', files: [
+                        { name: 'LV_Schwimmbadfliesen.pdf', type: 'pdf', size: '3.1 MB' },
+                        { name: 'LV_Umkleiden.pdf', type: 'pdf', size: '1.8 MB' },
+                    ]},
+                    { name: 'Zeichnungen', files: [
+                        { name: 'Beckenplan_Gesamt.pdf', type: 'pdf', size: '6.2 MB' },
+                        { name: 'Detail_Rinnenausbau.pdf', type: 'pdf', size: '2.8 MB' },
+                        { name: 'Umkleiden_Grundriss.pdf', type: 'pdf', size: '3.4 MB' },
+                    ]},
+                    { name: 'Stammdaten', files: [
+                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.9 MB' },
+                    ]},
+                    { name: 'Gutachten', files: [
+                        { name: 'Feuchtigkeitsgutachten.pdf', type: 'pdf', size: '4.5 MB' },
+                        { name: 'Abdichtungskonzept.pdf', type: 'pdf', size: '2.1 MB' },
+                    ]},
+                ]
+            },
+            {
+                id: 'k003',
+                name: 'Familie Berger – Neubau EFH',
+                adresse: 'Am Waldrand 7, 56472 Nisterau',
+                auftraggeber: 'Stefan & Maria Berger',
+                ag_adresse: 'Am Waldrand 7, 56472 Nisterau',
+                ag_telefon: '',
+                ag_email: 'stefan.berger@web.de',
+                bauleitung: 'Baugeschäft Müller GmbH',
+                bl_adresse: '',
+                bl_telefon: '',
+                bl_email: '',
+                architekt: 'Architekturbüro Hahn',
+                arch_adresse: 'Hauptstr. 88, 56470 Bad Marienberg',
+                arch_telefon: '02661-40550',
+                arch_email: 'info@architektur-hahn.de',
+                dateien: 8,
+                letzteAenderung: '18.02.2026',
+                files: [
+                    { name: 'LV_Fliesen_EFH_Berger.pdf', type: 'pdf', size: '1.9 MB' },
+                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
+                    { name: 'Grundriss_EG_OG.pdf', type: 'pdf', size: '4.3 MB' },
+                    { name: 'Bad_OG_Fliesenspiegel.jpg', type: 'img', size: '2.1 MB' },
+                ],
+                folders: [
+                    { name: 'Leistungsverzeichnis', files: [
+                        { name: 'LV_Fliesen_EFH_Berger.pdf', type: 'pdf', size: '1.9 MB' },
+                    ]},
+                    { name: 'Zeichnungen', files: [
+                        { name: 'Grundriss_EG_OG.pdf', type: 'pdf', size: '4.3 MB' },
+                        { name: 'Bad_OG_Fliesenspiegel.jpg', type: 'img', size: '2.1 MB' },
+                    ]},
+                    { name: 'Stammdaten', files: [
+                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
+                    ]},
+                ]
+            },
+            {
+                id: 'k004',
+                name: 'Seniorenzentrum St. Elisabeth – Badsanierung',
+                adresse: 'Kirchweg 12, 56457 Westerburg',
+                auftraggeber: 'Caritas Westerwald-Rhein-Lahn',
+                ag_adresse: 'Kirchweg 12, 56457 Westerburg',
+                ag_telefon: '02663-9410',
+                ag_email: '',
+                bauleitung: 'Bauplanung Reitz',
+                bl_adresse: '',
+                bl_telefon: '02663-78800',
+                bl_email: 'reitz@bauplanung-reitz.de',
+                architekt: 'Architekten Gemeinschaft Limburg',
+                arch_adresse: 'Domplatz 3, 65549 Limburg',
+                arch_telefon: '',
+                arch_email: '',
+                dateien: 22,
+                letzteAenderung: '15.02.2026',
+                files: [
+                    { name: 'LV_Sanitaer_Fliesen.pdf', type: 'pdf', size: '2.7 MB' },
+                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
+                    { name: 'Grundriss_Station_A.pdf', type: 'pdf', size: '5.5 MB' },
+                    { name: 'Grundriss_Station_B.pdf', type: 'pdf', size: '5.2 MB' },
+                    { name: 'Barrierefreiheit_Vorgaben.pdf', type: 'pdf', size: '1.4 MB' },
+                ],
+                folders: [
+                    { name: 'Leistungsverzeichnis', files: [
+                        { name: 'LV_Sanitaer_Fliesen.pdf', type: 'pdf', size: '2.7 MB' },
+                        { name: 'LV_Nachtrag_Barrierefreiheit.pdf', type: 'pdf', size: '0.9 MB' },
+                    ]},
+                    { name: 'Zeichnungen', files: [
+                        { name: 'Grundriss_Station_A.pdf', type: 'pdf', size: '5.5 MB' },
+                        { name: 'Grundriss_Station_B.pdf', type: 'pdf', size: '5.2 MB' },
+                        { name: 'Sanitaerdetails_Baeder.pdf', type: 'pdf', size: '3.8 MB' },
+                    ]},
+                    { name: 'Stammdaten', files: [
+                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
+                        { name: 'Kontaktliste_Caritas.pdf', type: 'pdf', size: '0.3 MB' },
+                    ]},
+                    { name: 'Vorschriften', files: [
+                        { name: 'Barrierefreiheit_Vorgaben.pdf', type: 'pdf', size: '1.4 MB' },
+                        { name: 'Brandschutzauflagen.pdf', type: 'pdf', size: '2.0 MB' },
+                        { name: 'Hygienerichtlinien.pdf', type: 'pdf', size: '1.1 MB' },
+                    ]},
+                    { name: 'Fotos', files: [
+                        { name: 'Bestand_Bad_Station_A_01.jpg', type: 'img', size: '3.2 MB' },
+                        { name: 'Bestand_Bad_Station_A_02.jpg', type: 'img', size: '2.9 MB' },
+                        { name: 'Bestand_Bad_Station_B_01.jpg', type: 'img', size: '3.5 MB' },
+                        { name: 'Bestand_Flur_01.jpg', type: 'img', size: '2.7 MB' },
+                    ]},
+                ]
+            },
+            {
+                id: 'k005',
+                name: 'Hotel Nistertal – Wellnessbereich',
+                adresse: 'Talstraße 22, 56477 Rennerod',
+                auftraggeber: 'Hotel Nistertal GmbH & Co. KG',
+                ag_adresse: 'Talstraße 22, 56477 Rennerod',
+                ag_telefon: '02664-99170',
+                ag_email: 'info@hotel-nistertal.de',
+                bauleitung: 'Dipl.-Ing. Petra Fuchs',
+                bl_adresse: 'Gartenweg 3, 56477 Rennerod',
+                bl_telefon: '0160-4478832',
+                bl_email: 'p.fuchs@fuchs-ing.de',
+                architekt: 'Wellness-Architektur Koblenz',
+                arch_adresse: 'Am Plan 8, 56068 Koblenz',
+                arch_telefon: '0261-2889900',
+                arch_email: 'kontakt@wellness-architektur.de',
+                dateien: 15,
+                letzteAenderung: '12.02.2026',
+                files: [
+                    { name: 'LV_Wellness_Fliesen.pdf', type: 'pdf', size: '2.2 MB' },
+                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
+                    { name: 'Poolbereich_Grundriss.pdf', type: 'pdf', size: '4.9 MB' },
+                    { name: 'Dampfbad_Detail.pdf', type: 'pdf', size: '2.3 MB' },
+                    { name: 'Mosaikplan_Pool.jpg', type: 'img', size: '3.6 MB' },
+                ],
+                folders: [
+                    { name: 'Leistungsverzeichnis', files: [
+                        { name: 'LV_Wellness_Fliesen.pdf', type: 'pdf', size: '2.2 MB' },
+                    ]},
+                    { name: 'Zeichnungen', files: [
+                        { name: 'Poolbereich_Grundriss.pdf', type: 'pdf', size: '4.9 MB' },
+                        { name: 'Dampfbad_Detail.pdf', type: 'pdf', size: '2.3 MB' },
+                        { name: 'Mosaikplan_Pool.jpg', type: 'img', size: '3.6 MB' },
+                    ]},
+                    { name: 'Stammdaten', files: [
+                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
+                    ]},
+                    { name: 'Fotos', files: [
+                        { name: 'Wellness_Bestand_01.jpg', type: 'img', size: '4.0 MB' },
+                        { name: 'Wellness_Bestand_02.jpg', type: 'img', size: '3.7 MB' },
+                    ]},
+                ]
+            },
+        ];
+
+        /* ═══════════════════════════════════════════
+           FIRMENLOGO COMPONENT
+           ═══════════════════════════════════════════ */
+        function FirmenLogo({ size = 'large' }) {
+            const scale = size === 'small' ? 0.55 : 1;
+            return (
+                <div className="logo-container" style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}>
+                    {/* Row 1: "Thomas" in rot kursiv */}
+                    <div className="logo-thomas-row">
+                        <span className="logo-thomas-text">Thomas</span>
+                    </div>
+
+                    {/* Row 2: "wiLLwacher" */}
+                    <div className="logo-word-row">
+                        <span className="logo-w">w</span>
+                        <span className="logo-i-wrap">
+                            <span className="logo-i-char">{'\u0131'}</span>
+                            <span className="logo-i-dot"></span>
+                        </span>
+                        <span className="logo-LL">LL</span>
+                        <span className="logo-wacher">wacher</span>
+                    </div>
+
+                    {/* Row 3: "Fliesenlegermeister e.K." rot rechtsbündig */}
+                    <div className="logo-subtitle-row">
+                        <span className="logo-subtitle-text">Fliesenlegermeister e.K.</span>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           NAV HEADER COMPONENT
+           ═══════════════════════════════════════════ */
+        function NavHeader({ page, onBack, onForward, canBack, canForward }) {
+            return (
+                <header className="app-header">
+                    <div className="nav-bar">
+                        <button className="nav-btn" disabled={!canBack} onClick={onBack}>
+                            ◀
+                        </button>
+                        <button className="nav-btn" disabled={!canForward} onClick={onForward}>
+                            ▶
+                        </button>
+                    </div>
+                    <span className="header-title">Aufmaß-App</span>
+                    <span className="header-version">v1.0</span>
+                </header>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           STATUS BAR COMPONENT
+           ═══════════════════════════════════════════ */
+        function StatusBar({ driveStatus, activeProject }) {
+            const statusText = {
+                offline: 'Google Drive: Nicht verbunden',
+                connecting: 'Verbinde mit Google Drive...',
+                online: 'Google Drive: Verbunden',
+            };
+            return (
+                <footer className="status-bar">
+                    <span>
+                        <span className={`status-dot ${driveStatus}`}></span>
+                        {statusText[driveStatus]}
+                    </span>
+                    <span>{activeProject ? `📐 ${activeProject}` : 'Kein aktives Aufmaß'}</span>
+                </footer>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           AUTH MODAL COMPONENT
+           ═══════════════════════════════════════════ */
+        function AuthModal({ onAuth, onCancel }) {
+            const [step, setStep] = useState(0);
+
+            const startAuth = () => {
+                setStep(1);
+                setTimeout(() => setStep(2), 1200);
+                setTimeout(() => setStep(3), 2200);
+                setTimeout(() => onAuth(), 3000);
+            };
+
+            useEffect(() => {
+                const handleKey = (e) => {
+                    if (e.key === 'Enter' && step === 0) startAuth();
+                    if (e.key === 'Escape') onCancel();
+                };
+                window.addEventListener('keydown', handleKey);
+                return () => window.removeEventListener('keydown', handleKey);
+            }, [step]);
+
+            return (
+                <div className="modal-overlay" onClick={onCancel}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-title">🔐 Google Drive Verbindung</div>
+                        <div className="modal-text">
+                            Zur Anzeige der Baustellen-Ordner wird eine Verbindung
+                            mit deinem Google Drive benötigt.
+                        </div>
+                        {step === 0 ? (
+                            <div className="modal-btn-group">
+                                <button className="modal-btn secondary" onClick={onCancel}>Abbrechen</button>
+                                <button className="modal-btn primary" onClick={startAuth}>Verbinden</button>
+                            </div>
+                        ) : (
+                            <div className="modal-steps">
+                                <div className="modal-step">
+                                    <span className={`step-num ${step >= 1 ? (step > 1 ? 'done' : 'active') : ''}`}>
+                                        {step > 1 ? '✓' : '1'}
+                                    </span>
+                                    <span>OAuth 2.0 Authentifizierung...</span>
+                                </div>
+                                <div className="modal-step">
+                                    <span className={`step-num ${step >= 2 ? (step > 2 ? 'done' : 'active') : ''}`}>
+                                        {step > 2 ? '✓' : '2'}
+                                    </span>
+                                    <span>Zugriffstoken erhalten...</span>
+                                </div>
+                                <div className="modal-step">
+                                    <span className={`step-num ${step >= 3 ? 'done' : ''}`}>
+                                        {step >= 3 ? '✓' : '3'}
+                                    </span>
+                                    <span>Baustellen-Ordner wird geöffnet...</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           STARTSEITE PAGE
+           ═══════════════════════════════════════════ */
+        function Startseite({ onKundeClick }) {
+            return (
+                <div className="startseite">
+                    <div className="logo-section">
+                        <FirmenLogo size="large" />
+                        <div className="logo-address">
+                            Flurweg 14a · 56472 Nisterau · Tel. 02661-63101
+                        </div>
+                    </div>
+
+                    <div className="kunde-btn-wrapper">
+                        <button className="kunde-btn" onClick={onKundeClick}>
+                            <span className="kunde-btn-icon">📂</span>
+                            Kunde
+                        </button>
+                        <div className="kunde-btn-hint">
+                            Verbindung zu Google Drive herstellen<br/>
+                            und Baustellen-Akte laden
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           KUNDENAUSWAHL PAGE
+           ═══════════════════════════════════════════ */
+        function Kundenauswahl({ onSelect, loading }) {
+            const [searchTerm, setSearchTerm] = useState('');
+            const inputRef = React.useRef(null);
+
+            const sortedKunden = [...DEMO_KUNDEN].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+            const filtered = sortedKunden.filter(k =>
+                k.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                k.adresse.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                k.auftraggeber.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            const highlightText = (text, term) => {
+                if (!term) return text;
+                const idx = text.toLowerCase().indexOf(term.toLowerCase());
+                if (idx === -1) return text;
+                return (
+                    <React.Fragment>
+                        {text.slice(0, idx)}
+                        <span className="highlight">{text.slice(idx, idx + term.length)}</span>
+                        {text.slice(idx + term.length)}
+                    </React.Fragment>
+                );
+            };
+
+            if (loading) {
+                return (
+                    <div className="page-container">
+                        <div className="loading-container">
+                            <div className="spinner"></div>
+                            <div className="loading-text">Baustellen-Ordner wird geladen...</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="page-container">
+                    <div className="breadcrumb">
+                        <span>Google Drive</span>
+                        <span>›</span>
+                        <span className="breadcrumb-active">Baustellen</span>
+                    </div>
+                    <div className="page-title">Baustellen-Ordner</div>
+                    <div className="page-subtitle">{DEMO_KUNDEN.length} Kundenprojekte verfügbar</div>
+
+                    <div className="search-container">
+                        <input
+                            ref={inputRef}
+                            className="search-input"
+                            type="text"
+                            placeholder="Baustelle suchen..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && filtered.length > 0) {
+                                    onSelect(filtered[0]);
+                                }
+                            }}
+                            autoComplete="off"
+                        />
+                        <span className="search-icon">🔍</span>
+                        <button
+                            className={`search-clear ${searchTerm ? 'visible' : ''}`}
+                            onClick={() => { setSearchTerm(''); inputRef.current.focus(); }}
+                        >
+                            ✕
+                        </button>
+                        <span className={`search-count ${searchTerm ? 'has-filter' : ''}`}>
+                            {filtered.length} / {DEMO_KUNDEN.length}
+                        </span>
+                    </div>
+
+                    {filtered.length > 0 ? (
+                        <div className="folder-list">
+                            {filtered.map((kunde, idx) => (
+                                <div
+                                    key={kunde.id}
+                                    className="folder-item"
+                                    style={{ animationDelay: `${idx * 0.06}s` }}
+                                    onClick={() => onSelect(kunde)}
+                                >
+                                    <span className="folder-icon">📁</span>
+                                    <div className="folder-info">
+                                        <div className="folder-name">
+                                            {highlightText(kunde.name, searchTerm)}
+                                        </div>
+                                        <div className="folder-meta">
+                                            {kunde.dateien} Dateien · Letzte Änderung: {kunde.letzteAenderung}
+                                        </div>
+                                    </div>
+                                    <span className="folder-arrow">›</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="no-results">
+                            <div className="no-results-icon">🔎</div>
+                            <div className="no-results-text">
+                                Keine Baustelle gefunden für „{searchTerm}"
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           KUNDEN-AKTE PAGE (Preview before loading)
+           ═══════════════════════════════════════════ */
+        function KundenAkte({ kunde, onLoad, onBack, loading }) {
+            const [edits, setEdits] = useState({});
+            const [extraNotes, setExtraNotes] = useState({ ag: [], bl: [], arch: [] });
+            const [selectedFolders, setSelectedFolders] = useState(() => {
+                return (kunde.folders || []).reduce((acc, f, i) => ({ ...acc, [i]: true }), {});
+            });
+
+            const handleEdit = (field, value) => {
+                setEdits(prev => ({ ...prev, [field]: value }));
+            };
+
+            const getVal = (field, original) => {
+                if (edits[field] !== undefined) return edits[field];
+                return original || '';
+            };
+
+            const addNote = (section) => {
+                setExtraNotes(prev => ({
+                    ...prev,
+                    [section]: [...prev[section], '']
+                }));
+                // Focus the new textarea after render
+                setTimeout(() => {
+                    const textareas = document.querySelectorAll(`.notes-${section} .contact-extra-textarea`);
+                    if (textareas.length) textareas[textareas.length - 1].focus();
+                }, 50);
+            };
+
+            const updateNote = (section, idx, value) => {
+                setExtraNotes(prev => ({
+                    ...prev,
+                    [section]: prev[section].map((n, i) => i === idx ? value : n)
+                }));
+            };
+
+            const removeNote = (section, idx) => {
+                setExtraNotes(prev => ({
+                    ...prev,
+                    [section]: prev[section].filter((_, i) => i !== idx)
+                }));
+            };
+
+            const fileTypeIcon = (type) => {
+                switch(type) {
+                    case 'pdf': return '📄';
+                    case 'xlsx': return '📊';
+                    case 'img': return '🖼️';
+                    default: return '📎';
+                }
+            };
+
+            const toggleFolder = (idx) => {
+                setSelectedFolders(prev => ({ ...prev, [idx]: !prev[idx] }));
+            };
+
+            const selectAll = () => {
+                const allSelected = Object.values(selectedFolders).every(v => v);
+                const newState = {};
+                (kunde.folders || []).forEach((_, i) => { newState[i] = !allSelected; });
+                setSelectedFolders(newState);
+            };
+
+            const calcSize = () => {
+                let total = 0;
+                (kunde.folders || []).forEach((folder, i) => {
+                    if (selectedFolders[i]) {
+                        folder.files.forEach(f => {
+                            total += parseFloat(f.size);
+                        });
+                    }
+                });
+                return total.toFixed(1);
+            };
+
+            const selectedCount = Object.values(selectedFolders).filter(v => v).length;
+            const totalFolders = (kunde.folders || []).length;
+            const allSelected = selectedCount === totalFolders;
+
+            const ContactField = ({ icon, label, field, original }) => {
+                const val = getVal(field, original);
+                const isMissing = !original;
+                return (
+                    <div className="contact-row">
+                        <span className="contact-icon">{icon}</span>
+                        {isMissing ? (
+                            <input
+                                className="contact-input"
+                                type="text"
+                                placeholder={`${label} nachtragen...`}
+                                value={val}
+                                onChange={e => handleEdit(field, e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.target.blur();
+                                        const next = e.target.closest('.contact-section')
+                                            ?.nextElementSibling?.querySelector('.contact-input');
+                                        if (next) next.focus();
+                                    }
+                                }}
+                            />
+                        ) : (
+                            <span className="contact-value">{val}</span>
+                        )}
+                    </div>
+                );
+            };
+
+            const countMissing = () => {
+                let m = 0;
+                ['ag_adresse','ag_telefon','ag_email','bl_adresse','bl_telefon','bl_email','arch_adresse','arch_telefon','arch_email'].forEach(f => {
+                    if (!kunde[f] && !edits[f]) m++;
+                });
+                return m;
+            };
+
+            if (loading) {
+                return (
+                    <div className="page-container">
+                        <div className="loading-container">
+                            <div className="spinner"></div>
+                            <div className="loading-text">
+                                {selectedCount} von {totalFolders} Ordner werden geladen...
+                            </div>
+                            <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'8px'}}>
+                                ca. {calcSize()} MB Datenübertragung
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            const missing = countMissing();
+
+            return (
+                <div className="page-container">
+                    <div className="breadcrumb">
+                        <span>Google Drive</span>
+                        <span>›</span>
+                        <span>Baustellen</span>
+                        <span>›</span>
+                        <span className="breadcrumb-active">{kunde.name.split(' – ')[0]}</span>
+                    </div>
+
+                    <div className="page-title">{kunde.name}</div>
+                    <div className="page-subtitle">📍 {kunde.adresse}</div>
+
+                    {/* Projektdaten mit Kontaktdaten */}
+                    <div className="kunde-preview">
+                        <div className="kunde-preview-header">
+                            📋 Projektdaten
+                        </div>
+
+                        <div className="contact-section">
+                            <div className="contact-section-header">
+                                <div className="contact-role">Auftraggeber</div>
+                                <button className="contact-add-btn" onClick={() => addNote('ag')} title="Zusatzinfo nachtragen">+</button>
+                            </div>
+                            <div className="contact-name">{kunde.auftraggeber}</div>
+                            <ContactField icon="📍" label="Adresse" field="ag_adresse" original={kunde.ag_adresse} />
+                            <ContactField icon="📞" label="Telefon" field="ag_telefon" original={kunde.ag_telefon} />
+                            <ContactField icon="✉️" label="E-Mail" field="ag_email" original={kunde.ag_email} />
+                            {extraNotes.ag.length > 0 && (
+                                <div className={`contact-extra-notes notes-ag`}>
+                                    {extraNotes.ag.map((note, i) => (
+                                        <div key={i} className="contact-extra-note">
+                                            <span className="contact-icon">📝</span>
+                                            <textarea
+                                                className="contact-extra-textarea"
+                                                placeholder="Zusatzinfo eingeben..."
+                                                value={note}
+                                                onChange={e => updateNote('ag', i, e.target.value)}
+                                                rows={1}
+                                                onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                            />
+                                            <button className="contact-remove-btn" onClick={() => removeNote('ag', i)}>✕</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="contact-section">
+                            <div className="contact-section-header">
+                                <div className="contact-role">Bauleitung</div>
+                                <button className="contact-add-btn" onClick={() => addNote('bl')} title="Zusatzinfo nachtragen">+</button>
+                            </div>
+                            <div className="contact-name">{kunde.bauleitung}</div>
+                            <ContactField icon="📍" label="Adresse" field="bl_adresse" original={kunde.bl_adresse} />
+                            <ContactField icon="📞" label="Telefon" field="bl_telefon" original={kunde.bl_telefon} />
+                            <ContactField icon="✉️" label="E-Mail" field="bl_email" original={kunde.bl_email} />
+                            {extraNotes.bl.length > 0 && (
+                                <div className={`contact-extra-notes notes-bl`}>
+                                    {extraNotes.bl.map((note, i) => (
+                                        <div key={i} className="contact-extra-note">
+                                            <span className="contact-icon">📝</span>
+                                            <textarea
+                                                className="contact-extra-textarea"
+                                                placeholder="Zusatzinfo eingeben..."
+                                                value={note}
+                                                onChange={e => updateNote('bl', i, e.target.value)}
+                                                rows={1}
+                                                onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                            />
+                                            <button className="contact-remove-btn" onClick={() => removeNote('bl', i)}>✕</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="contact-section">
+                            <div className="contact-section-header">
+                                <div className="contact-role">Architekt / Planer</div>
+                                <button className="contact-add-btn" onClick={() => addNote('arch')} title="Zusatzinfo nachtragen">+</button>
+                            </div>
+                            <div className="contact-name">{kunde.architekt}</div>
+                            <ContactField icon="📍" label="Adresse" field="arch_adresse" original={kunde.arch_adresse} />
+                            <ContactField icon="📞" label="Telefon" field="arch_telefon" original={kunde.arch_telefon} />
+                            <ContactField icon="✉️" label="E-Mail" field="arch_email" original={kunde.arch_email} />
+                            {extraNotes.arch.length > 0 && (
+                                <div className={`contact-extra-notes notes-arch`}>
+                                    {extraNotes.arch.map((note, i) => (
+                                        <div key={i} className="contact-extra-note">
+                                            <span className="contact-icon">📝</span>
+                                            <textarea
+                                                className="contact-extra-textarea"
+                                                placeholder="Zusatzinfo eingeben..."
+                                                value={note}
+                                                onChange={e => updateNote('arch', i, e.target.value)}
+                                                rows={1}
+                                                onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                            />
+                                            <button className="contact-remove-btn" onClick={() => removeNote('arch', i)}>✕</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {missing > 0 && (
+                            <div className="contact-missing-hint">
+                                ⚠️ {missing} Angabe{missing > 1 ? 'n' : ''} nicht gefunden – bitte nachtragen
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Ordnerauswahl */}
+                    {kunde.folders && kunde.folders.length > 0 && (
+                        <div className="kunde-preview" style={{marginTop:'12px'}}>
+                            <div className="folder-select-header">
+                                <div className="kunde-preview-header" style={{marginBottom:0}}>
+                                    📂 Ordner auswählen
+                                </div>
+                                <button className="select-all-btn" onClick={selectAll}>
+                                    {allSelected ? 'Keine auswählen' : 'Alle auswählen'}
+                                </button>
+                            </div>
+
+                            {kunde.folders.map((folder, idx) => {
+                                const isSelected = !!selectedFolders[idx];
+                                const folderSize = folder.files.reduce((s, f) => s + parseFloat(f.size), 0).toFixed(1);
+                                return (
+                                    <div key={idx} className={`folder-select-item ${isSelected ? 'selected' : ''}`}>
+                                        <div className="folder-select-head" onClick={() => toggleFolder(idx)}>
+                                            <div className={`folder-checkbox ${isSelected ? 'checked' : ''}`}>
+                                                {isSelected ? '✓' : ''}
+                                            </div>
+                                            <span style={{fontSize:'22px'}}>📁</span>
+                                            <div className="folder-select-info">
+                                                <div className="folder-select-name">{folder.name}</div>
+                                                <div className="folder-select-meta">
+                                                    {folder.files.length} Datei{folder.files.length > 1 ? 'en' : ''}
+                                                </div>
+                                            </div>
+                                            <span className="folder-select-size">{folderSize} MB</span>
+                                        </div>
+                                        <div className="folder-files-preview">
+                                            {folder.files.map((file, fi) => (
+                                                <div key={fi} className="folder-file-row">
+                                                    <span>{fileTypeIcon(file.type)}</span>
+                                                    <span>{file.name}</span>
+                                                    <span style={{marginLeft:'auto', opacity:0.6}}>{file.size}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            <div className="transfer-summary">
+                                <span className="transfer-summary-label">
+                                    {selectedCount} von {totalFolders} Ordner ausgewählt
+                                </span>
+                                <span className="transfer-summary-value">
+                                    {calcSize()} MB
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <button className="action-btn-full" onClick={onLoad} disabled={selectedCount === 0}
+                        style={selectedCount === 0 ? {opacity:0.4, cursor:'not-allowed'} : {}}>
+                        📥 Ausgewählte Ordner laden
+                    </button>
+                    <button className="action-btn-full" onClick={onLoad} style={{
+                        marginTop:'10px',
+                        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-hover) 100%)',
+                        border: '2px solid var(--accent-orange)',
+                        color: 'var(--accent-orange)'
+                    }}>
+                        Weiter ▶
+                    </button>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           AKTE GELADEN – SUCCESS PAGE
+           ═══════════════════════════════════════════ */
+        function AkteGeladen({ kunde, onStartAufmass }) {
+            return (
+                <div className="page-container">
+                    <div className="breadcrumb">
+                        <span>Google Drive</span>
+                        <span>›</span>
+                        <span>Baustellen</span>
+                        <span>›</span>
+                        <span className="breadcrumb-active">{kunde.name.split(' – ')[0]}</span>
+                    </div>
+
+                    <div style={{
+                        textAlign:'center',
+                        padding:'40px 20px',
+                        animation:'fadeInUp 0.5s ease-out'
+                    }}>
+                        <div style={{fontSize:'48px', marginBottom:'16px'}}>✅</div>
+                        <div className="page-title" style={{textAlign:'center', marginBottom:'8px'}}>
+                            Kundenakte geladen!
+                        </div>
+                        <div style={{fontSize:'14px', color:'var(--text-light)', marginBottom:'32px', lineHeight:'1.6'}}>
+                            Alle Dokumente wurden erfolgreich importiert.<br/>
+                            Das Aufmaß kann beginnen.
+                        </div>
+
+                        <div className="kunde-preview">
+                            <div className="kunde-preview-header">✅ Import-Zusammenfassung</div>
+                            <div className="kunde-detail">
+                                <span className="kunde-detail-label">Leistungsverzeichnis</span>
+                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>✓ Eingelesen</span>
+                            </div>
+                            <div className="kunde-detail">
+                                <span className="kunde-detail-label">Kundenstammdaten</span>
+                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>✓ Übernommen</span>
+                            </div>
+                            <div className="kunde-detail">
+                                <span className="kunde-detail-label">Grundrisse/Zeichnungen</span>
+                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>✓ Importiert</span>
+                            </div>
+                            <div className="kunde-detail">
+                                <span className="kunde-detail-label">Projekt</span>
+                                <span className="kunde-detail-value">{kunde.name}</span>
+                            </div>
+                        </div>
+
+                        <button className="action-btn-full" style={{marginTop:'24px'}} onClick={onStartAufmass}>
+                            🏗️ Raumblatt erstellen
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           RAUMBLATT COMPONENT (Schritt 4)
+           ═══════════════════════════════════════════ */
+        function Raumblatt({ kunde, raumNr, onFinishRaum }) {
+            const [raumName, setRaumName] = useState('');
+            const [fotos, setFotos] = useState([]);
+            const [masse, setMasse] = useState({ laenge: '', breite: '', hoehe: '' });
+            const [abzuege, setAbzuege] = useState([]);
+            const [showAbzugModal, setShowAbzugModal] = useState(false);
+            const [abzugForm, setAbzugForm] = useState({ typ: 'tuer', name: '', breite: '', hoehe: '', tiefe: '' });
+
+            const parseMass = (v) => { const n = parseFloat(v.replace(',','.')); return isNaN(n) ? 0 : n; };
+            const L = parseMass(masse.laenge);
+            const B = parseMass(masse.breite);
+            const H = parseMass(masse.hoehe);
+
+            const wandflaeche = H > 0 ? 2 * (L + B) * H : 0;
+            const bodenflaeche = L * B;
+
+            const abzugTotal = abzuege.filter(a => a.typ !== 'laibung').reduce((s, a) =>
+                s + parseMass(a.breite) * parseMass(a.hoehe), 0);
+            const zurechnungTotal = abzuege.filter(a => a.typ === 'laibung').reduce((s, a) => {
+                const b = parseMass(a.breite); const h = parseMass(a.hoehe); const t = parseMass(a.tiefe);
+                return s + (2 * h + b) * t; // Laibung: links+rechts+oben
+            }, 0);
+
+            const wandErgebnis = Math.max(0, wandflaeche - abzugTotal + zurechnungTotal);
+
+            const handleFoto = () => {
+                setFotos(prev => [...prev, { id: prev.length + 1, wand: `Wand ${prev.length + 1}`, zeit: new Date().toLocaleTimeString('de-DE') }]);
+            };
+
+            const addAbzug = () => {
+                const newAbzug = { ...abzugForm, id: Date.now() };
+                setAbzuege(prev => [...prev, newAbzug]);
+                setAbzugForm({ typ: 'tuer', name: '', breite: '', hoehe: '', tiefe: '' });
+                setShowAbzugModal(false);
+            };
+
+            const removeAbzug = (id) => {
+                setAbzuege(prev => prev.filter(a => a.id !== id));
+            };
+
+            // SVG Grundriss
+            const svgW = 280; const svgH = 200;
+            const rW = L > 0 && B > 0 ? 220 : 200;
+            const rH = L > 0 && B > 0 ? (B / L) * rW : 140;
+            const clampH = Math.min(Math.max(rH, 80), 160);
+            const rX = (svgW - rW) / 2; const rY = (svgH - clampH) / 2;
+
+            return (
+                <div className="page-container">
+                    <div className="breadcrumb">
+                        <span>{kunde.name.split(' – ')[0]}</span>
+                        <span>›</span>
+                        <span className="breadcrumb-active">Raumblatt #{raumNr}</span>
+                    </div>
+
+                    {/* Raumbezeichnung */}
+                    <div className="raum-header">
+                        <span className="raum-nummer">Raum #{raumNr}</span>
+                        <input
+                            className="raum-name-input"
+                            type="text"
+                            placeholder="Raumbezeichnung eingeben..."
+                            value={raumName}
+                            onChange={e => setRaumName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                            autoFocus
+                        />
+                    </div>
+
+                    {/* Grundriss */}
+                    <div className="grundriss-card">
+                        <div className="grundriss-card-title">📐 Grundriss</div>
+                        <svg className="grundriss-svg" viewBox={`0 0 ${svgW} ${svgH}`}>
+                            <rect x={rX} y={rY} width={rW} height={clampH}
+                                fill="rgba(230,126,34,0.06)" stroke="#e67e22" strokeWidth="2" rx="2"/>
+                            {/* Maßlinien */}
+                            {L > 0 && (
+                                <React.Fragment>
+                                    <line x1={rX} y1={rY + clampH + 16} x2={rX + rW} y2={rY + clampH + 16} stroke="#7a8a9e" strokeWidth="1"/>
+                                    <line x1={rX} y1={rY + clampH + 10} x2={rX} y2={rY + clampH + 22} stroke="#7a8a9e" strokeWidth="1"/>
+                                    <line x1={rX + rW} y1={rY + clampH + 10} x2={rX + rW} y2={rY + clampH + 22} stroke="#7a8a9e" strokeWidth="1"/>
+                                    <text x={svgW/2} y={rY + clampH + 30} textAnchor="middle" fill="#e67e22" fontSize="13" fontWeight="600">{L.toFixed(2)} m</text>
+                                </React.Fragment>
+                            )}
+                            {B > 0 && (
+                                <React.Fragment>
+                                    <line x1={rX - 16} y1={rY} x2={rX - 16} y2={rY + clampH} stroke="#7a8a9e" strokeWidth="1"/>
+                                    <line x1={rX - 22} y1={rY} x2={rX - 10} y2={rY} stroke="#7a8a9e" strokeWidth="1"/>
+                                    <line x1={rX - 22} y1={rY + clampH} x2={rX - 10} y2={rY + clampH} stroke="#7a8a9e" strokeWidth="1"/>
+                                    <text x={rX - 26} y={rY + clampH/2 + 4} textAnchor="middle" fill="#e67e22" fontSize="13" fontWeight="600"
+                                        transform={`rotate(-90, ${rX - 26}, ${rY + clampH/2})`}>{B.toFixed(2)} m</text>
+                                </React.Fragment>
+                            )}
+                            {/* Tür/Fenster Symbole */}
+                            {abzuege.map((a, i) => {
+                                if (a.typ === 'tuer') {
+                                    const tx = rX + 20 + i * 40;
+                                    return <React.Fragment key={a.id}>
+                                        <line x1={tx} y1={rY + clampH - 1} x2={tx + 20} y2={rY + clampH - 1} stroke="#e63535" strokeWidth="3"/>
+                                        <text x={tx + 10} y={rY + clampH - 6} textAnchor="middle" fill="#e63535" fontSize="9">T</text>
+                                    </React.Fragment>;
+                                }
+                                if (a.typ === 'fenster') {
+                                    const fx = rX + rW - 1;
+                                    const fy = rY + 15 + i * 30;
+                                    return <React.Fragment key={a.id}>
+                                        <line x1={fx} y1={fy} x2={fx} y2={fy + 20} stroke="#3498db" strokeWidth="3"/>
+                                        <text x={fx - 8} y={fy + 13} textAnchor="middle" fill="#3498db" fontSize="9">F</text>
+                                    </React.Fragment>;
+                                }
+                                return null;
+                            })}
+                            {/* Raumname im Grundriss */}
+                            <text x={svgW/2} y={rY + clampH/2 + 5} textAnchor="middle" fill="#b8c4d4" fontSize="14" fontWeight="500">
+                                {raumName || 'Raum ' + raumNr}
+                            </text>
+                        </svg>
+                    </div>
+
+                    {/* Foto-Button */}
+                    <button className="foto-btn" onClick={handleFoto}>
+                        📸 Foto aufnehmen
+                        {fotos.length > 0 && <span className="foto-count">{fotos.length}</span>}
+                    </button>
+
+                    {/* Maßeingabe */}
+                    <div className="masse-section">
+                        <div className="masse-section-title">📏 Raummaße</div>
+                        <div className="masse-grid three-col">
+                            <div className="masse-field">
+                                <span className="masse-label">Länge</span>
+                                <div className="masse-input-wrap">
+                                    <input className="masse-input" type="text" inputMode="decimal" placeholder="0,00"
+                                        value={masse.laenge} onChange={e => setMasse(p => ({...p, laenge: e.target.value}))}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.target.closest('.masse-grid').querySelectorAll('.masse-input')[1]?.focus(); }}}
+                                    />
+                                    <span className="masse-unit">m</span>
+                                </div>
+                            </div>
+                            <div className="masse-field">
+                                <span className="masse-label">Breite</span>
+                                <div className="masse-input-wrap">
+                                    <input className="masse-input" type="text" inputMode="decimal" placeholder="0,00"
+                                        value={masse.breite} onChange={e => setMasse(p => ({...p, breite: e.target.value}))}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.target.closest('.masse-grid').querySelectorAll('.masse-input')[2]?.focus(); }}}
+                                    />
+                                    <span className="masse-unit">m</span>
+                                </div>
+                            </div>
+                            <div className="masse-field">
+                                <span className="masse-label">Höhe</span>
+                                <div className="masse-input-wrap">
+                                    <input className="masse-input" type="text" inputMode="decimal" placeholder="0,00"
+                                        value={masse.hoehe} onChange={e => setMasse(p => ({...p, hoehe: e.target.value}))}
+                                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                    />
+                                    <span className="masse-unit">m</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Abzüge & Zurechnungen */}
+                    <div className="masse-section">
+                        <div className="masse-section-title">➖➕ Abzüge & Zurechnungen</div>
+                        {abzuege.map(a => {
+                            const bVal = parseMass(a.breite); const hVal = parseMass(a.hoehe); const tVal = parseMass(a.tiefe);
+                            let flaeche, icon, display;
+                            if (a.typ === 'laibung') {
+                                flaeche = (2 * hVal + bVal) * tVal;
+                                icon = '🔲';
+                                display = `${bVal}×${hVal} m, Tiefe ${tVal} m`;
+                            } else {
+                                flaeche = bVal * hVal;
+                                icon = a.typ === 'tuer' ? '🚪' : a.typ === 'fenster' ? '🪟' : '⬜';
+                                display = `${bVal} × ${hVal} m`;
+                            }
+                            return (
+                                <div className="abzug-item" key={a.id}>
+                                    <span className="abzug-icon">{icon}</span>
+                                    <div className="abzug-info">
+                                        <div className="abzug-name">{a.name || a.typ.charAt(0).toUpperCase() + a.typ.slice(1)}</div>
+                                        <div className="abzug-masse">{display}</div>
+                                    </div>
+                                    <span className={`abzug-result ${a.typ === 'laibung' ? 'zurechnung' : ''}`}>
+                                        {a.typ === 'laibung' ? '+' : '−'}{flaeche.toFixed(2)} m²
+                                    </span>
+                                    <button className="contact-remove-btn" onClick={() => removeAbzug(a.id)} style={{marginTop:0}}>✕</button>
+                                </div>
+                            );
+                        })}
+                        <button className="add-abzug-btn" onClick={() => setShowAbzugModal(true)}>
+                            ＋ Abzug / Zurechnung hinzufügen
+                        </button>
+                    </div>
+
+                    {/* Berechnungsbereich */}
+                    {(L > 0 || B > 0) && (
+                        <div className="berechnung-card">
+                            <div className="masse-section-title">🧮 Berechnung</div>
+                            {H > 0 && (
+                                <React.Fragment>
+                                    <div className="berechnung-row">
+                                        <div>
+                                            <div className="berechnung-label">Wandfläche</div>
+                                            <div className="berechnung-formel">2 × ({L.toFixed(2)} + {B.toFixed(2)}) × {H.toFixed(2)}</div>
+                                        </div>
+                                        <span className="berechnung-wert">{wandflaeche.toFixed(2)} m²</span>
+                                    </div>
+                                    {abzugTotal > 0 && (
+                                        <div className="berechnung-row">
+                                            <div className="berechnung-label">Abzüge</div>
+                                            <span className="berechnung-wert abzug">−{abzugTotal.toFixed(2)} m²</span>
+                                        </div>
+                                    )}
+                                    {zurechnungTotal > 0 && (
+                                        <div className="berechnung-row">
+                                            <div className="berechnung-label">Zurechnungen (Laibungen)</div>
+                                            <span className="berechnung-wert zurechnung">+{zurechnungTotal.toFixed(2)} m²</span>
+                                        </div>
+                                    )}
+                                    <div className="berechnung-total">
+                                        <span className="berechnung-total-label">Wand gesamt</span>
+                                        <span className="berechnung-total-wert">{wandErgebnis.toFixed(2)} m²</span>
+                                    </div>
+                                </React.Fragment>
+                            )}
+                            <div className="berechnung-row" style={{marginTop: H > 0 ? '12px' : '0'}}>
+                                <div>
+                                    <div className="berechnung-label">Bodenfläche</div>
+                                    <div className="berechnung-formel">{L.toFixed(2)} × {B.toFixed(2)}</div>
+                                </div>
+                                <span className="berechnung-wert">{bodenflaeche.toFixed(2)} m²</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Positionsauswahl */}
+                    <button className="pos-btn">
+                        📋 Position aus LV auswählen
+                    </button>
+
+                    {/* Action Buttons */}
+                    <div className="raum-actions">
+                        <button className="raum-btn-finish secondary" onClick={onFinishRaum}>
+                            ✅ Raumaufmaß fertigstellen
+                        </button>
+                    </div>
+
+                    {/* Abzug Modal */}
+                    {showAbzugModal && (
+                        <div className="modal-overlay" onClick={() => setShowAbzugModal(false)}>
+                            <div className="modal" onClick={e => e.stopPropagation()}>
+                                <div className="modal-title">Abzug / Zurechnung</div>
+                                <div className="abzug-modal-fields">
+                                    <div className="abzug-type-btns">
+                                        {['tuer','fenster','laibung','sonstige'].map(t => (
+                                            <button key={t} className={`abzug-type-btn ${abzugForm.typ === t ? 'active' : ''}`}
+                                                onClick={() => setAbzugForm(p => ({...p, typ: t}))}>
+                                                {t === 'tuer' ? '🚪 Tür' : t === 'fenster' ? '🪟 Fenster' : t === 'laibung' ? '🔲 Laibung' : '⬜ Sonst.'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="abzug-modal-field">
+                                        <span className="abzug-modal-label">Bezeichnung (optional)</span>
+                                        <input className="abzug-modal-input" placeholder="z.B. Eingangstür"
+                                            value={abzugForm.name} onChange={e => setAbzugForm(p => ({...p, name: e.target.value}))}
+                                            onKeyDown={e => { if (e.key === 'Enter') e.target.nextElementSibling?.nextElementSibling?.focus(); }}
+                                        />
+                                    </div>
+                                    <div className="masse-grid">
+                                        <div className="abzug-modal-field">
+                                            <span className="abzug-modal-label">Breite (m)</span>
+                                            <input className="abzug-modal-input" type="text" inputMode="decimal" placeholder="0,00"
+                                                value={abzugForm.breite} onChange={e => setAbzugForm(p => ({...p, breite: e.target.value}))}
+                                                onKeyDown={e => { if (e.key === 'Enter') e.target.closest('.masse-grid').querySelectorAll('.abzug-modal-input')[1]?.focus(); }}
+                                            />
+                                        </div>
+                                        <div className="abzug-modal-field">
+                                            <span className="abzug-modal-label">Höhe (m)</span>
+                                            <input className="abzug-modal-input" type="text" inputMode="decimal" placeholder="0,00"
+                                                value={abzugForm.hoehe} onChange={e => setAbzugForm(p => ({...p, hoehe: e.target.value}))}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        if (abzugForm.typ === 'laibung') {
+                                                            document.querySelector('.tiefe-input')?.focus();
+                                                        } else { addAbzug(); }
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    {abzugForm.typ === 'laibung' && (
+                                        <div className="abzug-modal-field">
+                                            <span className="abzug-modal-label">Laibungstiefe (m)</span>
+                                            <input className="abzug-modal-input tiefe-input" type="text" inputMode="decimal" placeholder="0,00"
+                                                value={abzugForm.tiefe} onChange={e => setAbzugForm(p => ({...p, tiefe: e.target.value}))}
+                                                onKeyDown={e => { if (e.key === 'Enter') addAbzug(); }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="modal-btn-group">
+                                    <button className="modal-btn secondary" onClick={() => setShowAbzugModal(false)}>Abbrechen</button>
+                                    <button className="modal-btn primary" onClick={addAbzug}>Hinzufügen</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           MAIN APP
+           ═══════════════════════════════════════════ */
+        function App() {
+            // Pages: 'start' | 'auswahl' | 'akte' | 'geladen' | 'raumblatt'
+            const [page, setPage] = useState('start');
+            const [driveStatus, setDriveStatus] = useState('offline');
+            const [showAuth, setShowAuth] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [selectedKunde, setSelectedKunde] = useState(null);
+            const [raumNr, setRaumNr] = useState(1);
+            const [history, setHistory] = useState(['start']);
+            const [historyIdx, setHistoryIdx] = useState(0);
+
+            /* ── Global Enter-Key Handler ── */
+            useEffect(() => {
+                const handleGlobalEnter = (e) => {
+                    if (e.key !== 'Enter') return;
+                    // Don't interfere with input fields
+                    const tag = e.target.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+                    switch(page) {
+                        case 'start':
+                            if (!showAuth) handleKundeClick();
+                            break;
+                        case 'akte':
+                            if (!loading) handleLoadAkte();
+                            break;
+                        case 'geladen':
+                            handleStartAufmass();
+                            break;
+                    }
+                };
+                window.addEventListener('keydown', handleGlobalEnter);
+                return () => window.removeEventListener('keydown', handleGlobalEnter);
+            });
+
+            const navigateTo = useCallback((newPage) => {
+                setPage(newPage);
+                setHistory(prev => {
+                    const newHistory = [...prev.slice(0, historyIdx + 1), newPage];
+                    setHistoryIdx(newHistory.length - 1);
+                    return newHistory;
+                });
+            }, [historyIdx]);
+
+            const goBack = () => {
+                if (historyIdx > 0) {
+                    const newIdx = historyIdx - 1;
+                    setHistoryIdx(newIdx);
+                    setPage(history[newIdx]);
+                }
+            };
+
+            const goForward = () => {
+                if (historyIdx < history.length - 1) {
+                    const newIdx = historyIdx + 1;
+                    setHistoryIdx(newIdx);
+                    setPage(history[newIdx]);
+                }
+            };
+
+            const handleKundeClick = () => {
+                setShowAuth(true);
+            };
+
+            const handleAuth = () => {
+                setShowAuth(false);
+                setDriveStatus('connecting');
+                setLoading(true);
+                navigateTo('auswahl');
+
+                setTimeout(() => {
+                    setDriveStatus('online');
+                    setLoading(false);
+                }, 1500);
+            };
+
+            const handleSelectKunde = (kunde) => {
+                setSelectedKunde(kunde);
+                navigateTo('akte');
+            };
+
+            const handleLoadAkte = () => {
+                setLoading(true);
+                setTimeout(() => {
+                    setLoading(false);
+                    navigateTo('geladen');
+                }, 2500);
+            };
+
+            const handleStartAufmass = () => {
+                setRaumNr(1);
+                navigateTo('raumblatt');
+            };
+
+            const handleFinishRaum = () => {
+                setRaumNr(prev => prev + 1);
+                navigateTo('raumblatt');
+            };
+
+            const renderPage = () => {
+                switch(page) {
+                    case 'start':
+                        return <Startseite onKundeClick={handleKundeClick} />;
+                    case 'auswahl':
+                        return <Kundenauswahl onSelect={handleSelectKunde} loading={loading} />;
+                    case 'akte':
+                        return <KundenAkte
+                            kunde={selectedKunde}
+                            onLoad={handleLoadAkte}
+                            loading={loading}
+                        />;
+                    case 'geladen':
+                        return <AkteGeladen kunde={selectedKunde} onStartAufmass={handleStartAufmass} />;
+                    case 'raumblatt':
+                        return <Raumblatt kunde={selectedKunde} raumNr={raumNr} onFinishRaum={handleFinishRaum} />;
+                    default:
+                        return <Startseite onKundeClick={handleKundeClick} />;
+                }
+            };
+
+            return (
+                <React.Fragment>
+                    <NavHeader
+                        page={page}
+                        onBack={goBack}
+                        onForward={goForward}
+                        canBack={historyIdx > 0}
+                        canForward={historyIdx < history.length - 1}
+                    />
+
+                    {renderPage()}
+
+                    {showAuth && (
+                        <AuthModal
+                            onAuth={handleAuth}
+                            onCancel={() => setShowAuth(false)}
+                        />
+                    )}
+
+                    <StatusBar driveStatus={driveStatus} activeProject={page === 'raumblatt' && selectedKunde ? selectedKunde.name.split(' – ')[0] : null} />
+                </React.Fragment>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           MOUNT
+           ═══════════════════════════════════════════ */
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
