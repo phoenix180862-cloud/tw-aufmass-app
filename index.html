@@ -25,6 +25,7 @@
         API_KEY: '',   // ← Optional: API Key für unauth. Requests
         SCOPES: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
         ROOT_FOLDER_NAME: 'Baustellen neu',
+        ROOT_FOLDER_ID: '14sYXItHIv09j3S9F8iPmhVS4qawbLqVe', // Direkte Ordner-ID als Fallback
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
     };
 
@@ -108,22 +109,43 @@
 
         // ── Ordner "Baustellen neu" finden ──
         async findRootFolder() {
-            const query = `name='${GDRIVE_CONFIG.ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents`;
-            const data = await this._fetchJSON(
-                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)&pageSize=10'
-            );
-            if (data.files && data.files.length > 0) {
-                this.rootFolderId = data.files[0].id;
-                return data.files[0];
+            // Methode 1: Direkte Ordner-ID (schnellste und sicherste Methode)
+            if (GDRIVE_CONFIG.ROOT_FOLDER_ID) {
+                try {
+                    const data = await this._fetchJSON(
+                        'https://www.googleapis.com/drive/v3/files/' + GDRIVE_CONFIG.ROOT_FOLDER_ID + '?fields=id,name'
+                    );
+                    if (data && data.id) {
+                        this.rootFolderId = data.id;
+                        return data;
+                    }
+                } catch (e) {
+                    console.warn('Direkte Ordner-ID fehlgeschlagen, suche per Name...', e);
+                }
             }
-            // Falls nicht in Root, breitere Suche
-            const query2 = `name='${GDRIVE_CONFIG.ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-            const data2 = await this._fetchJSON(
-                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query2) + '&fields=files(id,name)&pageSize=10'
+            // Methode 2: Suche per Name (mit und ohne Leerzeichen)
+            var searchNames = [GDRIVE_CONFIG.ROOT_FOLDER_NAME, GDRIVE_CONFIG.ROOT_FOLDER_NAME + ' '];
+            for (var si = 0; si < searchNames.length; si++) {
+                var sName = searchNames[si];
+                var query = "name='" + sName + "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+                var data = await this._fetchJSON(
+                    'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)&pageSize=10'
+                );
+                if (data.files && data.files.length > 0) {
+                    this.rootFolderId = data.files[0].id;
+                    return data.files[0];
+                }
+            }
+            // Methode 3: Breitere Suche mit "contains"
+            var query3 = "name contains 'Baustellen' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+            var data3 = await this._fetchJSON(
+                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query3) + '&fields=files(id,name)&pageSize=10'
             );
-            if (data2.files && data2.files.length > 0) {
-                this.rootFolderId = data2.files[0].id;
-                return data2.files[0];
+            if (data3.files && data3.files.length > 0) {
+                // Besten Treffer finden
+                var best = data3.files.find(function(f) { return f.name.trim().toLowerCase() === 'baustellen neu'; }) || data3.files[0];
+                this.rootFolderId = best.id;
+                return best;
             }
             throw new Error('Ordner "' + GDRIVE_CONFIG.ROOT_FOLDER_NAME + '" nicht gefunden');
         },
