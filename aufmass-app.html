@@ -10,6 +10,263 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+    <script>
+    // ═══════════════════════════════════════════════════════
+    // GOOGLE DRIVE SERVICE – Konfiguration & API-Funktionen
+    // ═══════════════════════════════════════════════════════
+    // WICHTIG: Eigene Google Cloud Client-ID hier eintragen!
+    // Erstelle unter https://console.cloud.google.com ein Projekt,
+    // aktiviere Google Drive API, erstelle OAuth 2.0 Client-ID
+    // (Webanwendung), und trage die ID hier ein.
+    const GDRIVE_CONFIG = {
+        CLIENT_ID: '76287040810-vsm8abbur2m4hjgm845mbdlps47b1qp4.apps.googleusercontent.com', // Thomas Willwacher OAuth Client-ID
+        API_KEY: '',   // ← Optional: API Key für unauth. Requests
+        SCOPES: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
+        ROOT_FOLDER_NAME: 'Baustellen neu',
+        DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+    };
+
+    window.GoogleDriveService = {
+        tokenClient: null,
+        accessToken: null,
+        rootFolderId: null,
+        _gapiInited: false,
+        _gisInited: false,
+
+        // ── Initialisierung ──
+        async init() {
+            if (!GDRIVE_CONFIG.CLIENT_ID) {
+                console.warn('Google Drive: Keine Client-ID konfiguriert – Demo-Modus aktiv');
+                return false;
+            }
+            try {
+                await new Promise((resolve) => {
+                    gapi.load('client', resolve);
+                });
+                await gapi.client.init({
+                    apiKey: GDRIVE_CONFIG.API_KEY || undefined,
+                    discoveryDocs: [GDRIVE_CONFIG.DISCOVERY_DOC],
+                });
+                this._gapiInited = true;
+                this.tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: GDRIVE_CONFIG.CLIENT_ID,
+                    scope: GDRIVE_CONFIG.SCOPES,
+                    callback: () => {}, // wird bei requestAuth gesetzt
+                });
+                this._gisInited = true;
+                return true;
+            } catch (err) {
+                console.error('GDrive Init Fehler:', err);
+                return false;
+            }
+        },
+
+        // ── OAuth 2.0 Authentifizierung ──
+        requestAuth() {
+            return new Promise((resolve, reject) => {
+                if (!this.tokenClient) { reject(new Error('Nicht initialisiert')); return; }
+                this.tokenClient.callback = (response) => {
+                    if (response.error) { reject(new Error(response.error)); return; }
+                    this.accessToken = response.access_token;
+                    resolve(response.access_token);
+                };
+                if (this.accessToken) {
+                    this.tokenClient.requestAccessToken({ prompt: '' });
+                } else {
+                    this.tokenClient.requestAccessToken({ prompt: 'consent' });
+                }
+            });
+        },
+
+        isConnected() {
+            return !!this.accessToken;
+        },
+
+        // ── API-Helfer ──
+        async _fetch(url, options) {
+            if (!this.accessToken) throw new Error('Nicht authentifiziert');
+            const resp = await fetch(url, {
+                ...options,
+                headers: {
+                    'Authorization': 'Bearer ' + this.accessToken,
+                    ...(options?.headers || {}),
+                },
+            });
+            if (!resp.ok) {
+                const err = await resp.text();
+                throw new Error('Drive API Fehler: ' + resp.status + ' ' + err);
+            }
+            return resp;
+        },
+
+        async _fetchJSON(url, options) {
+            const resp = await this._fetch(url, options);
+            return resp.json();
+        },
+
+        // ── Ordner "Baustellen neu" finden ──
+        async findRootFolder() {
+            const query = `name='${GDRIVE_CONFIG.ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents`;
+            const data = await this._fetchJSON(
+                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)&pageSize=10'
+            );
+            if (data.files && data.files.length > 0) {
+                this.rootFolderId = data.files[0].id;
+                return data.files[0];
+            }
+            // Falls nicht in Root, breitere Suche
+            const query2 = `name='${GDRIVE_CONFIG.ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+            const data2 = await this._fetchJSON(
+                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query2) + '&fields=files(id,name)&pageSize=10'
+            );
+            if (data2.files && data2.files.length > 0) {
+                this.rootFolderId = data2.files[0].id;
+                return data2.files[0];
+            }
+            throw new Error('Ordner "' + GDRIVE_CONFIG.ROOT_FOLDER_NAME + '" nicht gefunden');
+        },
+
+        // ── Kundenordner auflisten ──
+        async listKundenOrdner() {
+            if (!this.rootFolderId) await this.findRootFolder();
+            const query = `'${this.rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+            const data = await this._fetchJSON(
+                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name,modifiedTime)&orderBy=name&pageSize=100'
+            );
+            return (data.files || []).map(f => ({
+                id: f.id,
+                name: f.name,
+                letzteAenderung: new Date(f.modifiedTime).toLocaleDateString('de-DE'),
+            }));
+        },
+
+        // ── Dateien in einem Ordner auflisten (rekursiv 1 Ebene) ──
+        async listFolderContents(folderId) {
+            const query = `'${folderId}' in parents and trashed=false`;
+            const data = await this._fetchJSON(
+                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) +
+                '&fields=files(id,name,mimeType,size,modifiedTime)&orderBy=name&pageSize=200'
+            );
+            const files = data.files || [];
+            const result = { folders: [], files: [] };
+            for (const f of files) {
+                if (f.mimeType === 'application/vnd.google-apps.folder') {
+                    // Unterordner-Dateien laden
+                    const subQuery = `'${f.id}' in parents and trashed=false`;
+                    const subData = await this._fetchJSON(
+                        'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(subQuery) +
+                        '&fields=files(id,name,mimeType,size,modifiedTime)&orderBy=name&pageSize=100'
+                    );
+                    result.folders.push({
+                        name: f.name,
+                        id: f.id,
+                        files: (subData.files || []).map(sf => ({
+                            id: sf.id,
+                            name: sf.name,
+                            type: this._getFileType(sf.mimeType, sf.name),
+                            size: sf.size ? (parseFloat(sf.size) / 1024 / 1024).toFixed(1) + ' MB' : '—',
+                        })),
+                    });
+                } else {
+                    result.files.push({
+                        id: f.id,
+                        name: f.name,
+                        type: this._getFileType(f.mimeType, f.name),
+                        size: f.size ? (parseFloat(f.size) / 1024 / 1024).toFixed(1) + ' MB' : '—',
+                    });
+                }
+            }
+            return result;
+        },
+
+        _getFileType(mimeType, name) {
+            if (mimeType === 'application/pdf' || (name && name.endsWith('.pdf'))) return 'pdf';
+            if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || (name && (name.endsWith('.xlsx') || name.endsWith('.xls')))) return 'xlsx';
+            if (mimeType.includes('image')) return 'img';
+            if (mimeType.includes('word') || mimeType.includes('document') || (name && (name.endsWith('.docx') || name.endsWith('.doc')))) return 'doc';
+            return 'sonstige';
+        },
+
+        // ── Ordner erstellen oder finden ──
+        async findOrCreateFolder(parentId, folderName) {
+            const query = `'${parentId}' in parents and name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+            const data = await this._fetchJSON(
+                'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(query) + '&fields=files(id,name)&pageSize=5'
+            );
+            if (data.files && data.files.length > 0) return data.files[0].id;
+            // Erstellen
+            const resp = await this._fetchJSON('https://www.googleapis.com/drive/v3/files', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: folderName,
+                    mimeType: 'application/vnd.google-apps.folder',
+                    parents: [parentId],
+                }),
+            });
+            return resp.id;
+        },
+
+        // ── Datei hochladen (Multipart) ──
+        async uploadFile(folderId, fileName, mimeType, blob) {
+            const metadata = {
+                name: fileName,
+                mimeType: mimeType,
+                parents: [folderId],
+            };
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', blob);
+            const resp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + this.accessToken },
+                body: form,
+            });
+            if (!resp.ok) throw new Error('Upload fehlgeschlagen: ' + resp.status);
+            return resp.json();
+        },
+
+        // ── Aufmaß exportieren (PDF + Excel → Google Drive) ──
+        async exportToCustomerFolder(kundeFolderId, pdfBlob, excelBlob, kundenName) {
+            const datumFile = new Date().toISOString().split('T')[0];
+            const safeName = kundenName.replace(/[^a-zA-Z0-9äöüÄÖÜß ]/g, '').replace(/ +/g, '_').substring(0, 30);
+
+            // Aufmaß-Unterordner erstellen/finden
+            const aufmassFolderId = await this.findOrCreateFolder(kundeFolderId, 'Aufmaß');
+
+            const results = [];
+            if (pdfBlob) {
+                const pdfResult = await this.uploadFile(
+                    aufmassFolderId,
+                    'Aufmass_' + datumFile + '_' + safeName + '.pdf',
+                    'application/pdf',
+                    pdfBlob
+                );
+                results.push({ type: 'pdf', ...pdfResult });
+            }
+            if (excelBlob) {
+                const xlResult = await this.uploadFile(
+                    aufmassFolderId,
+                    'Aufmass_' + datumFile + '_' + safeName + '.xlsx',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    excelBlob
+                );
+                results.push({ type: 'excel', ...xlResult });
+            }
+            return results;
+        },
+
+        // ── Datei herunterladen (als Blob) ──
+        async downloadFile(fileId) {
+            const resp = await this._fetch(
+                'https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media'
+            );
+            return resp.blob();
+        },
+    };
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
     <style>
         /* ═══════════════════════════════════════════
@@ -1423,38 +1680,375 @@
             display: block;
         }
 
-        /* Foto-Button */
-        .foto-btn {
+        /* ═══ Laser DISTO Button ═══ */
+        .laser-bar {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            width: 100%;
-            padding: 14px;
-            background: var(--bg-card);
-            border: 2px dashed var(--border-color);
-            border-radius: var(--radius-md);
-            color: var(--text-light);
-            font-family: 'Source Sans 3', sans-serif;
-            font-size: 15px;
-            cursor: pointer;
-            transition: all 0.2s;
+            gap: 8px;
             margin-bottom: 12px;
         }
-
-        .foto-btn:hover {
-            border-color: var(--accent-orange);
-            color: var(--accent-orange);
-            background: rgba(230,126,34,0.05);
+        .laser-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 18px;
+            border-radius: var(--radius-md);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+            border: 2px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-light);
+            flex: 1;
+        }
+        .laser-btn:hover {
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        .laser-btn.active {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: #fff;
+            border-color: #c0392b;
+            box-shadow: 0 0 16px rgba(231,76,60,0.35);
+        }
+        .laser-btn.active .laser-pulse {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #fff;
+            border-radius: 50%;
+            animation: laserPulse 1s ease-in-out infinite;
+        }
+        .laser-btn .laser-pulse {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: var(--text-muted);
+            border-radius: 50%;
+        }
+        @keyframes laserPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(255,255,255,0.6); }
+            50% { opacity: 0.3; box-shadow: 0 0 12px rgba(255,255,255,0.9); }
+        }
+        .laser-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .laser-status.connected {
+            background: rgba(39,174,96,0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(39,174,96,0.25);
+        }
+        .laser-status.disconnected {
+            background: rgba(150,150,150,0.08);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+        .laser-field-highlight {
+            animation: laserHighlight 0.6s ease;
+        }
+        @keyframes laserHighlight {
+            0% { box-shadow: 0 0 0 3px rgba(231,76,60,0.5); }
+            100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+        }
+        .laser-next-indicator {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #e74c3c;
+            font-weight: 700;
+            pointer-events: none;
+            opacity: 0.8;
         }
 
-        .foto-count {
+        /* ═══════════════════════════════════════════
+           FOTO-SYSTEM – Wandfotos + KI-Erkennung
+           ═══════════════════════════════════════════ */
+        .foto-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        .foto-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+        .foto-section-header:hover { background: var(--bg-hover); }
+        .foto-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-white);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .foto-section-badge {
             background: var(--accent-orange);
             color: #fff;
             padding: 2px 8px;
             border-radius: 10px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .foto-section-chevron {
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+        .foto-section-chevron.open { transform: rotate(180deg); }
+        .foto-section-body {
+            padding: 0 16px 16px;
+        }
+
+        /* Wand-Foto-Slots */
+        .foto-wall-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .foto-wall-slot {
+            border: 2px dashed var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            background: rgba(0,0,0,0.15);
+        }
+        .foto-wall-slot:hover {
+            border-color: var(--accent-orange);
+            background: rgba(230,126,34,0.04);
+        }
+        .foto-wall-slot.has-photo {
+            border-style: solid;
+            border-color: var(--success);
+        }
+        .foto-wall-slot.analyzing {
+            border-color: var(--accent-orange);
+            border-style: solid;
+            animation: fotoPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes fotoPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(230,126,34,0.3); }
+            50% { box-shadow: 0 0 12px 4px rgba(230,126,34,0.15); }
+        }
+        .foto-wall-label {
+            text-align: center;
+            padding: 6px 4px 4px;
             font-size: 12px;
             font-weight: 700;
+            color: var(--text-light);
+            background: rgba(0,0,0,0.3);
+        }
+        .foto-wall-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 8px 14px;
+            color: var(--text-muted);
+            font-size: 11px;
+            gap: 4px;
+        }
+        .foto-wall-empty-icon { font-size: 24px; opacity: 0.5; }
+        .foto-wall-thumb {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: cover;
+            display: block;
+        }
+        .foto-wall-actions {
+            display: flex;
+            gap: 0;
+        }
+        .foto-wall-actions button {
+            flex: 1;
+            padding: 6px 4px;
+            font-size: 11px;
+            border: none;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-family: 'Source Sans 3', sans-serif;
+        }
+        .foto-wall-ai-btn {
+            background: rgba(230,126,34,0.15);
+            color: var(--accent-orange);
+        }
+        .foto-wall-ai-btn:hover { background: rgba(230,126,34,0.25); }
+        .foto-wall-ai-btn.done {
+            background: rgba(39,174,96,0.15);
+            color: var(--success);
+        }
+        .foto-wall-del-btn {
+            background: rgba(196,30,30,0.1);
+            color: var(--accent-red-light);
+        }
+        .foto-wall-del-btn:hover { background: rgba(196,30,30,0.2); }
+
+        /* KI-Tags unter Foto */
+        .foto-ai-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 6px 8px;
+            background: rgba(0,0,0,0.2);
+        }
+        .foto-ai-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 7px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(230,126,34,0.12);
+            color: var(--accent-orange-light);
+        }
+        .foto-ai-tag.count {
+            background: rgba(39,174,96,0.12);
+            color: var(--success);
+        }
+
+        /* Foto-Detail Modal */
+        .foto-detail-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .foto-detail-image {
+            max-width: 95vw;
+            max-height: 55vh;
+            border-radius: 10px;
+            object-fit: contain;
+            margin-bottom: 16px;
+        }
+        .foto-detail-analysis {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            max-width: 95vw;
+            width: 480px;
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+        .foto-detail-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-white);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .foto-detail-objects {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .foto-detail-obj {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .foto-detail-obj-name {
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .foto-detail-obj-count {
+            font-weight: 700;
+            color: var(--accent-orange);
+            min-width: 28px;
+            text-align: center;
+        }
+        .foto-detail-obj-detail {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .foto-detail-summary {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(39,174,96,0.06);
+            border: 1px solid rgba(39,174,96,0.15);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+        .foto-detail-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .foto-detail-close:hover { background: rgba(255,255,255,0.25); }
+
+        /* Extra-Foto Button */
+        .foto-extra-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .foto-extra-btn:hover {
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
+        }
+        .foto-analyzing-text {
+            font-size: 11px;
+            color: var(--accent-orange);
+            text-align: center;
+            padding: 4px;
+            animation: fotoPulse 1.5s ease-in-out infinite;
         }
 
         /* Maßeingabe-Sektion */
@@ -2076,6 +2670,16 @@
         .raum-action-btn .btn-text { flex: 1; }
         .raum-action-btn .btn-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; display: block; margin-top: 2px; }
         .gl-saved-msg { text-align: center; padding: 12px; background: rgba(39,174,96,0.12); border-radius: 8px; color: #27ae60; font-weight: 600; margin-top: 12px; font-size: 13px; }
+        .gl-rw-edit-row { display: flex; align-items: center; gap: 4px; padding: 3px 0; }
+        .gl-rw-edit-sign { width: 32px; min-width: 32px; text-align: center; font-weight: 700; font-size: 14px; cursor: pointer; border-radius: 4px; padding: 4px 0; }
+        .gl-rw-edit-sign.plus { color: #27ae60; } .gl-rw-edit-sign.minus { color: #e74c3c; }
+        .gl-rw-edit-input { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-white); font-size: 12px; padding: 5px 8px; outline: none; }
+        .gl-rw-edit-input:focus { border-color: var(--accent-orange); }
+        .gl-rw-edit-input.label { flex: 1.2; } .gl-rw-edit-input.formel { flex: 1.5; font-family: monospace; text-align: center; }
+        .gl-rw-edit-input.ergebnis { width: 80px; min-width: 80px; text-align: right; font-weight: 600; color: var(--accent-orange); }
+        .gl-rw-edit-del { width: 28px; min-width: 28px; height: 28px; border: none; background: rgba(231,76,60,0.08); border-radius: 4px; color: #e74c3c; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .gl-rw-edit-total { display: flex; justify-content: space-between; padding: 8px 0 4px; margin-top: 6px; border-top: 2px solid var(--accent-orange); }
+        .gl-rw-add-btn { width: 100%; padding: 6px; border: 1px dashed var(--border-color); border-radius: 6px; background: none; color: var(--text-muted); font-size: 12px; cursor: pointer; margin-top: 4px; }
 
         /* ═══════════════════════════════════════════
            RESPONSIVE
@@ -2284,6 +2888,108 @@
             display: flex;
             gap: 12px;
         }
+
+        /* Manuelle Position hinzufügen */
+        .manual-pos-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            margin: 8px 0 4px 0;
+            background: rgba(39,174,96,0.06);
+            border: 1px dashed rgba(39,174,96,0.3);
+            border-radius: var(--radius-md);
+            color: var(--accent-green);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .manual-pos-toggle:hover {
+            background: rgba(39,174,96,0.12);
+            border-color: var(--accent-green);
+        }
+        .manual-pos-form {
+            background: rgba(39,174,96,0.04);
+            border: 1px solid rgba(39,174,96,0.2);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin: 8px 0 4px 0;
+        }
+        .manual-pos-form-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent-green);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .manual-pos-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .manual-pos-field {
+            flex: 1;
+        }
+        .manual-pos-field.small {
+            flex: 0 0 80px;
+        }
+        .manual-pos-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .manual-pos-field input,
+        .manual-pos-field select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        .manual-pos-field input:focus,
+        .manual-pos-field select:focus {
+            border-color: var(--accent-green);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(39,174,96,0.15);
+        }
+        .manual-pos-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .manual-pos-actions button {
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+        .manual-pos-add {
+            background: var(--accent-green);
+            color: white;
+        }
+        .manual-pos-add:hover { background: #219a52; }
+        .manual-pos-add:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .manual-pos-cancel {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color) !important;
+        }
+        .manual-pos-cancel:hover { background: var(--bg-card); }
 
         /* Duplikat-Auswahl Modal */
         .dup-modal {
@@ -2976,6 +3682,27 @@
         const { useState, useEffect, useCallback, useRef } = React;
 
         /* ═══════════════════════════════════════════
+           LEICA DISTO – Bluetooth Tastatur-Modus
+           DISTO am Gerät auf "Text" oder "Tabelle" stellen,
+           dann per Bluetooth mit Handy/Tablet koppeln.
+           Der DISTO tippt Messwerte wie eine Tastatur.
+           ═══════════════════════════════════════════ */
+        const LaserManager = {
+            active: false,
+            onStatusChange: null,
+
+            activate() {
+                this.active = true;
+                if (this.onStatusChange) this.onStatusChange('active');
+            },
+            deactivate() {
+                this.active = false;
+                if (this.onStatusChange) this.onStatusChange('inactive');
+            },
+            isSupported() { return true; }
+        };
+
+        /* ═══════════════════════════════════════════
            HELPER: Format mass values to 3 decimals
            ═══════════════════════════════════════════ */
         const formatMass = (val) => {
@@ -3611,16 +4338,43 @@
         }
 
         /* ═══════════════════════════════════════════
-           AUTH MODAL COMPONENT
+           AUTH MODAL COMPONENT (REAL GOOGLE OAUTH)
            ═══════════════════════════════════════════ */
         function AuthModal({ onAuth, onCancel }) {
             const [step, setStep] = useState(0);
+            const [error, setError] = useState(null);
+            const isDemoMode = !GDRIVE_CONFIG.CLIENT_ID;
 
-            const startAuth = () => {
+            const startAuth = async () => {
                 setStep(1);
-                setTimeout(() => setStep(2), 1200);
-                setTimeout(() => setStep(3), 2200);
-                setTimeout(() => onAuth(), 3000);
+                setError(null);
+
+                if (isDemoMode) {
+                    // Demo-Modus wenn keine Client-ID
+                    setTimeout(() => setStep(2), 800);
+                    setTimeout(() => setStep(3), 1600);
+                    setTimeout(() => onAuth({ demo: true }), 2400);
+                    return;
+                }
+
+                try {
+                    // Echte Google Drive Verbindung
+                    const inited = await window.GoogleDriveService.init();
+                    if (!inited) throw new Error('Google API konnte nicht initialisiert werden');
+                    setStep(2);
+
+                    await window.GoogleDriveService.requestAuth();
+                    setStep(3);
+
+                    const root = await window.GoogleDriveService.findRootFolder();
+                    setStep(4);
+
+                    setTimeout(() => onAuth({ demo: false, rootFolder: root }), 500);
+                } catch (err) {
+                    console.error('Auth Fehler:', err);
+                    setError(err.message || 'Verbindung fehlgeschlagen');
+                    setStep(0);
+                }
             };
 
             useEffect(() => {
@@ -3637,13 +4391,22 @@
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-title">🔐 Google Drive Verbindung</div>
                         <div className="modal-text">
-                            Zur Anzeige der Baustellen-Ordner wird eine Verbindung
-                            mit deinem Google Drive benötigt.
+                            {isDemoMode
+                                ? 'Demo-Modus aktiv (keine Client-ID konfiguriert). Verbindung wird simuliert.'
+                                : 'Zur Anzeige der Baustellen-Ordner wird eine Verbindung mit deinem Google Drive benötigt.'
+                            }
                         </div>
+                        {error && (
+                            <div style={{padding:'10px 14px', background:'rgba(196,30,30,0.1)', border:'1px solid rgba(196,30,30,0.3)', borderRadius:'8px', color:'var(--accent-red-light)', fontSize:'13px', marginBottom:'12px'}}>
+                                ⚠️ {error}
+                            </div>
+                        )}
                         {step === 0 ? (
                             <div className="modal-btn-group">
                                 <button className="modal-btn secondary" onClick={onCancel}>Abbrechen</button>
-                                <button className="modal-btn primary" onClick={startAuth}>Verbinden</button>
+                                <button className="modal-btn primary" onClick={startAuth}>
+                                    {isDemoMode ? 'Demo starten' : 'Verbinden'}
+                                </button>
                             </div>
                         ) : (
                             <div className="modal-steps">
@@ -3660,11 +4423,19 @@
                                     <span>Zugriffstoken erhalten...</span>
                                 </div>
                                 <div className="modal-step">
-                                    <span className={`step-num ${step >= 3 ? 'done' : ''}`}>
-                                        {step >= 3 ? '✓' : '3'}
+                                    <span className={`step-num ${step >= 3 ? (step > 3 ? 'done' : 'active') : ''}`}>
+                                        {step > 3 ? '✓' : '3'}
                                     </span>
-                                    <span>Baustellen-Ordner wird geöffnet...</span>
+                                    <span>Ordner "{GDRIVE_CONFIG.ROOT_FOLDER_NAME}" wird geöffnet...</span>
                                 </div>
+                                {!isDemoMode && (
+                                    <div className="modal-step">
+                                        <span className={`step-num ${step >= 4 ? 'done' : ''}`}>
+                                            {step >= 4 ? '✓' : '4'}
+                                        </span>
+                                        <span>Kundenordner werden geladen...</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -3702,16 +4473,17 @@
         /* ═══════════════════════════════════════════
            KUNDENAUSWAHL PAGE
            ═══════════════════════════════════════════ */
-        function Kundenauswahl({ onSelect, loading }) {
+        function Kundenauswahl({ onSelect, loading, kunden }) {
             const [searchTerm, setSearchTerm] = useState('');
             const inputRef = React.useRef(null);
 
-            const sortedKunden = [...DEMO_KUNDEN].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+            const dataSource = kunden && kunden.length > 0 ? kunden : DEMO_KUNDEN;
+            const sortedKunden = [...dataSource].sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
             const filtered = sortedKunden.filter(k =>
                 k.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                k.adresse.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                k.auftraggeber.toLowerCase().includes(searchTerm.toLowerCase())
+                (k.adresse || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (k.auftraggeber || '').toLowerCase().includes(searchTerm.toLowerCase())
             );
 
             const highlightText = (text, term) => {
@@ -3743,10 +4515,10 @@
                     <div className="breadcrumb">
                         <span>Google Drive</span>
                         <span>›</span>
-                        <span className="breadcrumb-active">Baustellen</span>
+                        <span className="breadcrumb-active">Baustellen neu</span>
                     </div>
                     <div className="page-title">Baustellen-Ordner</div>
-                    <div className="page-subtitle">{DEMO_KUNDEN.length} Kundenprojekte verfügbar</div>
+                    <div className="page-subtitle">{dataSource.length} Kundenprojekte verfügbar{kunden && kunden.length > 0 ? ' (Google Drive)' : ' (Demo)'}</div>
 
                     <div className="search-container">
                         <input
@@ -3771,7 +4543,7 @@
                             ✕
                         </button>
                         <span className={`search-count ${searchTerm ? 'has-filter' : ''}`}>
-                            {filtered.length} / {DEMO_KUNDEN.length}
+                            {filtered.length} / {dataSource.length}
                         </span>
                     </div>
 
@@ -3790,7 +4562,7 @@
                                             {highlightText(kunde.name, searchTerm)}
                                         </div>
                                         <div className="folder-meta">
-                                            {kunde.dateien} Dateien · Letzte Änderung: {kunde.letzteAenderung}
+                                            {kunde.dateien ? (kunde.dateien + ' Dateien · ') : ''}Letzte Änderung: {kunde.letzteAenderung || '—'}
                                         </div>
                                     </div>
                                     <span className="folder-arrow">›</span>
@@ -4271,6 +5043,17 @@
             const [selectedPositions, setSelectedPositions] = useState([]);
             const [showDupModal, setShowDupModal] = useState(null);
 
+            // Manuelle Position State
+            const [showManualPos, setShowManualPos] = useState(false);
+            const [manualPosNr, setManualPosNr] = useState('');
+            const [manualPosBez, setManualPosBez] = useState('');
+            const [manualPosEinheit, setManualPosEinheit] = useState('m²');
+            const [manualPosMenge, setManualPosMenge] = useState('');
+            const [manualPosBereich, setManualPosBereich] = useState('Manuell');
+            const [manuellePositionen, setManuellePositionen] = useState([]);
+            const [hiddenLvPositionen, setHiddenLvPositionen] = useState([]);
+            const [showHiddenPos, setShowHiddenPos] = useState(false);
+
             // Baugleich-Dialog State
             const [showBaugleich, setShowBaugleich] = useState(false);
             const [bgNr, setBgNr] = useState('');
@@ -4455,15 +5238,16 @@
 
             // Position togglen - MUSS IMMER funktionieren
             const togglePosition = (pos) => {
-                const alreadySelected = selectedPositions.find(p => p.pos === pos.pos);
+                const isManuell = pos.manuell;
+                const alreadySelected = selectedPositions.find(p => p.pos === pos.pos && (isManuell ? p.manuell : !p.manuell));
                 if (alreadySelected) {
-                    // Abwählen
-                    setSelectedPositions(prev => prev.filter(p => p.pos !== pos.pos));
+                    // Abwählen (nicht löschen!)
+                    setSelectedPositions(prev => prev.filter(p => !(p.pos === pos.pos && (isManuell ? p.manuell : !p.manuell))));
                 } else {
                     // Auswählen - sofort hinzufügen
                     setSelectedPositions(prev => [...prev, pos]);
-                    // Wenn Duplikat: zusätzlich Hinweis-Dialog zeigen (nicht blockierend)
-                    if (duplicates[pos.pos] && duplicates[pos.pos].length > 0) {
+                    // Wenn Duplikat (nur LV): zusätzlich Hinweis-Dialog zeigen (nicht blockierend)
+                    if (!isManuell && duplicates[pos.pos] && duplicates[pos.pos].length > 0) {
                         setShowDupModal({ pos, duplicates: [pos, ...duplicates[pos.pos]] });
                     }
                 }
@@ -4480,6 +5264,49 @@
                 setShowDupModal(null);
             };
 
+            // Manuelle Position hinzufügen
+            const addManualPosition = () => {
+                if (!manualPosNr.trim() || !manualPosBez.trim()) return;
+                const newPos = {
+                    pos: manualPosNr.trim(),
+                    bez: manualPosBez.trim(),
+                    einheit: manualPosEinheit,
+                    menge: manualPosMenge ? parseFloat(manualPosMenge.replace(',', '.')) : 0,
+                    bereich: manualPosBereich || 'Manuell',
+                    kategorie: 'manuell',
+                    tags: ['manuell'],
+                    manuell: true
+                };
+                // Dauerhaft in die manuelle Positionsliste aufnehmen
+                setManuellePositionen(prev => [...prev, newPos]);
+                // Direkt in die Auswahl übernehmen (vorausgewählt)
+                setSelectedPositions(prev => [...prev, newPos]);
+                // Formular zurücksetzen
+                setManualPosNr('');
+                setManualPosBez('');
+                setManualPosEinheit('m²');
+                setManualPosMenge('');
+                setManualPosBereich('Manuell');
+                setShowManualPos(false);
+            };
+
+            // Manuelle Position dauerhaft löschen
+            const deleteManualPosition = (posNr) => {
+                setManuellePositionen(prev => prev.filter(p => p.pos !== posNr));
+                setSelectedPositions(prev => prev.filter(p => !(p.manuell && p.pos === posNr)));
+            };
+
+            // LV-Position ausblenden (entfernen aus der Liste, aber wiederherstellbar)
+            const hideLvPosition = (posNr) => {
+                setHiddenLvPositionen(prev => prev.includes(posNr) ? prev : [...prev, posNr]);
+                setSelectedPositions(prev => prev.filter(p => !(p.pos === posNr && !p.manuell)));
+            };
+
+            // LV-Position wiederherstellen
+            const restoreLvPosition = (posNr) => {
+                setHiddenLvPositionen(prev => prev.filter(nr => nr !== posNr));
+            };
+
             // Weiter zum Raumblatt
             const handleWeiterZumRaumblatt = () => {
                 if (!activeRaum || selectedPositions.length === 0) return;
@@ -4491,8 +5318,9 @@
 
             // Sortierte Positionen für aktiven Raum
             const sortedPositions = activeRaum ? sortPositionenForRaum(lvPositionen, activeRaum) : [];
-            const empfohlene = sortedPositions.filter(p => p.empfohlen);
-            const sonstige = sortedPositions.filter(p => !p.empfohlen);
+            const empfohlene = sortedPositions.filter(p => p.empfohlen && !hiddenLvPositionen.includes(p.pos));
+            const sonstige = sortedPositions.filter(p => !p.empfohlen && !hiddenLvPositionen.includes(p.pos));
+            const hiddenPositions = sortedPositions.filter(p => hiddenLvPositionen.includes(p.pos));
 
             const grouped = {};
             erkannteRaeume.forEach(r => {
@@ -4929,23 +5757,31 @@
                                     <React.Fragment>
                                         <div className="pos-section-label">⭐ Empfohlen für diesen Raum</div>
                                         {empfohlene.map(pos => {
-                                            const isSelected = selectedPositions.find(p => p.pos === pos.pos);
+                                            const isSelected = selectedPositions.find(p => p.pos === pos.pos && !p.manuell);
                                             return (
                                                 <div key={pos.pos} className={`pos-item ${isSelected ? 'selected' : ''}`}
-                                                    onClick={() => togglePosition(pos)}>
-                                                    <div className={`pos-item-check`}>{isSelected ? '✓' : ''}</div>
-                                                    <div className="pos-item-content">
-                                                        <div>
-                                                            <span className="pos-item-nr">Pos. {pos.pos}</span>
-                                                            <span className="pos-item-bez">{pos.bez}</span>
-                                                        </div>
-                                                        <div className="pos-item-meta">
-                                                            <span className="pos-item-badge empfohlen">⭐ Empfohlen</span>
-                                                            <span className="pos-item-badge bereich">{pos.bereich}</span>
-                                                            <span>{pos.einheit}</span>
-                                                            {duplicates[pos.pos] && <span className="pos-item-badge" style={{background:'rgba(230,126,34,0.15)', color:'var(--accent-orange)'}}>⚠ Mehrfach im LV</span>}
+                                                    style={{alignItems:'center'}}>
+                                                    <div style={{display:'flex', flex:1, alignItems:'flex-start', gap:'12px', cursor:'pointer', minWidth:0}}
+                                                        onClick={() => togglePosition(pos)}>
+                                                        <div className={`pos-item-check`}>{isSelected ? '✓' : ''}</div>
+                                                        <div className="pos-item-content">
+                                                            <div>
+                                                                <span className="pos-item-nr">Pos. {pos.pos}</span>
+                                                                <span className="pos-item-bez">{pos.bez}</span>
+                                                            </div>
+                                                            <div className="pos-item-meta">
+                                                                <span className="pos-item-badge empfohlen">⭐ Empfohlen</span>
+                                                                <span className="pos-item-badge bereich">{pos.bereich}</span>
+                                                                <span>{pos.einheit}</span>
+                                                                {duplicates[pos.pos] && <span className="pos-item-badge" style={{background:'rgba(230,126,34,0.15)', color:'var(--accent-orange)'}}>⚠ Mehrfach im LV</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
+                                                    <button onClick={() => hideLvPosition(pos.pos)}
+                                                        style={{flexShrink:0, background:'rgba(231,76,60,0.08)', border:'1px solid rgba(231,76,60,0.2)',
+                                                            borderRadius:'6px', padding:'6px 10px', cursor:'pointer', color:'#e74c3c',
+                                                            fontSize:'14px', lineHeight:1}}
+                                                        title="Position aus Liste entfernen">🗑️</button>
                                                 </div>
                                             );
                                         })}
@@ -4957,25 +5793,170 @@
                                     <React.Fragment>
                                         <div className="pos-section-label">📄 Weitere Positionen im LV</div>
                                         {sonstige.map(pos => {
-                                            const isSelected = selectedPositions.find(p => p.pos === pos.pos);
+                                            const isSelected = selectedPositions.find(p => p.pos === pos.pos && !p.manuell);
                                             return (
                                                 <div key={pos.pos} className={`pos-item ${isSelected ? 'selected' : ''}`}
-                                                    onClick={() => togglePosition(pos)}>
-                                                    <div className={`pos-item-check`}>{isSelected ? '✓' : ''}</div>
+                                                    style={{alignItems:'center'}}>
+                                                    <div style={{display:'flex', flex:1, alignItems:'flex-start', gap:'12px', cursor:'pointer', minWidth:0}}
+                                                        onClick={() => togglePosition(pos)}>
+                                                        <div className={`pos-item-check`}>{isSelected ? '✓' : ''}</div>
+                                                        <div className="pos-item-content">
+                                                            <div>
+                                                                <span className="pos-item-nr">Pos. {pos.pos}</span>
+                                                                <span className="pos-item-bez">{pos.bez}</span>
+                                                            </div>
+                                                            <div className="pos-item-meta">
+                                                                <span className="pos-item-badge bereich">{pos.bereich}</span>
+                                                                <span>{pos.einheit}</span>
+                                                                {duplicates[pos.pos] && <span className="pos-item-badge" style={{background:'rgba(230,126,34,0.15)', color:'var(--accent-orange)'}}>⚠ Mehrfach im LV</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => hideLvPosition(pos.pos)}
+                                                        style={{flexShrink:0, background:'rgba(231,76,60,0.08)', border:'1px solid rgba(231,76,60,0.2)',
+                                                            borderRadius:'6px', padding:'6px 10px', cursor:'pointer', color:'#e74c3c',
+                                                            fontSize:'14px', lineHeight:1}}
+                                                        title="Position aus Liste entfernen">🗑️</button>
+                                                </div>
+                                            );
+                                        })}
+                                    </React.Fragment>
+                                )}
+
+                                {/* ═══ MANUELL HINZUGEFÜGTE POSITIONEN ═══ */}
+                                {manuellePositionen.length > 0 && (
+                                    <React.Fragment>
+                                        <div className="pos-section-label">✏️ Manuell hinzugefügt</div>
+                                        {manuellePositionen.map(pos => {
+                                            const isSelected = selectedPositions.find(p => p.pos === pos.pos && p.manuell);
+                                            return (
+                                                <div key={'man-' + pos.pos} className={`pos-item ${isSelected ? 'selected' : ''}`}
+                                                    style={{alignItems:'center'}}>
+                                                    <div style={{display:'flex', flex:1, alignItems:'flex-start', gap:'12px', cursor:'pointer', minWidth:0}}
+                                                        onClick={() => togglePosition(pos)}>
+                                                        <div className="pos-item-check">{isSelected ? '✓' : ''}</div>
+                                                        <div className="pos-item-content">
+                                                            <div>
+                                                                <span className="pos-item-nr">Pos. {pos.pos}</span>
+                                                                <span className="pos-item-bez">{pos.bez}</span>
+                                                            </div>
+                                                            <div className="pos-item-meta">
+                                                                <span className="pos-item-badge" style={{background:'rgba(39,174,96,0.15)', color:'var(--accent-green)'}}>✏️ Manuell</span>
+                                                                <span className="pos-item-badge bereich">{pos.bereich}</span>
+                                                                <span>{pos.einheit}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => deleteManualPosition(pos.pos)}
+                                                        style={{flexShrink:0, background:'rgba(231,76,60,0.08)', border:'1px solid rgba(231,76,60,0.2)',
+                                                            borderRadius:'6px', padding:'6px 10px', cursor:'pointer', color:'#e74c3c',
+                                                            fontSize:'14px', lineHeight:1}}
+                                                        title="Position dauerhaft löschen">🗑️</button>
+                                                </div>
+                                            );
+                                        })}
+                                    </React.Fragment>
+                                )}
+
+                                {/* ═══ MANUELLE POSITION HINZUFÜGEN ═══ */}
+                                {!showManualPos ? (
+                                    <div className="manual-pos-toggle" onClick={() => setShowManualPos(true)}>
+                                        <span style={{fontSize:'18px'}}>＋</span>
+                                        <span>Position manuell hinzufügen</span>
+                                    </div>
+                                ) : (
+                                    <div className="manual-pos-form">
+                                        <div className="manual-pos-form-title">
+                                            <span>✏️</span> Neue Position manuell anlegen
+                                        </div>
+                                        <div className="manual-pos-row">
+                                            <div className="manual-pos-field small">
+                                                <label>Pos.-Nr.</label>
+                                                <input type="text" placeholder="z.B. 9.01"
+                                                    value={manualPosNr}
+                                                    onChange={e => setManualPosNr(e.target.value)} />
+                                            </div>
+                                            <div className="manual-pos-field">
+                                                <label>Bezeichnung</label>
+                                                <input type="text" placeholder="z.B. Zusatzleistung XY"
+                                                    value={manualPosBez}
+                                                    onChange={e => setManualPosBez(e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <div className="manual-pos-row">
+                                            <div className="manual-pos-field small">
+                                                <label>Einheit</label>
+                                                <select value={manualPosEinheit}
+                                                    onChange={e => setManualPosEinheit(e.target.value)}>
+                                                    <option value="m²">m²</option>
+                                                    <option value="m">m</option>
+                                                    <option value="Stk">Stk</option>
+                                                    <option value="psch">psch</option>
+                                                    <option value="kg">kg</option>
+                                                    <option value="l">l</option>
+                                                </select>
+                                            </div>
+                                            <div className="manual-pos-field small">
+                                                <label>Menge (LV)</label>
+                                                <input type="text" placeholder="0,00"
+                                                    value={manualPosMenge}
+                                                    onChange={e => setManualPosMenge(e.target.value)} />
+                                            </div>
+                                            <div className="manual-pos-field">
+                                                <label>Bereich</label>
+                                                <input type="text" placeholder="z.B. Nachtrag"
+                                                    value={manualPosBereich}
+                                                    onChange={e => setManualPosBereich(e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <div className="manual-pos-actions">
+                                            <button className="manual-pos-add"
+                                                disabled={!manualPosNr.trim() || !manualPosBez.trim()}
+                                                onClick={addManualPosition}>
+                                                ✓ Position hinzufügen
+                                            </button>
+                                            <button className="manual-pos-cancel"
+                                                onClick={() => { setShowManualPos(false); setManualPosNr(''); setManualPosBez(''); setManualPosMenge(''); setManualPosBereich('Manuell'); }}>
+                                                Abbrechen
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ═══ ENTFERNTE POSITIONEN (WIEDERHERSTELLBAR) ═══ */}
+                                {hiddenPositions.length > 0 && (
+                                    <React.Fragment>
+                                        <div className="manual-pos-toggle"
+                                            style={{background: showHiddenPos ? 'rgba(231,76,60,0.06)' : 'rgba(150,150,150,0.06)',
+                                                borderColor: showHiddenPos ? 'rgba(231,76,60,0.3)' : 'rgba(150,150,150,0.25)',
+                                                color: 'var(--text-muted)'}}
+                                            onClick={() => setShowHiddenPos(!showHiddenPos)}>
+                                            <span style={{fontSize:'14px'}}>{showHiddenPos ? '▼' : '▶'}</span>
+                                            <span>🗑️ {hiddenPositions.length} entfernte Position{hiddenPositions.length !== 1 ? 'en' : ''}</span>
+                                        </div>
+                                        {showHiddenPos && hiddenPositions.map(pos => (
+                                            <div key={'hid-' + pos.pos} className="pos-item"
+                                                style={{opacity:0.5, background:'rgba(150,150,150,0.04)', alignItems:'center'}}>
+                                                <div style={{display:'flex', flex:1, alignItems:'flex-start', gap:'12px', minWidth:0}}>
+                                                    <div className="pos-item-check" style={{color:'#e74c3c', borderColor:'#e74c3c'}}>✕</div>
                                                     <div className="pos-item-content">
                                                         <div>
-                                                            <span className="pos-item-nr">Pos. {pos.pos}</span>
-                                                            <span className="pos-item-bez">{pos.bez}</span>
+                                                            <span className="pos-item-nr" style={{textDecoration:'line-through'}}>Pos. {pos.pos}</span>
+                                                            <span className="pos-item-bez" style={{textDecoration:'line-through'}}>{pos.bez}</span>
                                                         </div>
                                                         <div className="pos-item-meta">
                                                             <span className="pos-item-badge bereich">{pos.bereich}</span>
                                                             <span>{pos.einheit}</span>
-                                                            {duplicates[pos.pos] && <span className="pos-item-badge" style={{background:'rgba(230,126,34,0.15)', color:'var(--accent-orange)'}}>⚠ Mehrfach im LV</span>}
                                                         </div>
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
+                                                <button onClick={() => restoreLvPosition(pos.pos)}
+                                                    style={{flexShrink:0, background:'rgba(39,174,96,0.1)', border:'1px solid rgba(39,174,96,0.3)',
+                                                        borderRadius:'6px', padding:'6px 12px', cursor:'pointer', color:'var(--accent-green)',
+                                                        fontSize:'12px', fontWeight:600, lineHeight:1}}
+                                                    title="Position wiederherstellen">↩ Zurück</button>
+                                            </div>
+                                        ))}
                                     </React.Fragment>
                                 )}
                             </div>
@@ -5093,6 +6074,12 @@
 
             const [raumName, setRaumName] = useState(raum?.name || (raum ? `${raum.bez || ''} (${raum.geschoss || ''})` : ''));
             const [fotos, setFotos] = useState([]);
+            const [fotoSectionOpen, setFotoSectionOpen] = useState(true);
+            const [fotoDetailId, setFotoDetailId] = useState(null);
+            const fotoInputRef = React.useRef(null);
+            const fotoTargetWand = React.useRef(null);
+            const [laserActive, setLaserActive] = useState(false);
+
             const [masse, setMasse] = useState(() => {
                 // ═══ RE-EDIT aus Gesamtliste: Gespeicherte Maße direkt übernehmen ═══
                 if (reEdit && reEdit.masse) return { ...reEdit.masse };
@@ -5306,6 +6293,80 @@
             // ── Manueller Rechenweg Modal ──
             const [rwModalPos, setRwModalPos] = useState(null); // pos.pos oder null
             const [rwModalZeilen, setRwModalZeilen] = useState([]);
+
+            // ═══ LASER DISTO – Tastatur-Modus ═══
+            // Enter/Tab vom DISTO → Wert formatieren + nächstes Feld
+            useEffect(() => {
+                if (!laserActive) return;
+
+                // ── Wenn Feld Fokus bekommt: alles markieren → DISTO überschreibt ──
+                const focusHandler = (e) => {
+                    const el = e.target;
+                    if (!el || !el.classList.contains('masse-input')) return;
+                    setTimeout(() => el.select(), 10);
+                };
+
+                // ── Enter/Tab: Wert bereinigen, formatieren, weiter ──
+                const keyHandler = (e) => {
+                    if (e.key !== 'Enter' && e.key !== 'Tab') return;
+                    const el = e.target;
+                    if (!el || !el.classList.contains('masse-input')) return;
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    let raw = el.value || '';
+                    if (raw.trim()) {
+                        // Einheit entfernen (m, mm, cm, ft, in, Leerzeichen)
+                        raw = raw.replace(/[mMcCfFtTiInN\s]/g, '').trim();
+                        const formatted = formatMass(raw);
+                        const fieldKey = el.dataset ? el.dataset.laserField : null;
+                        if (fieldKey) {
+                            setMasse(prev => ({...prev, [fieldKey]: formatted}));
+                        }
+                        el.classList.add('laser-field-highlight');
+                        setTimeout(() => el.classList.remove('laser-field-highlight'), 600);
+                    }
+
+                    // Nächstes Feld
+                    const container = el.closest('.masse-section') || el.closest('.raumblatt-content');
+                    if (container) {
+                        const allInputs = [...container.querySelectorAll('.masse-input')];
+                        const idx = allInputs.indexOf(el);
+                        if (idx >= 0 && allInputs[idx + 1]) {
+                            setTimeout(() => {
+                                allInputs[idx + 1].focus();
+                                allInputs[idx + 1].select();
+                            }, 50);
+                        }
+                    }
+                };
+
+                document.addEventListener('focus', focusHandler, true);
+                document.addEventListener('keydown', keyHandler, true);
+                return () => {
+                    document.removeEventListener('focus', focusHandler, true);
+                    document.removeEventListener('keydown', keyHandler, true);
+                };
+            }, [laserActive]);
+
+            useEffect(() => {
+                return () => { LaserManager.deactivate(); };
+            }, []);
+
+            const toggleLaser = () => {
+                if (laserActive) {
+                    LaserManager.deactivate();
+                    setLaserActive(false);
+                } else {
+                    LaserManager.activate();
+                    setLaserActive(true);
+                    setTimeout(() => {
+                        const first = document.querySelector('.masse-input[data-laser-field="laenge"]');
+                        if (first) { first.focus(); first.select(); }
+                    }, 200);
+                }
+            };
 
             const openRWModal = (pos) => {
                 // Lade bestehende manuelle Zeilen oder starte mit einer leeren
@@ -6384,8 +7445,109 @@
                 }
             };
 
-            const handleFoto = () => {
-                setFotos(prev => [...prev, { id: prev.length + 1, wand: `Wand ${prev.length + 1}`, zeit: new Date().toLocaleTimeString('de-DE') }]);
+            const handleFoto = (wandId) => {
+                fotoTargetWand.current = wandId || 'extra_' + Date.now();
+                if (fotoInputRef.current) {
+                    fotoInputRef.current.value = '';
+                    fotoInputRef.current.click();
+                }
+            };
+
+            const handleFotoCapture = (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const base64 = ev.target.result;
+                    const wandId = fotoTargetWand.current || 'extra_' + Date.now();
+                    const existing = fotos.find(f => f.wandId === wandId);
+                    if (existing) {
+                        setFotos(prev => prev.map(f => f.wandId === wandId
+                            ? { ...f, image: base64, zeit: new Date().toLocaleTimeString('de-DE'), aiAnalysis: null }
+                            : f
+                        ));
+                    } else {
+                        const label = wandId.startsWith('extra_') ? 'Sonstiges ' + (fotos.filter(f => f.wandId.startsWith('extra_')).length + 1) : 'Wand ' + wandId;
+                        setFotos(prev => [...prev, {
+                            id: Date.now(),
+                            wandId: wandId,
+                            label: label,
+                            image: base64,
+                            zeit: new Date().toLocaleTimeString('de-DE'),
+                            aiAnalysis: null
+                        }]);
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const handleFotoDelete = (wandId) => {
+                setFotos(prev => prev.filter(f => f.wandId !== wandId));
+            };
+
+            const handleAiAnalyze = async (wandId) => {
+                const foto = fotos.find(f => f.wandId === wandId);
+                if (!foto || !foto.image) return;
+                // Set analyzing state
+                setFotos(prev => prev.map(f => f.wandId === wandId
+                    ? { ...f, aiAnalysis: { analyzing: true, objects: [], summary: '', error: null } }
+                    : f
+                ));
+                try {
+                    const base64Data = foto.image.split(',')[1];
+                    const mediaType = foto.image.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+                    const raumInfo = raumName || raum?.bez || 'Raum';
+                    const wandInfo = foto.label || 'Wand';
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 1000,
+                            messages: [{
+                                role: 'user',
+                                content: [
+                                    {
+                                        type: 'image',
+                                        source: { type: 'base64', media_type: mediaType, data: base64Data }
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: 'Du bist ein Baustellen-Experte fuer Fliesenarbeiten. Analysiere dieses Foto einer Wand/Fläche (' + wandInfo + ' in ' + raumInfo + '). Antworte NUR mit einem JSON-Objekt (kein Markdown, keine Backticks), exakt in diesem Format:\n{"objects":[{"type":"Name","count":Anzahl,"icon":"emoji","details":"Kurze Beschreibung"}],"summary":"Zusammenfassung in 1-2 Saetzen","wandanschluesse":Anzahl,"ecken":Anzahl}\n\nErkenne und zaehle folgende Elemente:\n- Tueren (Typ: Stahlzarge, Holzzarge, etc. + geschaetzte Masse)\n- Fenster (geschaetzte Masse)\n- Wandanschluesse / Anschlussfugen\n- Innenecken und Aussenecken\n- Vorhandene Fliesen oder Wandbelaege\n- Sanitaer-Objekte (Waschbecken, WC, Dusche, Badewanne)\n- Installationen (Steckdosen, Schalter, Rohre, Leitungen)\n- Nischen, Vorspruenge, Absaetze\n- Sockelleisten oder Abdichtungen\nWenn etwas nicht sichtbar ist, lasse es weg. Sei praezise bei Massen (schaetze in Meter).'
+                                    }
+                                ]
+                            }]
+                        })
+                    });
+                    const data = await response.json();
+                    const textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                    const cleaned = textContent.replace(/```json|```/g, '').trim();
+                    const parsed = JSON.parse(cleaned);
+                    setFotos(prev => prev.map(f => f.wandId === wandId
+                        ? { ...f, aiAnalysis: {
+                            analyzing: false,
+                            objects: parsed.objects || [],
+                            summary: parsed.summary || '',
+                            wandanschluesse: parsed.wandanschluesse || 0,
+                            ecken: parsed.ecken || 0,
+                            error: null
+                        }}
+                        : f
+                    ));
+                } catch (err) {
+                    console.error('AI Analysis Error:', err);
+                    setFotos(prev => prev.map(f => f.wandId === wandId
+                        ? { ...f, aiAnalysis: { analyzing: false, objects: [], summary: '', error: 'Analyse fehlgeschlagen: ' + err.message } }
+                        : f
+                    ));
+                }
+            };
+
+            const handleAiAnalyzeAll = async () => {
+                const fotosWithImages = fotos.filter(f => f.image && (!f.aiAnalysis || !f.aiAnalysis.objects || f.aiAnalysis.objects.length === 0));
+                for (const foto of fotosWithImages) {
+                    await handleAiAnalyze(foto.wandId);
+                }
             };
 
             const addAbzug = () => {
@@ -6801,11 +7963,257 @@
                         )}
                     </div>
 
-                    {/* Foto-Button */}
-                    <button className="foto-btn" onClick={handleFoto}>
-                        📸 Foto aufnehmen
-                        {fotos.length > 0 && <span className="foto-count">{fotos.length}</span>}
-                    </button>
+                    {/* ═══ FOTO-SYSTEM – Wandfotos + KI-Erkennung ═══ */}
+                    <input type="file" accept="image/*" capture="environment" ref={fotoInputRef}
+                        style={{display:'none'}} onChange={handleFotoCapture} />
+
+                    <div className="foto-section">
+                        <div className="foto-section-header" onClick={() => setFotoSectionOpen(!fotoSectionOpen)}>
+                            <div className="foto-section-title">
+                                <span>📸 Wandfotos & KI-Erkennung</span>
+                                {fotos.length > 0 && <span className="foto-section-badge">{fotos.filter(f => f.image).length} Fotos</span>}
+                                {fotos.some(f => f.aiAnalysis && f.aiAnalysis.objects && f.aiAnalysis.objects.length > 0) && (
+                                    <span className="foto-section-badge" style={{background:'var(--success)'}}>KI ✓</span>
+                                )}
+                            </div>
+                            <span className={'foto-section-chevron ' + (fotoSectionOpen ? 'open' : '')}>▼</span>
+                        </div>
+                        {fotoSectionOpen && (
+                            <div className="foto-section-body">
+                                {/* Wand-Slots Grid */}
+                                <div className="foto-wall-grid">
+                                    {(function() {
+                                        var wallIds = [];
+                                        if (hasData && raum && raum.waende) {
+                                            wallIds = raum.waende.map(function(w) { return w.id; });
+                                        } else if (isMultiWall && raum && raum.waende) {
+                                            wallIds = raum.waende.map(function(w) { return w.id; });
+                                        } else {
+                                            wallIds = ['A','B','C','D'];
+                                        }
+                                        // Add extra foto slots
+                                        var extraFotos = fotos.filter(function(f) { return f.wandId.startsWith('extra_'); });
+
+                                        var slots = wallIds.map(function(wId) {
+                                            var foto = fotos.find(function(f) { return f.wandId === wId; });
+                                            var isAnalyzing = foto && foto.aiAnalysis && foto.aiAnalysis.analyzing;
+                                            var hasAi = foto && foto.aiAnalysis && foto.aiAnalysis.objects && foto.aiAnalysis.objects.length > 0;
+                                            return React.createElement('div', {
+                                                key: wId,
+                                                className: 'foto-wall-slot' + (foto && foto.image ? ' has-photo' : '') + (isAnalyzing ? ' analyzing' : ''),
+                                            }, [
+                                                React.createElement('div', { key: 'label', className: 'foto-wall-label' }, 'Wand ' + wId),
+                                                foto && foto.image
+                                                    ? React.createElement(React.Fragment, { key: 'content' }, [
+                                                        React.createElement('img', {
+                                                            key: 'thumb',
+                                                            className: 'foto-wall-thumb',
+                                                            src: foto.image,
+                                                            alt: 'Wand ' + wId,
+                                                            onClick: function() { setFotoDetailId(foto.wandId); }
+                                                        }),
+                                                        isAnalyzing
+                                                            ? React.createElement('div', { key: 'loading', className: 'foto-analyzing-text' }, '🔍 KI analysiert...')
+                                                            : hasAi
+                                                                ? React.createElement('div', { key: 'tags', className: 'foto-ai-tags' },
+                                                                    foto.aiAnalysis.objects.map(function(obj, oi) {
+                                                                        return React.createElement('span', {
+                                                                            key: oi,
+                                                                            className: 'foto-ai-tag' + (obj.count > 0 ? ' count' : ''),
+                                                                            onClick: function() { setFotoDetailId(foto.wandId); }
+                                                                        }, (obj.icon || '•') + ' ' + obj.type + (obj.count > 1 ? ' ×' + obj.count : ''));
+                                                                    })
+                                                                )
+                                                                : null,
+                                                        foto.aiAnalysis && foto.aiAnalysis.error
+                                                            ? React.createElement('div', { key: 'err', style: {fontSize:'10px', color:'var(--accent-red-light)', padding:'4px 8px'} }, foto.aiAnalysis.error)
+                                                            : null,
+                                                        React.createElement('div', { key: 'actions', className: 'foto-wall-actions' }, [
+                                                            React.createElement('button', {
+                                                                key: 'ai',
+                                                                className: 'foto-wall-ai-btn' + (hasAi ? ' done' : ''),
+                                                                onClick: function() { handleAiAnalyze(wId); }
+                                                            }, hasAi ? '✓ Erkannt' : '🤖 KI Analyse'),
+                                                            React.createElement('button', {
+                                                                key: 'retake',
+                                                                className: 'foto-wall-ai-btn',
+                                                                onClick: function() { handleFoto(wId); }
+                                                            }, '📷 Neu'),
+                                                            React.createElement('button', {
+                                                                key: 'del',
+                                                                className: 'foto-wall-del-btn',
+                                                                onClick: function() { handleFotoDelete(wId); }
+                                                            }, '✕')
+                                                        ])
+                                                    ])
+                                                    : React.createElement('div', {
+                                                        key: 'empty',
+                                                        className: 'foto-wall-empty',
+                                                        onClick: function() { handleFoto(wId); }
+                                                    }, [
+                                                        React.createElement('span', { key: 'icon', className: 'foto-wall-empty-icon' }, '📷'),
+                                                        React.createElement('span', { key: 'txt' }, 'Foto aufnehmen')
+                                                    ])
+                                            ]);
+                                        });
+
+                                        // Extra-Foto Slots
+                                        extraFotos.forEach(function(foto) {
+                                            var isAnalyzing = foto.aiAnalysis && foto.aiAnalysis.analyzing;
+                                            var hasAi = foto.aiAnalysis && foto.aiAnalysis.objects && foto.aiAnalysis.objects.length > 0;
+                                            slots.push(React.createElement('div', {
+                                                key: foto.wandId,
+                                                className: 'foto-wall-slot has-photo' + (isAnalyzing ? ' analyzing' : ''),
+                                            }, [
+                                                React.createElement('div', { key: 'label', className: 'foto-wall-label' }, foto.label),
+                                                React.createElement('img', {
+                                                    key: 'thumb',
+                                                    className: 'foto-wall-thumb',
+                                                    src: foto.image,
+                                                    alt: foto.label,
+                                                    onClick: function() { setFotoDetailId(foto.wandId); }
+                                                }),
+                                                isAnalyzing
+                                                    ? React.createElement('div', { key: 'loading', className: 'foto-analyzing-text' }, '🔍 KI analysiert...')
+                                                    : hasAi
+                                                        ? React.createElement('div', { key: 'tags', className: 'foto-ai-tags' },
+                                                            foto.aiAnalysis.objects.map(function(obj, oi) {
+                                                                return React.createElement('span', { key: oi, className: 'foto-ai-tag' + (obj.count > 0 ? ' count' : '') },
+                                                                    (obj.icon || '•') + ' ' + obj.type + (obj.count > 1 ? ' ×' + obj.count : '')
+                                                                );
+                                                            })
+                                                        )
+                                                        : null,
+                                                React.createElement('div', { key: 'actions', className: 'foto-wall-actions' }, [
+                                                    React.createElement('button', {
+                                                        key: 'ai',
+                                                        className: 'foto-wall-ai-btn' + (hasAi ? ' done' : ''),
+                                                        onClick: function() { handleAiAnalyze(foto.wandId); }
+                                                    }, hasAi ? '✓ Erkannt' : '🤖 KI Analyse'),
+                                                    React.createElement('button', {
+                                                        key: 'del',
+                                                        className: 'foto-wall-del-btn',
+                                                        onClick: function() { handleFotoDelete(foto.wandId); }
+                                                    }, '✕')
+                                                ])
+                                            ]));
+                                        });
+
+                                        return slots;
+                                    })()}
+                                </div>
+
+                                {/* Extra Foto + Alle Analysieren */}
+                                <div style={{display:'flex', gap:'8px'}}>
+                                    <button className="foto-extra-btn" style={{flex:1}} onClick={function() { handleFoto(null); }}>
+                                        + Sonstiges Foto
+                                    </button>
+                                    {fotos.filter(function(f) { return f.image; }).length > 0 && (
+                                        <button className="foto-extra-btn" style={{flex:1, borderColor:'var(--accent-orange)', color:'var(--accent-orange)'}}
+                                            onClick={handleAiAnalyzeAll}>
+                                            🤖 Alle analysieren
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* KI-Zusammenfassung */}
+                                {(function() {
+                                    var totalWA = 0; var totalEcken = 0;
+                                    fotos.forEach(function(f) {
+                                        if (f.aiAnalysis) {
+                                            totalWA += (f.aiAnalysis.wandanschluesse || 0);
+                                            totalEcken += (f.aiAnalysis.ecken || 0);
+                                        }
+                                    });
+                                    if (totalWA > 0 || totalEcken > 0) {
+                                        return React.createElement('div', {
+                                            style: { marginTop:'10px', padding:'10px', background:'rgba(39,174,96,0.06)', border:'1px solid rgba(39,174,96,0.15)', borderRadius:'8px', fontSize:'13px', color:'var(--text-light)' }
+                                        }, [
+                                            React.createElement('span', { key: 'title', style: {fontWeight:700, marginBottom:'4px', display:'block', color:'var(--success)'} }, '🤖 KI-Auswertung Gesamtraum'),
+                                            totalWA > 0 ? React.createElement('div', { key: 'wa' }, '🔗 Wandanschlüsse gesamt: ' + totalWA) : null,
+                                            totalEcken > 0 ? React.createElement('div', { key: 'ecken' }, '📐 Ecken gesamt: ' + totalEcken) : null
+                                        ]);
+                                    }
+                                    return null;
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Foto-Detail-Modal */}
+                    {fotoDetailId && (function() {
+                        var foto = fotos.find(function(f) { return f.wandId === fotoDetailId; });
+                        if (!foto) return null;
+                        var hasAi = foto.aiAnalysis && foto.aiAnalysis.objects && foto.aiAnalysis.objects.length > 0;
+                        return React.createElement('div', {
+                            className: 'foto-detail-overlay',
+                            onClick: function(e) { if (e.target === e.currentTarget) setFotoDetailId(null); }
+                        }, [
+                            React.createElement('button', {
+                                key: 'close',
+                                className: 'foto-detail-close',
+                                onClick: function() { setFotoDetailId(null); }
+                            }, '✕'),
+                            React.createElement('img', {
+                                key: 'img',
+                                className: 'foto-detail-image',
+                                src: foto.image,
+                                alt: foto.label
+                            }),
+                            React.createElement('div', { key: 'panel', className: 'foto-detail-analysis' }, [
+                                React.createElement('div', { key: 'title', className: 'foto-detail-title' }, [
+                                    React.createElement('span', { key: 'icon' }, '📸'),
+                                    React.createElement('span', { key: 'txt' }, foto.label + ' – ' + foto.zeit),
+                                    !hasAi && !(foto.aiAnalysis && foto.aiAnalysis.analyzing) ? React.createElement('button', {
+                                        key: 'btn',
+                                        style: { marginLeft:'auto', padding:'4px 12px', fontSize:'12px', background:'rgba(230,126,34,0.15)', border:'1px solid var(--accent-orange)', borderRadius:'6px', color:'var(--accent-orange)', cursor:'pointer', fontFamily:'Source Sans 3, sans-serif' },
+                                        onClick: function() { handleAiAnalyze(foto.wandId); }
+                                    }, '🤖 KI analysieren') : null
+                                ]),
+                                foto.aiAnalysis && foto.aiAnalysis.analyzing
+                                    ? React.createElement('div', { key: 'loading', className: 'foto-analyzing-text', style:{padding:'20px'} }, '🔍 KI analysiert das Foto...')
+                                    : null,
+                                hasAi ? React.createElement('div', { key: 'objects', className: 'foto-detail-objects' },
+                                    foto.aiAnalysis.objects.map(function(obj, idx) {
+                                        return React.createElement('div', { key: idx, className: 'foto-detail-obj' }, [
+                                            React.createElement('div', { key: 'left' }, [
+                                                React.createElement('div', { key: 'name', className: 'foto-detail-obj-name' }, [
+                                                    React.createElement('span', { key: 'icon' }, obj.icon || '•'),
+                                                    React.createElement('span', { key: 'txt' }, obj.type)
+                                                ]),
+                                                obj.details ? React.createElement('div', { key: 'det', className: 'foto-detail-obj-detail' }, obj.details) : null
+                                            ]),
+                                            React.createElement('span', { key: 'count', className: 'foto-detail-obj-count' }, '×' + obj.count)
+                                        ]);
+                                    })
+                                ) : null,
+                                hasAi && foto.aiAnalysis.summary
+                                    ? React.createElement('div', { key: 'summary', className: 'foto-detail-summary' }, foto.aiAnalysis.summary)
+                                    : null,
+                                foto.aiAnalysis && foto.aiAnalysis.error
+                                    ? React.createElement('div', { key: 'err', style: {color:'var(--accent-red-light)', padding:'10px', fontSize:'12px'} }, foto.aiAnalysis.error)
+                                    : null,
+                                !foto.aiAnalysis && !hasAi
+                                    ? React.createElement('div', { key: 'empty', style:{color:'var(--text-muted)', fontSize:'12px', padding:'10px', textAlign:'center'} }, 'Noch keine KI-Analyse. Tippe auf "KI analysieren" um Objekte erkennen zu lassen.')
+                                    : null
+                            ])
+                        ]);
+                    })()}
+
+                    {/* ═══ LASER DISTO Bluetooth-Tastatur ═══ */}
+                    <div className="laser-bar">
+                        <button className={`laser-btn ${laserActive ? 'active' : ''}`}
+                            onClick={toggleLaser}>
+                            <span className="laser-pulse"></span>
+                            <span>{laserActive ? '🔴 Laser aktiv' : '📡 Laser DISTO'}</span>
+                        </button>
+                        <div className={`laser-status ${laserActive ? 'connected' : 'disconnected'}`}
+                            style={{fontSize:'11px', lineHeight:'1.3', whiteSpace:'normal'}}>
+                            {laserActive
+                                ? '✓ Messen → Wert landet im Feld → springt weiter'
+                                : 'DISTO per Bluetooth koppeln, Modus: Text'}
+                        </div>
+                    </div>
 
                     {/* Maßeingabe */}
                     <div className="masse-section">
@@ -6817,7 +8225,7 @@
                                         <span className="masse-label">Länge (A/C)</span>
                                         <div className="masse-input-wrap">
                                             <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                value={masse.laenge} onChange={e => setMasse(p => ({...p, laenge: e.target.value}))}
+                                                data-laser-field="laenge" value={masse.laenge} onChange={e => setMasse(p => ({...p, laenge: e.target.value}))}
                                                 onBlur={handleBlurFormat(setMasse, 'laenge')}
                                                 />
                                             <span className="masse-unit">m</span>
@@ -6827,7 +8235,7 @@
                                         <span className="masse-label">Breite (B/D)</span>
                                         <div className="masse-input-wrap">
                                             <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                value={masse.breite} onChange={e => setMasse(p => ({...p, breite: e.target.value}))}
+                                                data-laser-field="breite" value={masse.breite} onChange={e => setMasse(p => ({...p, breite: e.target.value}))}
                                                 onBlur={handleBlurFormat(setMasse, 'breite')}
                                                 />
                                             <span className="masse-unit">m</span>
@@ -6837,7 +8245,7 @@
                                         <span className="masse-label">Raumhöhe</span>
                                         <div className="masse-input-wrap">
                                             <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                value={masse.raumhoehe} onChange={e => setMasse(p => ({...p, raumhoehe: e.target.value}))}
+                                                data-laser-field="raumhoehe" value={masse.raumhoehe} onChange={e => setMasse(p => ({...p, raumhoehe: e.target.value}))}
                                                 onBlur={handleBlurFormat(setMasse, 'raumhoehe')}
                                                 />
                                             <span className="masse-unit">m</span>
@@ -6851,7 +8259,7 @@
                                         <span className="masse-label">Fliesenhöhe</span>
                                         <div className="masse-input-wrap">
                                             <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                value={fliesenDeckenhoch ? masse.raumhoehe : masse.hoehe}
+                                                data-laser-field="hoehe" value={fliesenDeckenhoch ? masse.raumhoehe : masse.hoehe}
                                                 onChange={e => { if (!fliesenDeckenhoch) setMasse(p => ({...p, hoehe: e.target.value})); }}
                                                 onBlur={() => { if (!fliesenDeckenhoch) handleBlurFormat(setMasse, 'hoehe')({ target: { value: masse.hoehe } }); }}
                                                 disabled={fliesenDeckenhoch}
@@ -6897,7 +8305,7 @@
                                             <span className="masse-label">Abdichtungshöhe</span>
                                             <div className="masse-input-wrap">
                                                 <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                    value={abdichtungDeckenhoch ? masse.raumhoehe : masse.abdichtungshoehe}
+                                                    data-laser-field="abdichtungshoehe" value={abdichtungDeckenhoch ? masse.raumhoehe : masse.abdichtungshoehe}
                                                     onChange={e => { if (!abdichtungDeckenhoch) setMasse(p => ({...p, abdichtungshoehe: e.target.value})); }}
                                                     onBlur={() => { if (!abdichtungDeckenhoch) handleBlurFormat(setMasse, 'abdichtungshoehe')({ target: { value: masse.abdichtungshoehe } }); }}
                                                     disabled={abdichtungDeckenhoch}
@@ -6944,7 +8352,7 @@
                                             <span className="masse-label">Sockelhöhe</span>
                                             <div className="masse-input-wrap">
                                                 <input className="masse-input" type="text" inputMode="decimal" placeholder="z.B. 0,100"
-                                                    value={masse.sockelhoehe}
+                                                    data-laser-field="sockelhoehe" value={masse.sockelhoehe}
                                                     onChange={e => setMasse(p => ({...p, sockelhoehe: e.target.value}))}
                                                     onBlur={handleBlurFormat(setMasse, 'sockelhoehe')}
                                                     />
@@ -7022,7 +8430,7 @@
                                         <span className="masse-label">Raumhöhe</span>
                                         <div className="masse-input-wrap">
                                             <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                value={masse.raumhoehe} onChange={e => setMasse(p => ({...p, raumhoehe: e.target.value}))}
+                                                data-laser-field="raumhoehe" value={masse.raumhoehe} onChange={e => setMasse(p => ({...p, raumhoehe: e.target.value}))}
                                                 onBlur={handleBlurFormat(setMasse, 'raumhoehe')}
                                                 />
                                             <span className="masse-unit">m</span>
@@ -7035,7 +8443,7 @@
                                         <span className="masse-label">Fliesenhöhe</span>
                                         <div className="masse-input-wrap">
                                             <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                value={fliesenDeckenhoch ? masse.raumhoehe : masse.hoehe}
+                                                data-laser-field="hoehe" value={fliesenDeckenhoch ? masse.raumhoehe : masse.hoehe}
                                                 onChange={e => { if (!fliesenDeckenhoch) setMasse(p => ({...p, hoehe: e.target.value})); }}
                                                 onBlur={() => { if (!fliesenDeckenhoch) handleBlurFormat(setMasse, 'hoehe')({ target: { value: masse.hoehe } }); }}
                                                 disabled={fliesenDeckenhoch}
@@ -7077,7 +8485,7 @@
                                             <span className="masse-label">Abdichtungshöhe</span>
                                             <div className="masse-input-wrap">
                                                 <input className="masse-input" type="text" inputMode="decimal" placeholder="0,000"
-                                                    value={abdichtungDeckenhoch ? masse.raumhoehe : masse.abdichtungshoehe}
+                                                    data-laser-field="abdichtungshoehe" value={abdichtungDeckenhoch ? masse.raumhoehe : masse.abdichtungshoehe}
                                                     onChange={e => { if (!abdichtungDeckenhoch) setMasse(p => ({...p, abdichtungshoehe: e.target.value})); }}
                                                     onBlur={() => { if (!abdichtungDeckenhoch) handleBlurFormat(setMasse, 'abdichtungshoehe')({ target: { value: masse.abdichtungshoehe } }); }}
                                                     disabled={abdichtungDeckenhoch}
@@ -7121,7 +8529,7 @@
                                             <span className="masse-label">Sockelhöhe</span>
                                             <div className="masse-input-wrap">
                                                 <input className="masse-input" type="text" inputMode="decimal" placeholder="z.B. 0,100"
-                                                    value={masse.sockelhoehe}
+                                                    data-laser-field="sockelhoehe" value={masse.sockelhoehe}
                                                     onChange={e => setMasse(p => ({...p, sockelhoehe: e.target.value}))}
                                                     onBlur={handleBlurFormat(setMasse, 'sockelhoehe')}
                                                     />
@@ -8363,12 +9771,14 @@
         /* ═══════════════════════════════════════════
            GESAMTLISTE – Übersicht aller Räume
            ═══════════════════════════════════════════ */
-        function Gesamtliste({ gesamtliste, setGesamtliste, kunde, onClose, onOpenRaumblatt, onAufmassEndgueltig, aufmassGespeichert }) {
+        function Gesamtliste({ gesamtliste, setGesamtliste, kunde, onClose, onOpenRaumblatt, onAufmassEndgueltig, aufmassGespeichert, isDriveMode }) {
             const [expandedRooms, setExpandedRooms] = useState(() => gesamtliste.map((_, i) => i)); // Alle Räume offen
             const [expandedPos, setExpandedPos] = useState({}); // {roomIdx-posIdx: true}
             const [editingPos, setEditingPos] = useState(null); // 'ri-pi' string
             const [editValue, setEditValue] = useState('');
             const [exportInProgress, setExportInProgress] = useState(false);
+            const [driveUploadStatus, setDriveUploadStatus] = useState(null); // null | 'uploading' | 'success' | 'error'
+            const [driveUploadResults, setDriveUploadResults] = useState([]);
 
             const toggleRoom = (ri) => {
                 setExpandedRooms(prev => prev.includes(ri) ? prev.filter(i => i !== ri) : [...prev, ri]);
@@ -8395,6 +9805,62 @@
             };
             const cancelEdit = () => { setEditingPos(null); };
 
+            // ═══ EDITIERBARER RECHENWEG ═══
+            const [editingRW, setEditingRW] = useState(null);
+
+            const parseRWVal = (text) => {
+                if (!text) return 0;
+                const cleaned = String(text).replace(/×/g, '*').replace(/,/g, '.').replace(/[^0-9.+\-*/() ]/g, '');
+                try { return eval(cleaned) || 0; } catch(e) { return parseMass(text); }
+            };
+
+            const startRWEdit = (ri, pi, pos) => {
+                let steps = [];
+                const isManual = pos.hasManualRW && pos.manualRechenweg && pos.manualRechenweg.length > 0;
+                if (isManual) {
+                    steps = pos.manualRechenweg.map(z => {
+                        const val = parseRWVal(z.text);
+                        return { sign: z.vorzeichen === 'minus' ? -1 : 1, label: z.text, formel: '', ergebnis: fmtDe(val) };
+                    });
+                } else if (pos.rechenwegSteps && pos.rechenwegSteps.length > 0) {
+                    steps = pos.rechenwegSteps.filter(st => st.type !== 'total' && st.type !== 'vob-info').map(st => {
+                        const ergStr = (st.ergebnis || '').replace(/[^0-9,.\-]/g, '').replace(',', '.');
+                        const val = Math.abs(parseFloat(ergStr) || 0);
+                        return { sign: st.type === 'abzug' ? -1 : 1, label: (st.label || '').replace(/^[−+] /, ''), formel: st.formel || '', ergebnis: fmtDe(val) };
+                    });
+                }
+                if (steps.length === 0) steps = [{ sign: 1, label: '', formel: '', ergebnis: fmtDe(pos.ergebnis || 0) }];
+                setEditingRW({ ri, pi, steps, einheit: pos.einheit });
+            };
+            const updateStep = (idx, field, value) => {
+                setEditingRW(prev => {
+                    const steps = [...prev.steps];
+                    steps[idx] = { ...steps[idx], [field]: value };
+                    if (field === 'formel') { const v = parseRWVal(value); if (v > 0) steps[idx].ergebnis = fmtDe(v); }
+                    return { ...prev, steps };
+                });
+            };
+            const toggleSign = (idx) => {
+                setEditingRW(prev => { const steps = [...prev.steps]; steps[idx] = { ...steps[idx], sign: steps[idx].sign === 1 ? -1 : 1 }; return { ...prev, steps }; });
+            };
+            const addStep = () => { setEditingRW(prev => ({ ...prev, steps: [...prev.steps, { sign: 1, label: '', formel: '', ergebnis: '0,000' }] })); };
+            const removeStep = (idx) => { setEditingRW(prev => prev.steps.length <= 1 ? prev : { ...prev, steps: prev.steps.filter((_, i) => i !== idx) }); };
+            const calcEditTotal = (steps) => { let t = 0; (steps || []).forEach(st => { t += parseMass(st.ergebnis) * (st.sign || 1); }); return Math.max(0, t); };
+            const saveRWEdit = () => {
+                if (!editingRW) return;
+                const { ri, pi, steps } = editingRW;
+                const newTotal = calcEditTotal(steps);
+                setGesamtliste(prev => {
+                    const updated = [...prev]; const room = { ...updated[ri], positionen: [...updated[ri].positionen] };
+                    room.positionen[pi] = { ...room.positionen[pi], ergebnis: newTotal, editedInGesamtliste: true,
+                        rechenwegSteps: steps.map(st => ({ label: (st.sign === -1 ? '− ' : '+ ') + st.label, formel: st.formel, ergebnis: (st.sign === -1 ? '−' : '') + st.ergebnis, type: st.sign === -1 ? 'abzug' : 'zurechnung' })).concat([{ label: 'ERGEBNIS', formel: '', ergebnis: fmtDe(newTotal), type: 'total' }]),
+                        hasManualRW: false, editedRechenwegSteps: steps };
+                    updated[ri] = room; return updated;
+                });
+                setEditingRW(null);
+            };
+            const cancelRWEdit = () => { setEditingRW(null); };
+
             // ═══ GESAMTMASSEN pro Position über alle Räume ═══
             const positionsSummary = {};
             gesamtliste.forEach((room, ri) => {
@@ -8414,115 +9880,179 @@
             const handleExport = async () => {
                 setExportInProgress(true);
                 try {
-                    const kundenName = kunde?.name || 'Kunde';
-                    const datum = new Date().toLocaleDateString('de-DE');
-                    const datumFile = new Date().toISOString().split('T')[0];
+                    var kundenName = kunde?.name || 'Kunde';
+                    var safeName = kundenName.replace(/[^a-zA-Z0-9 ]/g, '').replace(/ +/g, '_').substring(0, 30);
+                    var datum = new Date().toLocaleDateString('de-DE');
+                    var datumFile = new Date().toISOString().split('T')[0];
+                    var raumNamen = gesamtliste.map(function(r) { return r.raumName; });
 
-                    // ── Excel: Gesamtmassen ──
+                    // ══════════════════════════════════════
+                    // EXCEL
+                    // ══════════════════════════════════════
+                    try {
                     if (typeof XLSX !== 'undefined') {
-                        const wb = XLSX.utils.book_new();
-                        // Sheet 1: Gesamtmassen
-                        const gData = [['Pos.', 'Bezeichnung', 'Einheit', 'Gesamtmenge']];
-                        sortedPositions.forEach(p => gData.push([p.pos, p.bez, p.einheit, Number(p.total.toFixed(3))]));
-                        const ws1 = XLSX.utils.aoa_to_sheet(gData);
-                        ws1['!cols'] = [{wch:12},{wch:45},{wch:10},{wch:15}];
+                        var wb = XLSX.utils.book_new();
+                        var gHead = ['Pos.', 'Bezeichnung', 'Einheit', 'GESAMT'];
+                        raumNamen.forEach(function(rn) { gHead.push(rn); });
+                        var gRows = [['AUFMASS - ' + kundenName], ['Datum: ' + datum, '', '', 'Raeume: ' + gesamtliste.length], [], gHead];
+                        sortedPositions.forEach(function(p) {
+                            var row = [p.pos, p.bez, p.einheit, Number(p.total.toFixed(3))];
+                            raumNamen.forEach(function(rn) {
+                                var f = p.rooms.find(function(r) { return r.raum === rn; });
+                                row.push(f ? Number(f.erg.toFixed(3)) : '');
+                            });
+                            gRows.push(row);
+                        });
+                        var ws1 = XLSX.utils.aoa_to_sheet(gRows);
+                        ws1['!cols'] = [{wch:10}, {wch:48}, {wch:8}, {wch:14}].concat(raumNamen.map(function() { return {wch:14}; }));
                         XLSX.utils.book_append_sheet(wb, ws1, 'Gesamtmassen');
-                        // Sheet 2: Raumdetails
-                        const dData = [['Raum', 'Pos.', 'Bezeichnung', 'Einheit', 'Menge']];
-                        gesamtliste.forEach(room => {
-                            (room.positionen || []).filter(p => p.ergebnis > 0).forEach(p => {
-                                dData.push([room.raumName, p.pos, p.bez, p.einheit, Number(p.ergebnis.toFixed(3))]);
+                        gesamtliste.forEach(function(room, ri) {
+                            var rNr = String(ri + 1).padStart(2, '0');
+                            var rRows = [['RAUMBLATT ' + rNr + ': ' + room.raumName], ['Kunde: ' + kundenName, '', '', 'Datum: ' + datum], [], ['Position', '+/-', 'Bezeichnung', 'Formel', 'Ergebnis']];
+                            (room.positionen || []).filter(function(p) { return p.ergebnis > 0; }).forEach(function(pos) {
+                                rRows.push(['Pos. ' + pos.pos, '', pos.bez, pos.einheit, Number(pos.ergebnis.toFixed(3))]);
+                                var isM = pos.hasManualRW && pos.manualRechenweg && pos.manualRechenweg.length > 0;
+                                if (isM) { pos.manualRechenweg.forEach(function(z) { rRows.push(['', z.vorzeichen === 'minus' ? '-' : '+', z.text, '', '']); }); }
+                                else if (pos.rechenwegSteps && pos.rechenwegSteps.length > 0) { pos.rechenwegSteps.forEach(function(st) { if (st.type !== 'vob-info') rRows.push(['', st.type === 'abzug' ? '-' : '+', st.label || '', st.formel || '', st.ergebnis || '']); }); }
+                                rRows.push([]);
                             });
+                            rRows.push([]); rRows.push(['ZUSAMMENFASSUNG']); rRows.push(['Pos.', '', 'Bezeichnung', 'Einheit', 'Menge']);
+                            (room.positionen || []).filter(function(p) { return p.ergebnis > 0; }).forEach(function(p) { rRows.push(['Pos. ' + p.pos, '', p.bez, p.einheit, Number(p.ergebnis.toFixed(3))]); });
+                            var sn = (rNr + ' ' + room.raumName).substring(0, 31).replace(/[\\\/\?\*\[\]:]/g, '');
+                            var wsR = XLSX.utils.aoa_to_sheet(rRows);
+                            wsR['!cols'] = [{wch:14}, {wch:4}, {wch:44}, {wch:36}, {wch:14}];
+                            XLSX.utils.book_append_sheet(wb, wsR, sn);
                         });
-                        const ws2 = XLSX.utils.aoa_to_sheet(dData);
-                        ws2['!cols'] = [{wch:20},{wch:12},{wch:45},{wch:10},{wch:15}];
-                        XLSX.utils.book_append_sheet(wb, ws2, 'Raumdetails');
-                        XLSX.writeFile(wb, `Aufmass_${datumFile}_${kundenName.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}.xlsx`);
+                        XLSX.writeFile(wb, 'Aufmass_' + datumFile + '_' + safeName + '.xlsx');
+                        // Excel-Blob für Drive-Upload erzeugen
+                        var xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                        var excelBlob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                     }
+                    } catch(xlErr) { console.error('Excel:', xlErr); }
 
-                    // ── PDF: Gesamtmassen ──
-                    if (typeof jspdf !== 'undefined' || typeof window.jspdf !== 'undefined') {
-                        const { jsPDF } = window.jspdf;
-                        // PDF Gesamtmassen
-                        const doc = new jsPDF('p', 'mm', 'a4');
-                        doc.setFont('helvetica', 'bold');
-                        doc.setFontSize(18);
-                        doc.text('Aufmaß – Gesamtmassen', 14, 20);
-                        doc.setFont('helvetica', 'normal');
-                        doc.setFontSize(11);
-                        doc.text(`Kunde: ${kundenName}`, 14, 30);
-                        doc.text(`Datum: ${datum}`, 14, 36);
-                        doc.text(`Räume: ${gesamtliste.length}`, 14, 42);
-                        doc.line(14, 46, 196, 46);
-                        // Gesamtmassen-Tabelle
-                        const tableData = sortedPositions.map(p => [p.pos, p.bez, p.einheit, fmtDe(p.total)]);
-                        doc.autoTable({
-                            startY: 50, head: [['Pos.', 'Bezeichnung', 'Einheit', 'Menge']],
-                            body: tableData, theme: 'grid',
-                            headStyles: { fillColor: [230, 126, 34], textColor: 255, fontStyle: 'bold' },
-                            styles: { fontSize: 10, cellPadding: 3 },
-                            columnStyles: { 0: {cellWidth:22}, 1: {cellWidth:100}, 2: {cellWidth:20}, 3: {cellWidth:30, halign:'right', fontStyle:'bold'} }
+                    // ══════════════════════════════════════
+                    // PDF: EINE DATEI MIT ALLEM
+                    // ══════════════════════════════════════
+                    try {
+                    var jspdfLib = window.jspdf;
+                    if (jspdfLib) {
+                        var jsPDF = jspdfLib.jsPDF;
+                        var pdf = new jsPDF('p', 'mm', 'a4');
+                        var drawH = function(t) {
+                            pdf.setDrawColor(196,30,30); pdf.setLineWidth(1.5); pdf.line(14,12,196,12);
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(196,30,30); pdf.text('Thomas Willwacher',14,17);
+                            pdf.setTextColor(40,40,40); pdf.text('Fliesenlegermeister e.K.',55,17);
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(130,130,130);
+                            pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101',196,17,{align:'right'});
+                            pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3); pdf.line(14,19.5,196,19.5);
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(13); pdf.setTextColor(30,30,30); pdf.text(t,14,27);
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(80,80,80); pdf.text(kundenName+'  |  '+datum,14,32);
+                        };
+
+                        // DECKBLATT
+                        pdf.setDrawColor(196,30,30); pdf.setLineWidth(1.5); pdf.line(14,40,196,40);
+                        pdf.setFont('helvetica','bold'); pdf.setFontSize(28); pdf.setTextColor(30,30,30); pdf.text('AUFMASS',105,62,{align:'center'});
+                        pdf.setFontSize(14); pdf.setTextColor(196,30,30); pdf.text(kundenName,105,75,{align:'center'});
+                        pdf.setLineWidth(0.5); pdf.line(50,80,160,80);
+                        var dy=95;
+                        [['Auftraggeber',kunde?.auftraggeber||''],['Baustelle',kunde?.adresse||''],['Bauleitung',kunde?.bauleitung||''],['Architekt',kunde?.architekt||''],['Datum',datum],['Raeume',String(gesamtliste.length)],['Positionen',String(sortedPositions.length)]].forEach(function(r){
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(10); pdf.setTextColor(120,120,120); pdf.text(r[0]+':',40,dy);
+                            pdf.setFont('helvetica','bold'); pdf.setTextColor(30,30,30); pdf.text(r[1],85,dy); dy+=7;
                         });
-                        doc.save(`Gesamtmassen_${datumFile}.pdf`);
+                        pdf.setDrawColor(196,30,30); pdf.setLineWidth(0.8); pdf.line(14,250,196,250);
+                        pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(196,30,30); pdf.text('Thomas Willwacher',14,257);
+                        pdf.setTextColor(30,30,30); pdf.text('Fliesenlegermeister e.K.',55,257);
+                        pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(100,100,100);
+                        pdf.text('Flurweg 14a, 56472 Nisterau  |  Tel. 02661-63101  |  0170-2024161',14,263);
 
-                        // PDF pro Raum
-                        gesamtliste.forEach((room, ri) => {
-                            const rdoc = new jsPDF('p', 'mm', 'a4');
-                            rdoc.setFont('helvetica', 'bold');
-                            rdoc.setFontSize(16);
-                            rdoc.text(`Raumblatt: ${room.raumName}`, 14, 18);
-                            rdoc.setFont('helvetica', 'normal');
-                            rdoc.setFontSize(10);
-                            rdoc.text(`Kunde: ${kundenName}  |  Datum: ${datum}`, 14, 26);
-                            rdoc.line(14, 30, 196, 30);
-                            let y = 35;
-                            const posWithErg = (room.positionen || []).filter(p => p.ergebnis > 0);
-                            posWithErg.forEach(pos => {
-                                if (y > 260) { rdoc.addPage(); y = 20; }
-                                rdoc.setFont('helvetica', 'bold');
-                                rdoc.setFontSize(11);
-                                rdoc.text(`Pos. ${pos.pos} — ${pos.bez}`, 14, y);
-                                y += 6;
-                                // Rechenweg
-                                rdoc.setFont('helvetica', 'normal');
-                                rdoc.setFontSize(9);
-                                if (pos.hasManualRW && pos.manualRechenweg && pos.manualRechenweg.length > 0) {
-                                    pos.manualRechenweg.forEach(z => {
-                                        if (y > 270) { rdoc.addPage(); y = 20; }
-                                        rdoc.text(`  ${z.vorzeichen === 'minus' ? '−' : '+'} ${z.text}`, 16, y);
-                                        y += 4.5;
-                                    });
-                                } else if (pos.rechenwegSteps && pos.rechenwegSteps.length > 0) {
-                                    pos.rechenwegSteps.forEach(st => {
-                                        if (y > 270) { rdoc.addPage(); y = 20; }
-                                        if (st.type === 'total') {
-                                            rdoc.setFont('helvetica', 'bold');
-                                            rdoc.text(`  ERGEBNIS: ${st.ergebnis}`, 16, y);
-                                            rdoc.setFont('helvetica', 'normal');
-                                        } else if (st.type !== 'vob-info') {
-                                            const lbl = st.label || '';
-                                            const frm = st.formel ? ` = ${st.formel}` : '';
-                                            rdoc.text(`  ${lbl}${frm}  →  ${st.ergebnis || ''}`, 16, y);
-                                        }
-                                        y += 4.5;
-                                    });
-                                }
-                                // Ergebnis-Zeile
-                                rdoc.setFont('helvetica', 'bold');
-                                rdoc.setFontSize(11);
-                                rdoc.text(`= ${fmtDe(pos.ergebnis)} ${pos.einheit}`, 150, y, {align:'right'});
-                                y += 10;
-                                rdoc.setFont('helvetica', 'normal');
+                        // GESAMTMASSEN
+                        pdf.addPage(); drawH('Gesamtmassen - Uebersicht');
+                        var gy=40;
+                        sortedPositions.forEach(function(p){
+                            if(gy>260){pdf.addPage();drawH('Gesamtmassen (Forts.)');gy=40;}
+                            pdf.setFillColor(244,244,244);pdf.rect(14,gy-3,182,7,'F');
+                            pdf.setFillColor(196,30,30);pdf.rect(14,gy-3,2,7,'F');
+                            pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(196,30,30);pdf.text('Pos. '+p.pos,19,gy+1);
+                            pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,60,60);pdf.text(p.bez.substring(0,70),38,gy+1);
+                            pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(196,30,30);pdf.text(fmtDe(p.total)+' '+p.einheit,194,gy+1,{align:'right'});
+                            gy+=7;
+                            pdf.setFont('helvetica','normal');pdf.setFontSize(7);
+                            p.rooms.forEach(function(r){if(gy>275){pdf.addPage();drawH('Gesamtmassen (Forts.)');gy=40;}pdf.setTextColor(130,130,130);pdf.text(r.raum,24,gy);pdf.setTextColor(60,60,60);pdf.text(fmtDe(r.erg)+' '+p.einheit,130,gy,{align:'right'});gy+=3.5;});
+                            gy+=3;
+                        });
+
+                        // RAUMBLAETTER
+                        gesamtliste.forEach(function(room,ri){
+                            pdf.addPage();
+                            var rNr=String(ri+1).padStart(2,'0');
+                            drawH('Raumblatt '+rNr+': '+room.raumName);
+                            pdf.setDrawColor(196,30,30);pdf.setLineWidth(0.5);pdf.line(14,35,196,35);
+                            var ry=42;
+                            var posE=(room.positionen||[]).filter(function(p){return p.ergebnis>0;});
+                            posE.forEach(function(pos){
+                                if(ry>245){pdf.addPage();drawH('Raumblatt '+rNr+' (Forts.)');ry=40;}
+                                // Kopf
+                                pdf.setFillColor(244,244,244);pdf.rect(14,ry-3,182,13,'F');
+                                pdf.setFillColor(196,30,30);pdf.rect(14,ry-3,2.5,13,'F');
+                                pdf.setFont('helvetica','bold');pdf.setFontSize(11);pdf.setTextColor(196,30,30);pdf.text('Pos. '+pos.pos,19,ry+1);
+                                pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(60,60,60);pdf.text(pos.bez.substring(0,85),19,ry+6);
+                                pdf.setFont('helvetica','bold');pdf.setFontSize(12);pdf.setTextColor(196,30,30);pdf.text(fmtDe(pos.ergebnis)+' '+pos.einheit,194,ry+1,{align:'right'});
+                                ry+=16;
+                                // RW Header
+                                pdf.setFont('helvetica','normal');pdf.setFontSize(6.5);pdf.setTextColor(170,170,170);
+                                pdf.text('+/-',17,ry);pdf.text('Bezeichnung',24,ry);pdf.text('Formel',92,ry);pdf.text('Ergebnis',194,ry,{align:'right'});
+                                pdf.setDrawColor(220,220,220);pdf.setLineWidth(0.2);pdf.line(16,ry+1,194,ry+1);ry+=4;
+                                // RW Zeilen
+                                var isM=pos.hasManualRW&&pos.manualRechenweg&&pos.manualRechenweg.length>0;
+                                if(isM){pos.manualRechenweg.forEach(function(z){if(ry>272){pdf.addPage();drawH(room.raumName+' (Forts.)');ry=40;}var a=z.vorzeichen==='minus';if(a){pdf.setFillColor(249,236,235);pdf.rect(16,ry-2,178,5,'F');}pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(a?180:39,a?40:130,a?40:72);pdf.text(a?'-':'+',18,ry);pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,60,60);pdf.text(z.text.substring(0,55),24,ry);pdf.setDrawColor(240,240,240);pdf.setLineWidth(0.1);pdf.line(24,ry+1.5,194,ry+1.5);ry+=5;});}
+                                else if(pos.rechenwegSteps&&pos.rechenwegSteps.length>0){pos.rechenwegSteps.forEach(function(st){if(st.type==='vob-info'||st.type==='total')return;if(ry>272){pdf.addPage();drawH(room.raumName+' (Forts.)');ry=40;}var a=st.type==='abzug';if(a){pdf.setFillColor(249,236,235);}else{pdf.setFillColor(234,247,239);}pdf.rect(16,ry-2,178,5,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(a?180:39,a?40:130,a?40:72);pdf.text(a?'-':'+',18,ry);pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,60,60);pdf.text((st.label||'').substring(0,42),24,ry);pdf.setFont('courier','normal');pdf.setFontSize(7);pdf.setTextColor(100,100,100);if(st.formel)pdf.text(st.formel.substring(0,32),92,ry);pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.setTextColor(a?180:50,a?40:50,a?40:50);if(st.ergebnis)pdf.text(st.ergebnis,194,ry,{align:'right'});pdf.setDrawColor(240,240,240);pdf.setLineWidth(0.1);pdf.line(24,ry+1.5,194,ry+1.5);ry+=5;});}
+                                // Ergebnis
+                                ry+=1;pdf.setDrawColor(196,30,30);pdf.setLineWidth(0.6);pdf.line(110,ry,194,ry);ry+=4;
+                                pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(30,30,30);pdf.text('ERGEBNIS:',112,ry);
+                                pdf.setTextColor(196,30,30);pdf.text(fmtDe(pos.ergebnis)+' '+pos.einheit,194,ry,{align:'right'});
+                                pdf.setLineWidth(0.6);pdf.line(110,ry+2,194,ry+2);ry+=10;
                             });
-                            rdoc.save(`Raumblatt_${(ri+1).toString().padStart(2,'0')}_${room.raumName.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${datumFile}.pdf`);
+                            // Zusammenfassung
+                            if(ry>230){pdf.addPage();drawH(room.raumName+' Zusammenfassung');ry=40;}
+                            ry+=2;pdf.setDrawColor(196,30,30);pdf.setLineWidth(0.8);pdf.line(14,ry,196,ry);ry+=5;
+                            pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(30,30,30);pdf.text('Zusammenfassung: '+room.raumName,14,ry);ry+=7;
+                            pdf.setFillColor(196,30,30);pdf.rect(14,ry-3,182,7,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(255,255,255);
+                            pdf.text('Pos.',16,ry+1);pdf.text('Bezeichnung',30,ry+1);pdf.text('Einheit',145,ry+1);pdf.text('Menge',194,ry+1,{align:'right'});ry+=7;
+                            posE.forEach(function(p,pi){if(ry>275){pdf.addPage();ry=20;}if(pi%2===0){pdf.setFillColor(245,245,245);pdf.rect(14,ry-2.5,182,5.5,'F');}pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(196,30,30);pdf.text(p.pos,16,ry);pdf.setFont('helvetica','normal');pdf.setTextColor(50,50,50);pdf.text(p.bez.substring(0,65),30,ry);pdf.setTextColor(100,100,100);pdf.text(p.einheit,145,ry);pdf.setFont('helvetica','bold');pdf.setTextColor(196,30,30);pdf.text(fmtDe(p.ergebnis),194,ry,{align:'right'});ry+=5.5;});
                         });
+
+                        // Seitenzahlen
+                        var tp=pdf.internal.getNumberOfPages();
+                        for(var pg=1;pg<=tp;pg++){pdf.setPage(pg);pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(160,160,160);pdf.text('Seite '+pg+' von '+tp,196,287,{align:'right'});if(pg>1){pdf.text(kundenName,14,287);pdf.text(datum,105,287,{align:'center'});}}
+
+                        pdf.save('Aufmass_Komplett_'+datumFile+'_'+safeName+'.pdf');
+                        // PDF-Blob für Drive-Upload erzeugen
+                        var pdfBlob = pdf.output('blob');
+                    }
+                    } catch(pdfErr) { console.error('PDF:',pdfErr); alert('PDF Fehler: '+pdfErr.message); }
+
+                    // ══════════════════════════════════════
+                    // GOOGLE DRIVE UPLOAD
+                    // ══════════════════════════════════════
+                    if (isDriveMode && kunde && kunde._driveFolderId && window.GoogleDriveService.isConnected()) {
+                        try {
+                            setDriveUploadStatus('uploading');
+                            var uploadResults = await window.GoogleDriveService.exportToCustomerFolder(
+                                kunde._driveFolderId,
+                                typeof pdfBlob !== 'undefined' ? pdfBlob : null,
+                                typeof excelBlob !== 'undefined' ? excelBlob : null,
+                                kundenName
+                            );
+                            setDriveUploadResults(uploadResults);
+                            setDriveUploadStatus('success');
+                        } catch (driveErr) {
+                            console.error('Drive Upload:', driveErr);
+                            setDriveUploadStatus('error');
+                        }
                     }
 
                     if (onAufmassEndgueltig) onAufmassEndgueltig();
-                } catch(e) {
-                    console.error('Export-Fehler:', e);
-                    alert('⚠ Fehler beim Export: ' + e.message);
-                }
+                } catch(e) { console.error('Export:',e); alert('Export-Fehler: '+e.message); }
                 setExportInProgress(false);
             };
 
@@ -8600,7 +10130,32 @@
                                                 </div>
 
                                                 {/* ═══ RECHENWEG ═══ */}
-                                                {isPosExpanded && (
+                                                {isPosExpanded && (() => {
+                                                    const isCurrentlyEditing = editingRW && editingRW.ri === ri && editingRW.pi === realPi;
+                                                    return isCurrentlyEditing ? (
+                                                    <div className="gl-pos-body">
+                                                        <div style={{fontSize:'11px', color:'var(--accent-orange)', marginBottom:'8px', fontWeight:600}}>✏️ Rechenweg bearbeiten</div>
+                                                        {editingRW.steps.map((st, si) => (
+                                                            <div key={si} className="gl-rw-edit-row">
+                                                                <div className={`gl-rw-edit-sign ${st.sign===1?'plus':'minus'}`} onClick={() => toggleSign(si)}>{st.sign===1?'+':'−'}</div>
+                                                                <input className="gl-rw-edit-input label" value={st.label} onChange={e => updateStep(si,'label',e.target.value)} placeholder="Bezeichnung" />
+                                                                <input className="gl-rw-edit-input formel" value={st.formel} onChange={e => updateStep(si,'formel',e.target.value)} placeholder="Formel" />
+                                                                <input className="gl-rw-edit-input ergebnis" value={st.ergebnis} onChange={e => updateStep(si,'ergebnis',e.target.value)}
+                                                                    onBlur={() => { const v = parseMass(st.ergebnis); if(v>=0) updateStep(si,'ergebnis',fmtDe(v)); }} placeholder="0,000" />
+                                                                <button className="gl-rw-edit-del" onClick={() => removeStep(si)}>✕</button>
+                                                            </div>
+                                                        ))}
+                                                        <button className="gl-rw-add-btn" onClick={addStep}>+ Zeile hinzufügen</button>
+                                                        <div className="gl-rw-edit-total">
+                                                            <span style={{fontWeight:700, color:'var(--accent-orange)', fontSize:'14px'}}>ERGEBNIS</span>
+                                                            <span style={{fontWeight:700, color:'var(--accent-orange)', fontSize:'16px'}}>{fmtDe(calcEditTotal(editingRW.steps))} {pos.einheit}</span>
+                                                        </div>
+                                                        <div style={{display:'flex', gap:'6px', marginTop:'8px', justifyContent:'flex-end'}}>
+                                                            <button style={{padding:'5px 14px', border:'1px solid var(--border-color)', borderRadius:'5px', background:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'12px'}} onClick={cancelRWEdit}>Abbrechen</button>
+                                                            <button style={{padding:'5px 14px', border:'none', borderRadius:'5px', background:'#27ae60', color:'#fff', cursor:'pointer', fontWeight:600, fontSize:'12px'}} onClick={saveRWEdit}>✓ Speichern</button>
+                                                        </div>
+                                                    </div>
+                                                    ) : (
                                                     <div className="gl-pos-body">
                                                         <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'6px', display:'flex', gap:'6px', alignItems:'center'}}>
                                                             <span style={{padding:'1px 6px', borderRadius:'3px', background:'rgba(230,126,34,0.1)', color:'var(--accent-orange)', fontSize:'10px', fontWeight:600}}>
@@ -8610,42 +10165,36 @@
                                                             {hasEditedRW && <span style={{padding:'1px 6px', borderRadius:'3px', background:'rgba(230,126,34,0.12)', color:'var(--accent-orange)', fontSize:'10px', fontWeight:600}}>✏️ Bearbeitet</span>}
                                                             {pos.editedInGesamtliste && <span style={{padding:'1px 6px', borderRadius:'3px', background:'rgba(39,174,96,0.12)', color:'#27ae60', fontSize:'10px', fontWeight:600}}>📋 Gesamtliste</span>}
                                                         </div>
-
                                                         {isManual ? (
-                                                            /* Manueller Rechenweg */
                                                             <div>
                                                                 {pos.manualRechenweg.map((z, zi) => {
                                                                     const val = parseMass(z.text?.replace(/[^0-9,.\-+*/() ]/g, ''));
-                                                                    return (
-                                                                        <div key={zi} className={`gl-rw-step ${z.vorzeichen === 'minus' ? 'abzug' : 'zurechnung'}`}>
-                                                                            <span className="gl-rw-label">{z.vorzeichen === 'minus' ? '−' : '+'}</span>
-                                                                            <span className="gl-rw-formel">{z.text}</span>
-                                                                            <span className="gl-rw-erg">{val ? fmtDe(val) : ''}</span>
-                                                                        </div>
-                                                                    );
+                                                                    return (<div key={zi} className={`gl-rw-step ${z.vorzeichen === 'minus' ? 'abzug' : 'zurechnung'}`}>
+                                                                        <span className="gl-rw-label">{z.vorzeichen === 'minus' ? '−' : '+'}</span>
+                                                                        <span className="gl-rw-formel">{z.text}</span>
+                                                                        <span className="gl-rw-erg">{val ? fmtDe(val) : ''}</span>
+                                                                    </div>);
                                                                 })}
-                                                                <div className="gl-rw-step total">
-                                                                    <span className="gl-rw-label">ERGEBNIS</span>
-                                                                    <span className="gl-rw-formel"></span>
-                                                                    <span className="gl-rw-erg">{fmtDe(pos.ergebnis)} {pos.einheit}</span>
-                                                                </div>
+                                                                <div className="gl-rw-step total"><span className="gl-rw-label">ERGEBNIS</span><span className="gl-rw-formel"></span><span className="gl-rw-erg">{fmtDe(pos.ergebnis)} {pos.einheit}</span></div>
                                                             </div>
                                                         ) : pos.rechenwegSteps && pos.rechenwegSteps.length > 0 ? (
-                                                            /* Auto/VOB Rechenweg */
-                                                            <div>
-                                                                {pos.rechenwegSteps.map((st, si) => (
-                                                                    <div key={si} className={`gl-rw-step ${st.type || ''}`}>
-                                                                        <span className="gl-rw-label">{st.label || ''}</span>
-                                                                        <span className="gl-rw-formel">{st.formel || ''}</span>
-                                                                        <span className="gl-rw-erg">{st.ergebnis || ''}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
+                                                            <div>{pos.rechenwegSteps.map((st, si) => (
+                                                                <div key={si} className={`gl-rw-step ${st.type || ''}`}>
+                                                                    <span className="gl-rw-label">{st.label || ''}</span>
+                                                                    <span className="gl-rw-formel">{st.formel || ''}</span>
+                                                                    <span className="gl-rw-erg">{st.ergebnis || ''}</span>
+                                                                </div>
+                                                            ))}</div>
                                                         ) : (
                                                             <div style={{fontSize:'12px', color:'var(--text-muted)', fontStyle:'italic'}}>Kein Rechenweg verfügbar</div>
                                                         )}
+                                                        <button style={{width:'100%', marginTop:'10px', padding:'8px', border:'1px dashed var(--accent-orange)', borderRadius:'6px', background:'rgba(230,126,34,0.06)', color:'var(--accent-orange)', fontFamily:'Oswald', fontSize:'12px', fontWeight:600, cursor:'pointer'}}
+                                                            onClick={e => { e.stopPropagation(); startRWEdit(ri, realPi, pos); }}>
+                                                            ✏️ Rechenweg bearbeiten
+                                                        </button>
                                                     </div>
-                                                )}
+                                                    );
+                                                })()}
                                             </div>
                                             );
                                         })}
@@ -8690,16 +10239,39 @@
 
                         {/* ═══ EXPORT BUTTON ═══ */}
                         <button className="gl-export-btn" onClick={handleExport} disabled={exportInProgress}>
-                            {exportInProgress ? '⏳ Export läuft...' : '📦 Aufmaß endgültig fertigstellen'}
+                            {exportInProgress
+                                ? (driveUploadStatus === 'uploading' ? '⏳ Upload auf Google Drive...' : '⏳ Export läuft...')
+                                : '📦 Aufmaß endgültig fertigstellen'}
                             <div style={{fontSize:'11px', fontWeight:400, marginTop:'4px', opacity:0.8}}>
-                                PDF + Excel erstellen · {gesamtliste.length} Raumblätter · Gesamtmassen
+                                PDF + Excel erstellen · {gesamtliste.length} Raumblätter{isDriveMode ? ' · Upload auf Google Drive' : ''} · Gesamtmassen
                             </div>
                         </button>
 
                         {aufmassGespeichert && (
                             <div style={{textAlign:'center', padding:'14px', marginTop:'12px', background:'rgba(39,174,96,0.1)', borderRadius:'10px', border:'1px solid rgba(39,174,96,0.3)'}}>
                                 <div style={{color:'#27ae60', fontWeight:700, fontSize:'14px'}}>✅ Export erfolgreich!</div>
-                                <div style={{color:'var(--text-muted)', fontSize:'12px', marginTop:'4px'}}>PDF- und Excel-Dateien wurden heruntergeladen</div>
+                                <div style={{color:'var(--text-muted)', fontSize:'12px', marginTop:'4px'}}>PDF- und Excel-Dateien wurden lokal heruntergeladen</div>
+                            </div>
+                        )}
+
+                        {/* Google Drive Upload Status */}
+                        {driveUploadStatus === 'success' && (
+                            <div style={{textAlign:'center', padding:'14px', marginTop:'8px', background:'rgba(39,174,96,0.08)', borderRadius:'10px', border:'1px solid rgba(39,174,96,0.25)'}}>
+                                <div style={{color:'#27ae60', fontWeight:700, fontSize:'14px'}}>☁️ Google Drive – Gespeichert!</div>
+                                <div style={{color:'var(--text-muted)', fontSize:'12px', marginTop:'4px'}}>
+                                    Dateien im Kundenordner unter "Aufmaß" abgelegt
+                                </div>
+                                {driveUploadResults.map(function(r, i) {
+                                    return React.createElement('div', { key: i, style: {fontSize:'11px', color:'var(--text-light)', marginTop:'3px'} },
+                                        (r.type === 'pdf' ? '📄 ' : '📊 ') + r.name
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {driveUploadStatus === 'error' && (
+                            <div style={{textAlign:'center', padding:'14px', marginTop:'8px', background:'rgba(196,30,30,0.08)', borderRadius:'10px', border:'1px solid rgba(196,30,30,0.25)'}}>
+                                <div style={{color:'var(--accent-red-light)', fontWeight:700, fontSize:'14px'}}>⚠️ Google Drive Upload fehlgeschlagen</div>
+                                <div style={{color:'var(--text-muted)', fontSize:'12px', marginTop:'4px'}}>Lokale Dateien wurden trotzdem heruntergeladen.</div>
                             </div>
                         )}
 
@@ -8731,6 +10303,9 @@
             const [aufmassGespeichert, setAufmassGespeichert] = useState(false);
             const [history, setHistory] = useState(['start']);
             const [historyIdx, setHistoryIdx] = useState(0);
+            // ── Google Drive State ──
+            const [driveKunden, setDriveKunden] = useState([]);
+            const [isDriveMode, setIsDriveMode] = useState(false);
 
             /* ── Global Enter-Key Handler ── */
             useEffect(() => {
@@ -8806,21 +10381,58 @@
                 setShowAuth(true);
             };
 
-            const handleAuth = () => {
+            const handleAuth = async (authResult) => {
                 setShowAuth(false);
                 setDriveStatus('connecting');
                 setLoading(true);
                 navigateTo('auswahl');
 
-                setTimeout(() => {
+                if (authResult && !authResult.demo) {
+                    // Echte Google Drive Verbindung
+                    try {
+                        setIsDriveMode(true);
+                        const folders = await window.GoogleDriveService.listKundenOrdner();
+                        setDriveKunden(folders);
+                        setDriveStatus('online');
+                    } catch (err) {
+                        console.error('Drive Fehler:', err);
+                        setDriveStatus('online');
+                        // Fallback auf Demo
+                        setIsDriveMode(false);
+                    }
+                } else {
+                    // Demo-Modus
+                    setIsDriveMode(false);
                     setDriveStatus('online');
-                    setLoading(false);
-                }, 1500);
+                }
+                setLoading(false);
             };
 
-            const handleSelectKunde = (kunde) => {
+            const handleSelectKunde = async (kunde) => {
                 setSelectedKunde(kunde);
                 navigateTo('akte');
+
+                // Wenn echte Drive-Verbindung: Ordner-Inhalt laden
+                if (isDriveMode && kunde.id && !kunde.files) {
+                    setLoading(true);
+                    try {
+                        const contents = await window.GoogleDriveService.listFolderContents(kunde.id);
+                        // Merge folder contents into kunde object
+                        const enriched = {
+                            ...kunde,
+                            auftraggeber: kunde.name,
+                            adresse: '',
+                            folders: contents.folders,
+                            files: contents.files,
+                            dateien: contents.files.length + contents.folders.reduce((s, f) => s + f.files.length, 0),
+                            _driveFolderId: kunde.id, // Für Upload merken
+                        };
+                        setSelectedKunde(enriched);
+                    } catch (err) {
+                        console.error('Ordner laden:', err);
+                    }
+                    setLoading(false);
+                }
             };
 
             const handleLoadAkte = () => {
@@ -8828,7 +10440,7 @@
                 setTimeout(() => {
                     setLoading(false);
                     navigateTo('geladen');
-                }, 2500);
+                }, isDriveMode ? 500 : 2500);
             };
 
             const handleStartAufmass = () => {
@@ -8933,7 +10545,7 @@
                     case 'start':
                         return <Startseite onKundeClick={handleKundeClick} />;
                     case 'auswahl':
-                        return <Kundenauswahl onSelect={handleSelectKunde} loading={loading} />;
+                        return <Kundenauswahl onSelect={handleSelectKunde} loading={loading} kunden={isDriveMode ? driveKunden : null} />;
                     case 'akte':
                         return <KundenAkte
                             kunde={selectedKunde}
@@ -8981,6 +10593,7 @@
                                     onOpenRaumblatt={handleOpenRoomFromGesamtliste}
                                     onAufmassEndgueltig={() => setAufmassGespeichert(true)}
                                     aufmassGespeichert={aufmassGespeichert}
+                                    isDriveMode={isDriveMode}
                                 />
                             </div>
                         </div>
