@@ -23,7 +23,7 @@
     const GDRIVE_CONFIG = {
         CLIENT_ID: '76287040810-vsm8abbur2m4hjgm845mbdlps47b1qp4.apps.googleusercontent.com', // Thomas Willwacher OAuth Client-ID
         API_KEY: '',   // ← Optional: API Key für unauth. Requests
-        SCOPES: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
+        SCOPES: 'https://www.googleapis.com/auth/drive',
         ROOT_FOLDER_NAME: 'Baustellen neu',
         ROOT_FOLDER_ID: '14sYXItHIv09j3S9F8iPmhVS4qawbLqVe', // Direkte Ordner-ID als Fallback
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
@@ -10418,6 +10418,7 @@
                         setDriveStatus('online');
                     } catch (err) {
                         console.error('Drive Fehler:', err);
+                        alert('Google Drive Fehler:\n\n' + err.message + '\n\nPrüfe in der Google Cloud Console:\n1. "Datenzugriff" → Google Drive API Scope hinzufügen\n2. Deine E-Mail als Testnutzer eintragen\n3. Autorisierte JavaScript-Quellen korrekt');
                         setDriveStatus('online');
                         // Fallback auf Demo
                         setIsDriveMode(false);
