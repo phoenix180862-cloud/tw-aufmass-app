@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client"></script>
     <script>
@@ -23,7 +24,7 @@
     const GDRIVE_CONFIG = {
         CLIENT_ID: '76287040810-vsm8abbur2m4hjgm845mbdlps47b1qp4.apps.googleusercontent.com', // Thomas Willwacher OAuth Client-ID
         API_KEY: '',   // ← Optional: API Key für unauth. Requests
-        SCOPES: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
+        SCOPES: 'https://www.googleapis.com/auth/drive',
         ROOT_FOLDER_NAME: 'Baustellen neu',
         ROOT_FOLDER_ID: '14sYXItHIv09j3S9F8iPmhVS4qawbLqVe', // Direkte Ordner-ID als Fallback
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
@@ -287,6 +288,549 @@
             );
             return resp.blob();
         },
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // FILE PROCESSOR SERVICE – Daten-Import-Pipeline
+    // Hybrid: Regex (Offline) + KI (Online) für optimale Ergebnisse
+    // ═══════════════════════════════════════════════════════════════
+    window.FileProcessor = {
+        // ── Konnektivitätsprüfung ──
+        isOnline() {
+            return navigator.onLine;
+        },
+
+        // ── PDF Text-Extraktion (pdf.js) ──
+        async extractPdfText(blob) {
+            try {
+                if (typeof pdfjsLib === 'undefined') {
+                    console.warn('pdf.js nicht geladen – PDF-Extraktion nicht möglich');
+                    return '';
+                }
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                var arrayBuffer = await blob.arrayBuffer();
+                var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                var fullText = '';
+                for (var i = 1; i <= pdf.numPages; i++) {
+                    var page = await pdf.getPage(i);
+                    var content = await page.getTextContent();
+                    var pageText = content.items.map(function(item) { return item.str; }).join(' ');
+                    fullText += pageText + '\n--- SEITENUMBRUCH ---\n';
+                }
+                return fullText;
+            } catch (err) {
+                console.error('PDF Extraktion Fehler:', err);
+                return '';
+            }
+        },
+
+        // ── PDF als Base64 für KI-Analyse ──
+        async pdfToBase64(blob) {
+            return new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function() { resolve(reader.result.split(',')[1]); };
+                reader.onerror = function() { reject(new Error('PDF Base64 Fehler')); };
+                reader.readAsDataURL(blob);
+            });
+        },
+
+        // ══════════════════════════════════════════════
+        // REGEX LV-PARSER (Offline-fähig, läuft IMMER)
+        // ══════════════════════════════════════════════
+        parseLvRegex(text) {
+            if (!text || text.trim().length < 20) return [];
+            var positionen = [];
+            var lines = text.split('\n');
+
+            // ── Strategie 1: Zeile enthält Pos-Nr + Menge + Einheit + Beschreibung ──
+            // Typisches Format: "1.01  45,00  m²  Bodenfliesen 30×60 liefern u. verlegen"
+            // Oder: "01.01.001  45,000  m2  Bodenfliesen..."
+            var regexOneLine = /(\d{1,3}[\.\,]\d{1,3}(?:[\.\,]\d{1,4})?)\s+([\d\.,]+)\s+(m[²2]|m|lfm|Stk|Stück|Stck|psch|pauschal|kg|l|t|St)\s+(.{5,})/i;
+            
+            // ── Strategie 2: Pos-Nr am Zeilenanfang, Rest auf gleicher oder nächster Zeile ──
+            // "1.01  Bodenfliesen 30×60 liefern u. verlegen  45,00 m²"
+            var regexPosFirst = /^[\s]*(\d{1,3}[\.\,]\d{1,3}(?:[\.\,]\d{1,4})?)\s+(.{10,})/;
+            var regexMengeEnd = /([\d\.,]+)\s+(m[²2]|m|lfm|Stk|Stück|Stck|psch|pauschal|kg|l|t|St)\s*$/i;
+
+            // ── Strategie 3: GAEB / Strukturiertes Format mit "Pos." Prefix ──
+            var regexGAEB = /Pos\.?\s*(\d{1,3}[\.\,]\d{1,3}(?:[\.\,]\d{1,4})?)/i;
+
+            // Normalisierung: Punkte in Pos-Nummern, Kommas in Zahlen
+            var normalizePos = function(p) {
+                return p.replace(/,/g, '.').replace(/\.(\d{3,})/, function(m, d) { return '.' + d; });
+            };
+            var normalizeMenge = function(m) {
+                return parseFloat(m.replace(/\./g, '').replace(',', '.')) || 0;
+            };
+            var normalizeEinheit = function(e) {
+                var el = e.toLowerCase().trim();
+                if (el === 'm2' || el === 'm²') return 'm²';
+                if (el === 'stk' || el === 'stück' || el === 'stck' || el === 'st') return 'Stk';
+                if (el === 'psch' || el === 'pauschal') return 'psch';
+                if (el === 'lfm') return 'lfm';
+                return e.trim();
+            };
+
+            // Duplikat-Check
+            var seen = {};
+
+            // ── Durchlauf Strategie 1: Einzeiler ──
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (!line || line.length < 8) continue;
+
+                var m1 = line.match(regexOneLine);
+                if (m1) {
+                    var pos = normalizePos(m1[1]);
+                    if (!seen[pos]) {
+                        seen[pos] = true;
+                        positionen.push({
+                            pos: pos,
+                            menge: normalizeMenge(m1[2]),
+                            einheit: normalizeEinheit(m1[3]),
+                            bez: m1[4].trim().replace(/\s+/g, ' '),
+                            quelle: 'regex-einzeiler'
+                        });
+                    }
+                    continue;
+                }
+
+                // ── Strategie 2: Pos am Anfang, Menge irgendwo in der Zeile oder nächste Zeile ──
+                var m2 = line.match(regexPosFirst);
+                if (m2) {
+                    var pos2 = normalizePos(m2[1]);
+                    var rest = m2[2];
+
+                    // Menge am Ende der Zeile?
+                    var mEnd = rest.match(regexMengeEnd);
+                    if (mEnd) {
+                        var bez2 = rest.replace(regexMengeEnd, '').trim();
+                        if (bez2.length >= 5 && !seen[pos2]) {
+                            seen[pos2] = true;
+                            positionen.push({
+                                pos: pos2,
+                                menge: normalizeMenge(mEnd[1]),
+                                einheit: normalizeEinheit(mEnd[2]),
+                                bez: bez2.replace(/\s+/g, ' '),
+                                quelle: 'regex-pos-first'
+                            });
+                            continue;
+                        }
+                    }
+
+                    // Nächste Zeile(n) auf Menge prüfen (max 3 Zeilen voraus)
+                    var beschreibung = rest.trim();
+                    for (var j = 1; j <= 3 && (i + j) < lines.length; j++) {
+                        var nextLine = lines[i + j].trim();
+                        if (!nextLine) continue;
+                        var mNext = nextLine.match(/([\d\.,]+)\s+(m[²2]|m|lfm|Stk|Stück|Stck|psch|pauschal|kg|l|t|St)/i);
+                        if (mNext) {
+                            if (!seen[pos2]) {
+                                seen[pos2] = true;
+                                positionen.push({
+                                    pos: pos2,
+                                    menge: normalizeMenge(mNext[1]),
+                                    einheit: normalizeEinheit(mNext[2]),
+                                    bez: beschreibung.replace(/\s+/g, ' '),
+                                    quelle: 'regex-multiline'
+                                });
+                            }
+                            break;
+                        }
+                        // Beschreibung über mehrere Zeilen sammeln
+                        if (!nextLine.match(/^\d{1,3}[\.\,]\d/) && nextLine.length > 3) {
+                            beschreibung += ' ' + nextLine;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Fallback: Pos ohne Menge (Menge = 0, wird manuell ergänzt)
+                    if (!seen[pos2] && beschreibung.length >= 5) {
+                        seen[pos2] = true;
+                        positionen.push({
+                            pos: pos2,
+                            menge: 0,
+                            einheit: '?',
+                            bez: beschreibung.replace(/\s+/g, ' ').substring(0, 120),
+                            quelle: 'regex-ohne-menge'
+                        });
+                    }
+                }
+            }
+
+            // Sortieren nach Positionsnummer
+            positionen.sort(function(a, b) {
+                var pa = a.pos.split('.').map(Number);
+                var pb = b.pos.split('.').map(Number);
+                for (var k = 0; k < Math.max(pa.length, pb.length); k++) {
+                    var va = pa[k] || 0;
+                    var vb = pb[k] || 0;
+                    if (va !== vb) return va - vb;
+                }
+                return 0;
+            });
+
+            return positionen;
+        },
+
+        // ══════════════════════════════════════════════
+        // KI LV-PARSER (Online, Claude API)
+        // ══════════════════════════════════════════════
+        async parseLvAI(text, existingRegexResult) {
+            if (!this.isOnline()) return null;
+
+            try {
+                var truncated = text.substring(0, 15000); // Token-Limit beachten
+                var regexHint = '';
+                if (existingRegexResult && existingRegexResult.length > 0) {
+                    regexHint = '\n\nEin Regex-Parser hat bereits folgende Positionen gefunden (als Referenz, bitte korrigieren/ergänzen):\n' +
+                        existingRegexResult.slice(0, 20).map(function(p) {
+                            return 'Pos ' + p.pos + ': ' + p.bez + ' (' + p.menge + ' ' + p.einheit + ')';
+                        }).join('\n');
+                }
+
+                var response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 4000,
+                        messages: [{
+                            role: 'user',
+                            content: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere den folgenden Text aus einem LV-PDF und extrahiere ALLE Positionen.\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks), exakt in diesem Format:\n[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden"},{"pos":"1.02",...}]\n\nRegeln:\n- pos: Positionsnummer exakt wie im Dokument\n- bez: Volle Positionsbezeichnung\n- einheit: m², m, Stk, psch, lfm, kg, l, t\n- menge: Ausgeschriebene Menge als Zahl\n- bereich: Abschnitt/Bereich aus dem LV (z.B. EG, OG, Allgemein, Becken, etc.)\n- kategorie: Eine von: boden, wand, sockel, abdichtung, silikon, schiene, einbau, verfugung, vorbereitung, estrich, entkopplung, decke, fensterbank, rinne, schwelle, allgemein\n- tags: Array mit Suchbegriffen fuer die Position\n\nWenn Menge oder Einheit nicht erkennbar: menge=0, einheit="?"\nHalte die EXAKTE Reihenfolge aus dem Dokument ein!' + regexHint + '\n\nLV-TEXT:\n' + truncated
+                        }]
+                    })
+                });
+
+                var data = await response.json();
+                var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                var cleaned = textContent.replace(/```json|```/g, '').trim();
+                var parsed = JSON.parse(cleaned);
+
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed.map(function(p) {
+                        return {
+                            pos: String(p.pos || ''),
+                            bez: String(p.bez || ''),
+                            einheit: String(p.einheit || '?'),
+                            menge: Number(p.menge) || 0,
+                            bereich: String(p.bereich || 'Allgemein'),
+                            kategorie: String(p.kategorie || 'allgemein'),
+                            tags: Array.isArray(p.tags) ? p.tags : [],
+                            quelle: 'ki'
+                        };
+                    });
+                }
+                return null;
+            } catch (err) {
+                console.error('KI LV-Parser Fehler:', err);
+                return null;
+            }
+        },
+
+        // ── KI-Analyse direkt vom PDF (base64) – höchste Genauigkeit ──
+        async parseLvAIFromPdf(blob, existingRegexResult) {
+            if (!this.isOnline()) return null;
+
+            try {
+                var base64 = await this.pdfToBase64(blob);
+                var regexHint = '';
+                if (existingRegexResult && existingRegexResult.length > 0) {
+                    regexHint = '\n\nEin Regex-Parser hat bereits ' + existingRegexResult.length + ' Positionen gefunden. Bitte validiere und korrigiere.';
+                }
+
+                var response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 4000,
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'document',
+                                    source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+                                },
+                                {
+                                    type: 'text',
+                                    text: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere dieses LV-PDF und extrahiere ALLE Positionen.\n\nExtrahiere ausserdem die Kundenstammdaten, falls vorhanden (Auftraggeber, Baustellenadresse, Baumassnahme, Bauleitung, Architekt/Planer und deren Kontaktdaten).\n\nAntworte NUR mit einem JSON-Objekt (kein Markdown, keine Backticks):\n{"positionen":[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"Name","adresse":"Strasse, PLZ Ort","baumassnahme":"Beschreibung","bauleitung":"Name","bl_telefon":"","bl_email":"","architekt":"Name","arch_telefon":"","arch_email":""},"raeume":["Bad EG","Kueche EG","Flur OG"]}\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument\n- bez: Volle Leistungsbeschreibung\n- einheit: m², m, Stk, psch, lfm\n- menge: Ausgeschriebene Menge (0 wenn nicht erkennbar)\n- bereich: Abschnitt aus dem LV\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe\n- raeume: Erkannte Raumbezeichnungen aus dem LV\n- EXAKTE Reihenfolge beibehalten!' + regexHint
+                                }
+                            ]
+                        }]
+                    })
+                });
+
+                var data = await response.json();
+                var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                var cleaned = textContent.replace(/```json|```/g, '').trim();
+                var parsed = JSON.parse(cleaned);
+                return parsed; // {positionen: [...], kundendaten: {...}, raeume: [...]}
+            } catch (err) {
+                console.error('KI PDF-Parser Fehler:', err);
+                return null;
+            }
+        },
+
+        // ══════════════════════════════════════════════
+        // EXCEL PARSER (Kundenstammdaten, SheetJS)
+        // ══════════════════════════════════════════════
+        parseExcelKundendaten(blob) {
+            return new Promise(function(resolve) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        var data = new Uint8Array(e.target.result);
+                        var workbook = XLSX.read(data, { type: 'array' });
+                        var result = {};
+
+                        // Alle Sheets durchsuchen
+                        workbook.SheetNames.forEach(function(name) {
+                            var sheet = workbook.Sheets[name];
+                            var json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+                            // Schlüssel-Wert-Paare suchen
+                            json.forEach(function(row) {
+                                if (!row || row.length < 2) return;
+                                var key = String(row[0] || '').toLowerCase().trim();
+                                var val = String(row[1] || '').trim();
+                                if (!val) return;
+
+                                if (key.match(/auftraggeber|bauherr|ag /)) result.auftraggeber = val;
+                                if (key.match(/baustelle|bauvorhaben|objekt|baumaßnahme|baumassnahme/)) {
+                                    result.adresse = result.adresse ? result.adresse + ', ' + val : val;
+                                }
+                                if (key.match(/baumass|baumaß/)) result.baumassnahme = val;
+                                if (key.match(/bauleitung|bauleiter/)) result.bauleitung = val;
+                                if (key.match(/architekt|planer|planungsbüro/)) result.architekt = val;
+                                if (key.match(/strasse|straße|adresse|anschrift/) && !result.adresse) result.adresse = val;
+                                if (key.match(/plz|ort|stadt/)) {
+                                    result.adresse = (result.adresse || '') + (result.adresse ? ', ' : '') + val;
+                                }
+                                if (key.match(/telefon|tel\.?|fon/) && key.match(/bau/)) result.bl_telefon = val;
+                                if (key.match(/email|e-mail|mail/) && key.match(/bau/)) result.bl_email = val;
+                                if (key.match(/telefon|tel\.?|fon/) && key.match(/arch|plan/)) result.arch_telefon = val;
+                                if (key.match(/email|e-mail|mail/) && key.match(/arch|plan/)) result.arch_email = val;
+                            });
+                        });
+                        resolve(result);
+                    } catch (err) {
+                        console.error('Excel Parse Fehler:', err);
+                        resolve({});
+                    }
+                };
+                reader.onerror = function() { resolve({}); };
+                reader.readAsArrayBuffer(blob);
+            });
+        },
+
+        // ══════════════════════════════════════════════
+        // HYBRID LV-PARSER: Regex → KI-Verfeinerung
+        // ══════════════════════════════════════════════
+        async parseLV(pdfBlob, onProgress) {
+            var result = {
+                positionen: [],
+                kundendaten: {},
+                raeume: [],
+                quelle: 'none',
+                aiVerfuegbar: false
+            };
+
+            // ── SCHRITT 1: PDF Text extrahieren ──
+            if (onProgress) onProgress('PDF wird gelesen...');
+            var text = await this.extractPdfText(pdfBlob);
+
+            // ── SCHRITT 2: Regex-Parser (IMMER, sofort) ──
+            if (onProgress) onProgress('Positionen werden erkannt (Offline)...');
+            var regexResult = this.parseLvRegex(text);
+            result.positionen = regexResult;
+            result.quelle = 'regex';
+
+            // Bereiche als potenzielle Räume
+            var bereiche = {};
+            regexResult.forEach(function(p) {
+                if (p.bereich && p.bereich !== 'Allgemein') bereiche[p.bereich] = true;
+            });
+            result.raeume = Object.keys(bereiche);
+
+            // ── SCHRITT 3: KI-Verfeinerung (nur wenn online) ──
+            if (this.isOnline()) {
+                result.aiVerfuegbar = true;
+                if (onProgress) onProgress('KI-Analyse läuft (bessere Erkennung)...');
+
+                try {
+                    // Versuch 1: Direkte PDF-Analyse (beste Qualität)
+                    var aiResult = await this.parseLvAIFromPdf(pdfBlob, regexResult);
+
+                    if (aiResult && aiResult.positionen && aiResult.positionen.length > 0) {
+                        // KI-Ergebnis übernehmen (höhere Qualität)
+                        result.positionen = aiResult.positionen.map(function(p) {
+                            return {
+                                pos: String(p.pos || ''),
+                                bez: String(p.bez || ''),
+                                einheit: String(p.einheit || '?'),
+                                menge: Number(p.menge) || 0,
+                                bereich: String(p.bereich || 'Allgemein'),
+                                kategorie: String(p.kategorie || 'allgemein'),
+                                tags: Array.isArray(p.tags) ? p.tags : [],
+                                quelle: 'ki'
+                            };
+                        });
+                        result.quelle = 'ki';
+
+                        // Kundendaten von KI übernehmen
+                        if (aiResult.kundendaten) result.kundendaten = aiResult.kundendaten;
+                        if (aiResult.raeume && aiResult.raeume.length > 0) result.raeume = aiResult.raeume;
+                    } else if (regexResult.length > 0) {
+                        // Fallback: Text-basierte KI-Analyse
+                        var aiTextResult = await this.parseLvAI(text, regexResult);
+                        if (aiTextResult && aiTextResult.length > 0) {
+                            result.positionen = aiTextResult;
+                            result.quelle = 'ki-text';
+                        }
+                    }
+                } catch (err) {
+                    console.warn('KI-Analyse fehlgeschlagen, Regex-Ergebnis wird verwendet:', err.message);
+                    // Regex-Ergebnis bleibt bestehen → App funktioniert trotzdem!
+                }
+            } else {
+                if (onProgress) onProgress('Offline-Modus: Regex-Erkennung aktiv');
+            }
+
+            return result;
+        },
+
+        // ══════════════════════════════════════════════
+        // MASTER: Komplette Kundenakte verarbeiten
+        // ══════════════════════════════════════════════
+        async processKundenAkte(kunde, onProgress) {
+            var processResult = {
+                positionen: [],
+                kundendaten: {},
+                raeume: [],
+                zeichnungen: [],
+                quellenInfo: [],
+                fehler: []
+            };
+
+            // Alle Dateien sammeln (Ordner + Root-Files)
+            var allFiles = [];
+            if (kunde.files) {
+                kunde.files.forEach(function(f) { allFiles.push(f); });
+            }
+            if (kunde.folders) {
+                kunde.folders.forEach(function(folder) {
+                    if (folder.files) {
+                        folder.files.forEach(function(f) {
+                            allFiles.push(Object.assign({}, f, { folderName: folder.name }));
+                        });
+                    }
+                });
+            }
+
+            if (onProgress) onProgress('Dateien werden verarbeitet: 0/' + allFiles.length);
+
+            var pdfCount = 0;
+            var xlsxCount = 0;
+            var imgCount = 0;
+
+            for (var i = 0; i < allFiles.length; i++) {
+                var file = allFiles[i];
+                if (onProgress) onProgress('Verarbeite ' + (i + 1) + '/' + allFiles.length + ': ' + file.name);
+
+                try {
+                    // ── PDF-Dateien: LV-Positionen extrahieren ──
+                    if (file.type === 'pdf' && file.id) {
+                        var pdfBlob = await window.GoogleDriveService.downloadFile(file.id);
+                        var lvResult = await this.parseLV(pdfBlob, function(msg) {
+                            if (onProgress) onProgress(file.name + ': ' + msg);
+                        });
+
+                        if (lvResult.positionen.length > 0) {
+                            // Positionen mergen (nicht überschreiben)
+                            if (processResult.positionen.length === 0) {
+                                processResult.positionen = lvResult.positionen;
+                            } else {
+                                // Zusätzliche Positionen aus weiteren PDFs anhängen
+                                var existingPos = {};
+                                processResult.positionen.forEach(function(p) { existingPos[p.pos] = true; });
+                                lvResult.positionen.forEach(function(p) {
+                                    if (!existingPos[p.pos]) {
+                                        processResult.positionen.push(p);
+                                    }
+                                });
+                            }
+                            processResult.quellenInfo.push({
+                                datei: file.name,
+                                typ: 'lv',
+                                positionen: lvResult.positionen.length,
+                                quelle: lvResult.quelle
+                            });
+                        }
+
+                        // Kundendaten von KI übernehmen
+                        if (lvResult.kundendaten) {
+                            Object.keys(lvResult.kundendaten).forEach(function(key) {
+                                if (lvResult.kundendaten[key] && !processResult.kundendaten[key]) {
+                                    processResult.kundendaten[key] = lvResult.kundendaten[key];
+                                }
+                            });
+                        }
+
+                        // Räume mergen
+                        if (lvResult.raeume && lvResult.raeume.length > 0) {
+                            lvResult.raeume.forEach(function(r) {
+                                if (processResult.raeume.indexOf(r) === -1) processResult.raeume.push(r);
+                            });
+                        }
+
+                        pdfCount++;
+                    }
+
+                    // ── Excel-Dateien: Kundenstammdaten ──
+                    if (file.type === 'xlsx' && file.id) {
+                        var xlBlob = await window.GoogleDriveService.downloadFile(file.id);
+                        var xlData = await this.parseExcelKundendaten(xlBlob);
+                        Object.keys(xlData).forEach(function(key) {
+                            if (xlData[key] && !processResult.kundendaten[key]) {
+                                processResult.kundendaten[key] = xlData[key];
+                            }
+                        });
+                        processResult.quellenInfo.push({ datei: file.name, typ: 'excel' });
+                        xlsxCount++;
+                    }
+
+                    // ── Bilddateien: Zeichnungen/Grundrisse speichern ──
+                    if (file.type === 'img' && file.id) {
+                        var imgBlob = await window.GoogleDriveService.downloadFile(file.id);
+                        var imgUrl = URL.createObjectURL(imgBlob);
+                        processResult.zeichnungen.push({
+                            name: file.name,
+                            url: imgUrl,
+                            blob: imgBlob,
+                            folderName: file.folderName || ''
+                        });
+                        processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung' });
+                        imgCount++;
+                    }
+
+                } catch (err) {
+                    console.error('Fehler bei Datei ' + file.name + ':', err);
+                    processResult.fehler.push({ datei: file.name, fehler: err.message });
+                }
+            }
+
+            if (onProgress) {
+                var summary = 'Fertig! ' + pdfCount + ' PDFs, ' + xlsxCount + ' Excel, ' + imgCount + ' Bilder verarbeitet';
+                if (processResult.positionen.length > 0) {
+                    summary += ' → ' + processResult.positionen.length + ' LV-Positionen erkannt';
+                }
+                onProgress(summary);
+            }
+
+            return processResult;
+        }
     };
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
@@ -4606,7 +5150,7 @@
         /* ═══════════════════════════════════════════
            KUNDEN-AKTE PAGE (Preview before loading)
            ═══════════════════════════════════════════ */
-        function KundenAkte({ kunde, onLoad, onBack, loading }) {
+        function KundenAkte({ kunde, onLoad, onBack, loading, loadProgress }) {
             const [edits, setEdits] = useState({});
             const [extraNotes, setExtraNotes] = useState({ ag: [], bl: [], arch: [] });
             const [selectedFolders, setSelectedFolders] = useState(() => {
@@ -4719,11 +5263,21 @@
                         <div className="loading-container">
                             <div className="spinner"></div>
                             <div className="loading-text">
-                                {selectedCount} von {totalFolders} Ordner werden geladen...
+                                {loadProgress || (selectedCount + ' von ' + totalFolders + ' Ordner werden geladen...')}
                             </div>
                             <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'8px'}}>
                                 ca. {calcSize()} MB Datenübertragung
                             </div>
+                            {loadProgress && loadProgress.includes('KI') && (
+                                <div style={{fontSize:'11px', color:'var(--accent-orange)', marginTop:'6px'}}>
+                                    🤖 KI-Analyse aktiv – optimale Erkennung
+                                </div>
+                            )}
+                            {loadProgress && loadProgress.includes('Offline') && (
+                                <div style={{fontSize:'11px', color:'var(--accent-red)', marginTop:'6px'}}>
+                                    📡 Offline-Modus – Regex-Erkennung wird verwendet
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -4917,7 +5471,20 @@
         /* ═══════════════════════════════════════════
            AKTE GELADEN – SUCCESS PAGE
            ═══════════════════════════════════════════ */
-        function AkteGeladen({ kunde, onStartAufmass }) {
+        function AkteGeladen({ kunde, onStartAufmass, importResult }) {
+            var ir = importResult || {};
+            var posCount = (ir.positionen || []).length;
+            var zeichnCount = (ir.zeichnungen || []).length;
+            var quellenInfo = ir.quellenInfo || [];
+            var fehler = ir.fehler || [];
+            var hasImport = !!importResult;
+            var quelle = '';
+            quellenInfo.forEach(function(q) {
+                if (q.typ === 'lv' && q.quelle) {
+                    quelle = q.quelle;
+                }
+            });
+
             return (
                 <div className="page-container">
                     <div className="breadcrumb">
@@ -4933,33 +5500,121 @@
                         padding:'40px 20px',
                         animation:'fadeInUp 0.5s ease-out'
                     }}>
-                        <div style={{fontSize:'48px', marginBottom:'16px'}}>✅</div>
+                        <div style={{fontSize:'48px', marginBottom:'16px'}}>
+                            {fehler.length > 0 && posCount === 0 ? '⚠️' : '✅'}
+                        </div>
                         <div className="page-title" style={{textAlign:'center', marginBottom:'8px'}}>
-                            Kundenakte geladen!
+                            {hasImport ? 'Kundenakte importiert!' : 'Kundenakte geladen!'}
                         </div>
                         <div style={{fontSize:'14px', color:'var(--text-light)', marginBottom:'32px', lineHeight:'1.6'}}>
-                            Alle Dokumente wurden erfolgreich importiert.<br/>
-                            Das Aufmaß kann beginnen.
+                            {hasImport ? (
+                                posCount > 0
+                                    ? 'Daten erfolgreich aus Google Drive importiert.'
+                                    : 'Import abgeschlossen, aber keine LV-Positionen erkannt.'
+                            ) : (
+                                'Alle Dokumente wurden erfolgreich importiert.'
+                            )}
+                            <br/>Das Aufmaß kann beginnen.
                         </div>
 
                         <div className="kunde-preview">
-                            <div className="kunde-preview-header">✅ Import-Zusammenfassung</div>
-                            <div className="kunde-detail">
-                                <span className="kunde-detail-label">Leistungsverzeichnis</span>
-                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>✓ Eingelesen</span>
+                            <div className="kunde-preview-header">
+                                {hasImport ? '📊 Import-Ergebnis' : '✅ Import-Zusammenfassung'}
                             </div>
+
+                            {/* LV Positionen */}
+                            <div className="kunde-detail">
+                                <span className="kunde-detail-label">LV-Positionen</span>
+                                <span className="kunde-detail-value" style={{color: posCount > 0 ? 'var(--success)' : 'var(--accent-orange)'}}>
+                                    {posCount > 0 ? ('✓ ' + posCount + ' erkannt') : (hasImport ? '⚠ Keine erkannt' : '✓ Eingelesen')}
+                                </span>
+                            </div>
+
+                            {/* Erkennungs-Quelle */}
+                            {quelle && (
+                                <div className="kunde-detail">
+                                    <span className="kunde-detail-label">Erkennungs-Methode</span>
+                                    <span className="kunde-detail-value" style={{fontSize:'12px'}}>
+                                        {quelle === 'ki' ? '🤖 KI-Analyse (optimal)' :
+                                         quelle === 'ki-text' ? '🤖 KI Text-Analyse' :
+                                         quelle === 'regex' ? '📡 Regex (Offline)' :
+                                         quelle}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Kundenstammdaten */}
                             <div className="kunde-detail">
                                 <span className="kunde-detail-label">Kundenstammdaten</span>
-                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>✓ Übernommen</span>
+                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>
+                                    {kunde.auftraggeber ? '✓ ' + kunde.auftraggeber : '✓ Übernommen'}
+                                </span>
                             </div>
+
+                            {/* Zeichnungen */}
                             <div className="kunde-detail">
-                                <span className="kunde-detail-label">Grundrisse/Zeichnungen</span>
-                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>✓ Importiert</span>
+                                <span className="kunde-detail-label">Zeichnungen/Grundrisse</span>
+                                <span className="kunde-detail-value" style={{color: zeichnCount > 0 ? 'var(--success)' : 'var(--text-muted)'}}>
+                                    {zeichnCount > 0 ? ('✓ ' + zeichnCount + ' importiert') : (hasImport ? '– Keine gefunden' : '✓ Importiert')}
+                                </span>
                             </div>
-                            <div className="kunde-detail">
+
+                            {/* Erkannte Räume */}
+                            {kunde.raeume && kunde.raeume.length > 0 && (
+                                <div className="kunde-detail">
+                                    <span className="kunde-detail-label">Erkannte Räume</span>
+                                    <span className="kunde-detail-value" style={{color:'var(--success)'}}>
+                                        ✓ {kunde.raeume.length} Räume
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Verarbeitete Dateien */}
+                            {quellenInfo.length > 0 && (
+                                <div style={{marginTop:'12px', padding:'10px 14px', background:'var(--bg-hover)', borderRadius:'8px'}}>
+                                    <div style={{fontSize:'11px', fontWeight:600, marginBottom:'6px', color:'var(--text-muted)'}}>
+                                        Verarbeitete Dateien:
+                                    </div>
+                                    {quellenInfo.map(function(q, qi) {
+                                        return (
+                                            <div key={qi} style={{fontSize:'11px', color:'var(--text-light)', padding:'2px 0'}}>
+                                                {q.typ === 'lv' ? '📄' : q.typ === 'excel' ? '📊' : '🖼️'}
+                                                {' '}{q.datei}
+                                                {q.positionen ? (' → ' + q.positionen + ' Pos.') : ''}
+                                                {q.quelle ? (' [' + q.quelle + ']') : ''}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Fehler */}
+                            {fehler.length > 0 && (
+                                <div style={{marginTop:'12px', padding:'10px 14px', background:'rgba(255,59,48,0.1)', borderRadius:'8px'}}>
+                                    <div style={{fontSize:'11px', fontWeight:600, marginBottom:'4px', color:'var(--accent-red)'}}>
+                                        ⚠ Fehler bei {fehler.length} Datei(en):
+                                    </div>
+                                    {fehler.map(function(f, fi) {
+                                        return (
+                                            <div key={fi} style={{fontSize:'10px', color:'var(--accent-red)', padding:'2px 0'}}>
+                                                {f.datei}: {f.fehler}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Projekt-Info */}
+                            <div className="kunde-detail" style={{marginTop:'8px'}}>
                                 <span className="kunde-detail-label">Projekt</span>
                                 <span className="kunde-detail-value">{kunde.name}</span>
                             </div>
+                            {kunde.adresse && (
+                                <div className="kunde-detail">
+                                    <span className="kunde-detail-label">Baumaßnahme</span>
+                                    <span className="kunde-detail-value">{kunde.adresse}</span>
+                                </div>
+                            )}
                         </div>
 
                         <button className="action-btn-full" style={{marginTop:'24px'}} onClick={onStartAufmass}>
@@ -5095,7 +5750,7 @@
             };
 
             const erkannteRaeume = kunde.raeume || [];
-            const lvPositionen = LV_POSITIONEN[kunde.id] || [];
+            const lvPositionen = LV_POSITIONEN[kunde._lvPositionenKey] || LV_POSITIONEN[kunde._driveFolderId] || LV_POSITIONEN[kunde.id] || [];
             const duplicates = findDuplicatePositions(lvPositionen);
 
             // ═══ Auto-Fill: Wenn Vorraum-Daten existieren, Höhen-Felder automatisch vorausfüllen ═══
@@ -10328,6 +10983,8 @@
             // ── Google Drive State ──
             const [driveKunden, setDriveKunden] = useState([]);
             const [isDriveMode, setIsDriveMode] = useState(false);
+            const [loadProgress, setLoadProgress] = useState('');
+            const [importResult, setImportResult] = useState(null);
 
             /* ── Global Enter-Key Handler ── */
             useEffect(() => {
@@ -10418,6 +11075,7 @@
                         setDriveStatus('online');
                     } catch (err) {
                         console.error('Drive Fehler:', err);
+                        alert('Google Drive Fehler:\n\n' + err.message + '\n\nPrüfe in der Google Cloud Console:\n1. "Datenzugriff" → Google Drive API Scope hinzufügen\n2. Deine E-Mail als Testnutzer eintragen\n3. Autorisierte JavaScript-Quellen korrekt');
                         setDriveStatus('online');
                         // Fallback auf Demo
                         setIsDriveMode(false);
@@ -10457,12 +11115,76 @@
                 }
             };
 
-            const handleLoadAkte = () => {
+            const handleLoadAkte = async () => {
                 setLoading(true);
-                setTimeout(() => {
-                    setLoading(false);
-                    navigateTo('geladen');
-                }, isDriveMode ? 500 : 2500);
+                setLoadProgress('Starte Datenimport...');
+
+                if (isDriveMode && selectedKunde && selectedKunde._driveFolderId) {
+                    // ═══ ECHTE GOOGLE DRIVE VERARBEITUNG ═══
+                    try {
+                        var result = await window.FileProcessor.processKundenAkte(
+                            selectedKunde,
+                            function(msg) { setLoadProgress(msg); }
+                        );
+
+                        // Positionen in LV_POSITIONEN injizieren
+                        if (result.positionen && result.positionen.length > 0) {
+                            var kundeKey = selectedKunde._driveFolderId || selectedKunde.id || 'drive_import';
+                            LV_POSITIONEN[kundeKey] = result.positionen;
+                            // Auch unter der kunde.id verfügbar machen
+                            if (selectedKunde.id && selectedKunde.id !== kundeKey) {
+                                LV_POSITIONEN[selectedKunde.id] = result.positionen;
+                            }
+                        }
+
+                        // Kundendaten in selectedKunde mergen
+                        var kd = result.kundendaten || {};
+                        var updatedKunde = Object.assign({}, selectedKunde, {
+                            auftraggeber: kd.auftraggeber || selectedKunde.auftraggeber || selectedKunde.name,
+                            adresse: kd.adresse || kd.baumassnahme || selectedKunde.adresse || '',
+                            baumassnahme: kd.baumassnahme || selectedKunde.baumassnahme || '',
+                            bauleitung: kd.bauleitung || selectedKunde.bauleitung || '',
+                            bl_telefon: kd.bl_telefon || selectedKunde.bl_telefon || '',
+                            bl_email: kd.bl_email || selectedKunde.bl_email || '',
+                            architekt: kd.architekt || selectedKunde.architekt || '',
+                            arch_telefon: kd.arch_telefon || selectedKunde.arch_telefon || '',
+                            arch_email: kd.arch_email || selectedKunde.arch_email || '',
+                            // Räume aus dem Import
+                            raeume: (result.raeume || []).map(function(r, idx) {
+                                return {
+                                    id: 'import_' + idx,
+                                    nr: String(idx + 1),
+                                    bez: r,
+                                    geschoss: r.match(/EG|OG|KG|DG|UG/i) ? r.match(/EG|OG|KG|DG|UG/i)[0].toUpperCase() : '',
+                                    fliesenhoehe: 0,
+                                    raumhoehe: 0,
+                                    waende: [{ id: 'A', l: '' }, { id: 'B', l: '' }, { id: 'C', l: '' }, { id: 'D', l: '' }]
+                                };
+                            }),
+                            // Zeichnungen verfügbar machen
+                            zeichnungen: result.zeichnungen || [],
+                            // Import-Metadaten
+                            _importResult: result,
+                            _lvPositionenKey: selectedKunde._driveFolderId || selectedKunde.id,
+                        });
+                        setSelectedKunde(updatedKunde);
+                        setImportResult(result);
+
+                        setLoadProgress('Import abgeschlossen! ' + (result.positionen || []).length + ' Positionen erkannt');
+                    } catch (err) {
+                        console.error('Import-Fehler:', err);
+                        setLoadProgress('Fehler beim Import: ' + err.message);
+                        setImportResult({ fehler: [{ datei: 'Import', fehler: err.message }], positionen: [], quellenInfo: [] });
+                    }
+                } else {
+                    // ═══ DEMO-MODUS ═══
+                    setLoadProgress('Demo-Daten werden geladen...');
+                    await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+                    setImportResult(null);
+                }
+
+                setLoading(false);
+                navigateTo('geladen');
             };
 
             const handleStartAufmass = () => {
@@ -10573,9 +11295,10 @@
                             kunde={selectedKunde}
                             onLoad={handleLoadAkte}
                             loading={loading}
+                            loadProgress={loadProgress}
                         />;
                     case 'geladen':
-                        return <AkteGeladen kunde={selectedKunde} onStartAufmass={handleStartAufmass} />;
+                        return <AkteGeladen kunde={selectedKunde} onStartAufmass={handleStartAufmass} importResult={importResult} />;
                     case 'raumerkennung':
                         return <Raumerkennung kunde={selectedKunde} onSelectRaum={handleSelectRaum} fertigeRaeume={fertigeRaeume} lastRaumData={lastRaumData} gesamtliste={gesamtliste} onShowGesamtliste={() => setShowGesamtliste(true)} />;
                     case 'raumblatt':
