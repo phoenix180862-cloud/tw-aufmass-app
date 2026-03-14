@@ -3,6 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <script>
+    // Global Error Handler - zeigt Fehler statt schwarzem Bildschirm
+    window.onerror = function(msg, url, line, col, error) {
+        console.error('App Fehler:', msg, 'at', url, line, col);
+        var d = document.getElementById('crash-info');
+        if (!d) {
+            d = document.createElement('div');
+            d.id = 'crash-info';
+            d.style.cssText = 'position:fixed;top:20px;left:20px;right:20px;padding:20px;background:#1a2332;color:#ff6b6b;border:2px solid #ff6b6b;border-radius:12px;z-index:99999;font-family:monospace;font-size:13px;white-space:pre-wrap;max-height:80vh;overflow:auto;';
+            document.body.appendChild(d);
+        }
+        d.innerHTML = '<h3 style="color:#ff6b6b;margin:0 0 10px">⚠️ App-Fehler</h3>' + 
+            '<b>Fehler:</b> ' + msg + '\n' +
+            '<b>Zeile:</b> ' + line + '\n' +
+            '<b>Datei:</b> ' + (url || 'inline') + '\n\n' +
+            '<span style="color:#7a8a9e">Bitte Screenshot an den Entwickler schicken.</span>\n' +
+            '<button onclick="this.parentNode.remove()" style="margin-top:10px;padding:8px 16px;background:#c41e1e;color:white;border:none;border-radius:6px;cursor:pointer">Schließen</button>';
+        return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+        console.error('Unhandled Promise:', e.reason);
+    });
+    </script>
+
     <title>Aufmaß-App – Thomas Willwacher Fliesenlegermeister e.K.</title>
 
     <!-- ═══ PWA & ICON SETUP ═══ -->
@@ -70,7 +95,7 @@
     };
 
     // ── KI-API Hilfsfunktion (mit API-Key) ──
-    window.callAnthropicAPI = async function(messages, maxTokens) {
+    try { window.callAnthropicAPI = async function(messages, maxTokens) {
         // API-Key aus Config oder localStorage
         var apiKey = ANTHROPIC_CONFIG.API_KEY || localStorage.getItem('anthropic_api_key') || '';
         if (!apiKey) {
@@ -123,6 +148,7 @@
         var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
         return textContent;
     };
+    } catch(apiSetupErr) { console.warn('API setup:', apiSetupErr); window.callAnthropicAPI = async function() { return null; }; }
 
     window.GoogleDriveService = {
         tokenClient: null,
@@ -187,7 +213,7 @@
                 ...options,
                 headers: {
                     'Authorization': 'Bearer ' + this.accessToken,
-                    ...(options?.headers || {}),
+                    ...((options && options.headers) || {}),
                 },
             });
             if (!resp.ok) {
@@ -746,9 +772,7 @@
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
                             content: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere den folgenden Text und extrahiere ALLE Positionen. Es ist KRITISCH, dass du JEDE EINZELNE Position findest - ueberspringe KEINE!\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument\n- bez: VOLLSTAENDIGE Positionsbezeichnung\n- einheit: m², m, Stk, psch, lfm, kg, l, t\n- menge: Ausgeschriebene Menge als Zahl (0 wenn unklar)\n- bereich: Abschnitt/Bereich (EG, OG, Allgemein, etc.)\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe als Array\n- EXAKTE Reihenfolge beibehalten!\n- KEINE Position auslassen!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
-                        }]
-                    })
-                ], 8000);
+                        }], 8000);
                 if (!apiText) return null;
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
                 var parsed = JSON.parse(cleaned);
@@ -785,9 +809,7 @@
                                     text: 'WICHTIG: Analysiere dieses Dokument VOLLSTAENDIG und gruendlich. Es handelt sich um ein Dokument aus dem Bereich Fliesenarbeiten/Bauwesen.\n\nExtrahiere ALLES was du finden kannst:\n\n1. ALLE LV-Positionen (Leistungsverzeichnis) - ueberspringe KEINE EINZIGE Position! Jede Zeile mit einer Positionsnummer MUSS erfasst werden.\n2. ALLE Kundenstammdaten - Auftraggeber, Bauherr, Baustellenadresse, Baumassnahme, Bauleitung, Architekt/Planer mit ALLEN Kontaktdaten (Name, Firma, Adresse, Telefon, Fax, E-Mail, Mobilnummer)\n3. ALLE erkennbaren Raeume mit Bezeichnung und Geschoss\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks, KEIN erklaerrender Text):\n{"positionen":[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"Firmenname oder Person","ag_adresse":"Strasse Nr, PLZ Ort","ag_telefon":"Nummer","ag_email":"email@domain","adresse":"Baustellenadresse","baumassnahme":"Bezeichnung der Baumassnahme","bauleitung":"Name/Firma","bl_adresse":"Adresse","bl_telefon":"Nummer","bl_email":"email","architekt":"Name/Firma","arch_adresse":"Adresse","arch_telefon":"Nummer","arch_email":"email"},"raeume":["Bad EG","Kueche EG","Flur OG"]}\n\nKRITISCHE Regeln:\n- JEDE Position mit Positionsnummer MUSS in die Liste!\n- Positionsnummern EXAKT wie im Dokument (z.B. 01.001 oder 1.01 oder 1.1)\n- Vollstaendige Leistungsbeschreibung, nicht abkuerzen!\n- einheit: m², m, Stk, psch, lfm, kg, l, t (EXAKT wie im Dokument)\n- menge: Ausgeschriebene Menge als Zahl (0 wenn nicht erkennbar)\n- bereich: EG, OG, KG, DG, Allgemein, oder Abschnittsname aus dem LV\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- Kundendaten: ALLE Felder die du findest, auch aus Briefkoepfen, Fussnoten, Stempeln\n- EXAKTE Reihenfolge der Positionen beibehalten!'
                                 }
                             ]
-                        }]
-                    })
-                ], 8000);
+                        }], 8000);
                 if (!apiText) {
                     console.error('KI: Keine Antwort erhalten');
                     return null;
@@ -1134,12 +1156,9 @@
                                 { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
                                 { type: 'text', text: 'Du bist ein Bau-Experte. Analysiere diese Zeichnung/Grundriss/Wandansicht.\n\nExtrahiere ALLE erkennbaren Raeume mit deren Informationen.\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"bez":"Bad EG","nr":"0.01","geschoss":"EG","waende":[{"id":"A","l":"3.45"},{"id":"B","l":"2.10"},{"id":"C","l":"3.45"},{"id":"D","l":"2.10"}],"hoehe":0,"flaeche":7.2,"abzuege":[{"typ":"tuer","bez":"Tuer","b":0.885,"h":2.10},{"typ":"fenster","bez":"Fenster","b":1.20,"h":0.60,"tiefe":0.18}],"material":""}]\n\nRegeln:\n- bez: Raumbezeichnung wie auf der Zeichnung\n- nr: Raumnummer falls vorhanden (sonst leer)\n- geschoss: EG, OG, KG, DG etc.\n- waende: Alle Wandabschnitte mit ID (A,B,C,...) und Laenge in Metern\n- hoehe: Raumhoehe oder Fliesenhoehe falls angegeben (sonst 0)\n- flaeche: Grundflaeche in m² falls angegeben (sonst 0)\n- abzuege: Erkannte Tueren und Fenster mit Massen\n- material: Erkannte Materialangaben\n\nWenn keine Raeume erkennbar: leeres Array []\nLies ALLE Masse direkt von der Zeichnung ab!' }
                             ]
-                        }]
-                    })
-                });
-                var data = await response.json();
-                var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
-                var cleaned = textContent.replace(/```json|```/g, '').trim();
+                        }], 4000);
+                if (!apiText) return [];
+                var cleaned = apiText.replace(/```json|```/g, '').trim();
                 var parsed = JSON.parse(cleaned);
                 if (Array.isArray(parsed)) {
                     return parsed.map(function(r) {
@@ -11710,6 +11729,42 @@
             );
         }
 
+        // ═══ ERROR BOUNDARY – Zeigt Fehler statt schwarzem Bildschirm ═══
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null, errorInfo: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error: error };
+            }
+            componentDidCatch(error, errorInfo) {
+                this.setState({ errorInfo: errorInfo });
+                console.error('React Error Boundary:', error, errorInfo);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return React.createElement('div', {
+                        style: { padding: '30px', background: '#1a2332', color: '#ff6b6b', minHeight: '100vh', fontFamily: 'monospace', fontSize: '14px' }
+                    },
+                        React.createElement('h2', { style: { color: '#ff6b6b', marginBottom: '16px' } }, '⚠️ App-Fehler aufgetreten'),
+                        React.createElement('p', { style: { color: '#f0f2f5', marginBottom: '12px' } }, 'Die App ist abgestürzt. Bitte Screenshot an den Entwickler senden:'),
+                        React.createElement('pre', {
+                            style: { background: '#243044', padding: '16px', borderRadius: '8px', overflow: 'auto', maxHeight: '200px', whiteSpace: 'pre-wrap', marginBottom: '12px', border: '1px solid #3a4d66' }
+                        }, String(this.state.error)),
+                        this.state.errorInfo && React.createElement('pre', {
+                            style: { background: '#243044', padding: '16px', borderRadius: '8px', overflow: 'auto', maxHeight: '300px', whiteSpace: 'pre-wrap', fontSize: '11px', border: '1px solid #3a4d66' }
+                        }, this.state.errorInfo.componentStack),
+                        React.createElement('button', {
+                            onClick: function() { window.location.reload(); },
+                            style: { marginTop: '16px', padding: '12px 24px', background: '#c41e1e', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer' }
+                        }, '🔄 App neu laden')
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
         function App() {
             // Pages: 'start' | 'auswahl' | 'akte' | 'geladen' | 'raumerkennung' | 'raumblatt'
             const [page, setPage] = useState('start');
@@ -12149,7 +12204,7 @@
            MOUNT
            ═══════════════════════════════════════════ */
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
 </body>
 </html>
