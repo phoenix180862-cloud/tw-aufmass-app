@@ -736,34 +736,20 @@
                 aiVerfuegbar: false
             };
 
-            // ── SCHRITT 1: PDF Text extrahieren ──
-            if (onProgress) onProgress('PDF wird gelesen...');
-            var text = await this.extractPdfText(pdfBlob);
+            // ══════════════════════════════════════════════
+            // STRATEGIE: KI ZUERST (Online) → Regex NUR als Fallback (Offline)
+            // ══════════════════════════════════════════════
 
-            // ── SCHRITT 2: Regex-Parser (IMMER, sofort) ──
-            if (onProgress) onProgress('Positionen werden erkannt (Offline)...');
-            var regexResult = this.parseLvRegex(text);
-            result.positionen = regexResult;
-            result.quelle = 'regex';
-
-            // Bereiche als potenzielle Räume
-            var bereiche = {};
-            regexResult.forEach(function(p) {
-                if (p.bereich && p.bereich !== 'Allgemein') bereiche[p.bereich] = true;
-            });
-            result.raeume = Object.keys(bereiche);
-
-            // ── SCHRITT 3: KI-Verfeinerung (nur wenn online) ──
             if (this.isOnline()) {
+                // ═══ ONLINE: KI macht die Hauptarbeit ═══
                 result.aiVerfuegbar = true;
-                if (onProgress) onProgress('KI-Analyse läuft (bessere Erkennung)...');
+                if (onProgress) onProgress('KI-Analyse läuft (optimale Erkennung)...');
 
                 try {
-                    // Versuch 1: Direkte PDF-Analyse (beste Qualität)
-                    var aiResult = await this.parseLvAIFromPdf(pdfBlob, regexResult);
+                    // Direkter PDF-Upload an Claude → beste Qualität
+                    var aiResult = await this.parseLvAIFromPdf(pdfBlob);
 
                     if (aiResult && aiResult.positionen && aiResult.positionen.length > 0) {
-                        // KI-Ergebnis übernehmen (höhere Qualität)
                         result.positionen = aiResult.positionen.map(function(p) {
                             return {
                                 pos: String(p.pos || ''),
@@ -777,32 +763,297 @@
                             };
                         });
                         result.quelle = 'ki';
-
-                        // Kundendaten von KI übernehmen
                         if (aiResult.kundendaten) result.kundendaten = aiResult.kundendaten;
                         if (aiResult.raeume && aiResult.raeume.length > 0) result.raeume = aiResult.raeume;
-                    } else if (regexResult.length > 0) {
-                        // Fallback: Text-basierte KI-Analyse
-                        var aiTextResult = await this.parseLvAI(text, regexResult);
+
+                        if (onProgress) onProgress('KI: ' + result.positionen.length + ' Positionen erkannt ✓');
+                        return result;
+                    }
+                } catch (err) {
+                    console.warn('KI PDF-Analyse fehlgeschlagen:', err.message);
+                }
+
+                // KI-PDF hat nichts geliefert → Text extrahieren und KI nochmal mit Text versuchen
+                if (onProgress) onProgress('KI-Textanalyse als Fallback...');
+                try {
+                    var text = await this.extractPdfText(pdfBlob);
+                    if (text && text.trim().length > 50) {
+                        var aiTextResult = await this.parseLvAI(text, []);
                         if (aiTextResult && aiTextResult.length > 0) {
                             result.positionen = aiTextResult;
                             result.quelle = 'ki-text';
+                            if (onProgress) onProgress('KI-Text: ' + result.positionen.length + ' Positionen erkannt ✓');
+                            return result;
                         }
                     }
-                } catch (err) {
-                    console.warn('KI-Analyse fehlgeschlagen, Regex-Ergebnis wird verwendet:', err.message);
-                    // Regex-Ergebnis bleibt bestehen → App funktioniert trotzdem!
+                } catch (err2) {
+                    console.warn('KI Text-Analyse fehlgeschlagen:', err2.message);
                 }
+
+                // KI komplett fehlgeschlagen → Regex als letzter Online-Fallback
+                if (onProgress) onProgress('KI lieferte keine Ergebnisse – Regex-Fallback...');
+                var text2 = text || await this.extractPdfText(pdfBlob);
+                var regexResult = this.parseLvRegex(text2);
+                if (regexResult.length > 0) {
+                    result.positionen = regexResult;
+                    result.quelle = 'regex-fallback';
+                    var bereiche = {};
+                    regexResult.forEach(function(p) {
+                        if (p.bereich && p.bereich !== 'Allgemein') bereiche[p.bereich] = true;
+                    });
+                    result.raeume = Object.keys(bereiche);
+                }
+                if (onProgress) onProgress('Regex-Fallback: ' + result.positionen.length + ' Positionen');
+
             } else {
-                if (onProgress) onProgress('Offline-Modus: Regex-Erkennung aktiv');
+                // ═══ OFFLINE: Nur Regex ═══
+                if (onProgress) onProgress('Offline-Modus: Regex-Erkennung...');
+                var offlineText = await this.extractPdfText(pdfBlob);
+                var offlineResult = this.parseLvRegex(offlineText);
+                result.positionen = offlineResult;
+                result.quelle = 'regex-offline';
+
+                var offlineBereiche = {};
+                offlineResult.forEach(function(p) {
+                    if (p.bereich && p.bereich !== 'Allgemein') offlineBereiche[p.bereich] = true;
+                });
+                result.raeume = Object.keys(offlineBereiche);
+
+                if (onProgress) onProgress('Offline: ' + result.positionen.length + ' Positionen erkannt');
             }
 
             return result;
         },
 
         // ══════════════════════════════════════════════
-        // MASTER: Komplette Kundenakte verarbeiten
+        // RAUM-ERKENNUNG AUS PDF-TEXT (Offline Regex)
         // ══════════════════════════════════════════════
+        parseRaeumeRegex(text) {
+            if (!text || text.length < 20) return [];
+            var raeume = [];
+            var seen = {};
+            var lines = text.split('\n');
+
+            // Geschoss-Keywords
+            var geschossRe = /\b(KG|UG|EG|OG|1\.?\s*OG|2\.?\s*OG|3\.?\s*OG|DG|Keller|Erdgeschoss|Obergeschoss|Dachgeschoss|Souterrain|Untergeschoss)\b/i;
+
+            // Raum-Typen (deutsch, Bauwesen)
+            var raumTypen = 'Bad|Badezimmer|Gäste-?WC|Gäste-?Bad|WC|Toilette|Duschbad|Dusche|Küche|Küchenzeile|Flur|Diele|Eingang|Treppenhaus|Wohnzimmer|Schlafzimmer|Kinderzimmer|Arbeitszimmer|Büro|Abstellraum|Abstellkammer|Hauswirtschaft|HWR|Hauswirtschaftsraum|Waschküche|Technikraum|Heizungsraum|Kellerraum|Keller|Garage|Carport|Balkon|Terrasse|Loggia|Wintergarten|Umkleide|Umkleiden|Sanitär|Sanitärraum|Duschraum|Nassraum|Nassbereich|Becken|Schwimmbad|Pool|Dampfbad|Sauna|Wellness|Station|Zimmer|Raum|Wohnung|Apartment|Einheit|Bereich|Foyer|Empfang|Personalraum|Gemeinschaftsraum|Hobbyraum';
+
+            // ── Pattern 1: "Raumnummer + Bezeichnung" z.B. "0.01 Bad" oder "R 1.02 Küche" ──
+            var p1 = new RegExp('(?:Raum|R\\.?|Nr\\.?)\\s*(\\d{1,3}[\\.\\,]\\d{1,3})\\s*[:\\-–]?\\s*(' + raumTypen + ')(?:\\s+(' + geschossRe.source + '))?', 'gi');
+
+            // ── Pattern 2: "Bezeichnung + Geschoss" z.B. "Bad EG", "Küche 1.OG" ──
+            var p2 = new RegExp('\\b(' + raumTypen + ')\\s+(' + geschossRe.source + ')', 'gi');
+
+            // ── Pattern 3: "Nummer.Nummer Bezeichnung" z.B. "0.01 Bad groß" ──
+            var p3 = new RegExp('^\\s*(\\d{1,2}[\\.\\,]\\d{1,3})\\s+(' + raumTypen + ')\\b(.{0,30})', 'gim');
+
+            // ── Pattern 4: Raumblatt-Header z.B. "Raumblatt: Bad EG" oder "RAUMBLATT 3: Küche" ──
+            var p4 = /Raumblatt\s*[:\-–#]?\s*(\d*)\s*[:\-–]?\s*(.{3,40})/gi;
+
+            // ── Pattern 5: Grundriss-Labels z.B. "Bad 8,5 m²" oder "Flur 12,3m²" ──
+            var p5 = new RegExp('\\b(' + raumTypen + ')\\s*(?:ca\\.?\\s*)?([\\d\\.,]+)\\s*m[²2]', 'gi');
+
+            // ── Pattern 6: "Bereich:" Headers im LV ──
+            var p6 = new RegExp('(?:Bereich|Abschnitt|Titel|Los)\\s*[:\\-–]?\\s*(.{3,50})', 'gi');
+
+            var addRaum = function(bez, nr, geschoss, quelle, extra) {
+                bez = (bez || '').trim().replace(/\s+/g, ' ');
+                if (!bez || bez.length < 2) return;
+                // Duplikat-Check
+                var key = bez.toLowerCase().replace(/\s+/g, '');
+                if (seen[key]) return;
+                seen[key] = true;
+
+                // Geschoss erkennen wenn nicht angegeben
+                if (!geschoss) {
+                    var gm = bez.match(geschossRe);
+                    if (gm) geschoss = gm[1].toUpperCase().replace(/\s/g, '');
+                }
+
+                raeume.push({
+                    nr: nr || String(raeume.length + 1),
+                    bez: bez,
+                    geschoss: (geschoss || '').toUpperCase().replace(/\s/g, ''),
+                    quelle: quelle || 'regex',
+                    fliesenhoehe: 0,
+                    raumhoehe: 0,
+                    waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}],
+                    flaeche: extra && extra.flaeche ? extra.flaeche : 0,
+                });
+            };
+
+            // Patterns auf den ganzen Text anwenden
+            var m;
+
+            // Pattern 1: "Raum 0.01 Bad"
+            while ((m = p1.exec(text)) !== null) {
+                addRaum(m[2] + (m[3] ? ' ' + m[3] : ''), m[1], m[3], 'regex-raumnr');
+            }
+
+            // Pattern 2: "Bad EG"
+            while ((m = p2.exec(text)) !== null) {
+                addRaum(m[1] + ' ' + m[2], '', m[2], 'regex-typ-geschoss');
+            }
+
+            // Pattern 3: "0.01 Bad groß"
+            while ((m = p3.exec(text)) !== null) {
+                var extra3 = (m[3] || '').trim().replace(/[\d\.,]+\s*m[²2]?.*$/, '').trim();
+                addRaum(m[2] + (extra3 ? ' ' + extra3 : ''), m[1], '', 'regex-nr-typ');
+            }
+
+            // Pattern 4: Raumblatt-Header
+            while ((m = p4.exec(text)) !== null) {
+                addRaum(m[2].trim(), m[1] || '', '', 'regex-raumblatt');
+            }
+
+            // Pattern 5: "Bad 8,5 m²"
+            while ((m = p5.exec(text)) !== null) {
+                var fl = parseFloat((m[2] || '').replace(',', '.')) || 0;
+                addRaum(m[1], '', '', 'regex-flaeche', { flaeche: fl });
+            }
+
+            // Pattern 6: Bereiche
+            while ((m = p6.exec(text)) !== null) {
+                var bereich = m[1].trim();
+                // Nur wenn es nach einem Raum klingt
+                if (bereich.match(new RegExp(raumTypen, 'i')) || bereich.match(geschossRe)) {
+                    addRaum(bereich, '', '', 'regex-bereich');
+                }
+            }
+
+            // ── Zeilenweises Scannen für einfache Patterns ──
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (!line || line.length < 3 || line.length > 80) continue;
+
+                // "Raum: Bad", "Raum 3: Küche EG"
+                var rmatch = line.match(/^Raum\s*(?:\d+\s*)?[:\-–]\s*(.{3,40})$/i);
+                if (rmatch) {
+                    addRaum(rmatch[1].trim(), '', '', 'regex-zeile');
+                }
+
+                // Zeile besteht NUR aus Raumtyp + optional Geschoss (= Überschrift)
+                var headMatch = line.match(new RegExp('^(' + raumTypen + ')(?:\\s+(' + geschossRe.source + '))?\\s*$', 'i'));
+                if (headMatch && line.length < 40) {
+                    addRaum(headMatch[1] + (headMatch[2] ? ' ' + headMatch[2] : ''), '', headMatch[2] || '', 'regex-header');
+                }
+            }
+
+            return raeume;
+        },
+
+        // ══════════════════════════════════════════════
+        // KI-ZEICHNUNGSANALYSE (Grundrisse → Räume)
+        // ══════════════════════════════════════════════
+        async analyzeDrawingForRooms(imgBlob, fileName) {
+            if (!this.isOnline()) return [];
+            try {
+                var base64 = await new Promise(function(resolve, reject) {
+                    var reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result.split(',')[1]); };
+                    reader.onerror = function() { reject(new Error('Bild lesen fehlgeschlagen')); };
+                    reader.readAsDataURL(imgBlob);
+                });
+                var mediaType = fileName.toLowerCase().match(/\.png$/) ? 'image/png' : 'image/jpeg';
+
+                var response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 2000,
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+                                { type: 'text', text: 'Du bist ein Bau-Experte. Analysiere diese Zeichnung/Grundriss/Wandansicht.\n\nExtrahiere ALLE erkennbaren Raeume mit deren Informationen.\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"bez":"Bad EG","nr":"0.01","geschoss":"EG","waende":[{"id":"A","l":"3.45"},{"id":"B","l":"2.10"},{"id":"C","l":"3.45"},{"id":"D","l":"2.10"}],"hoehe":0,"flaeche":7.2,"abzuege":[{"typ":"tuer","bez":"Tuer","b":0.885,"h":2.10},{"typ":"fenster","bez":"Fenster","b":1.20,"h":0.60,"tiefe":0.18}],"material":""}]\n\nRegeln:\n- bez: Raumbezeichnung wie auf der Zeichnung\n- nr: Raumnummer falls vorhanden (sonst leer)\n- geschoss: EG, OG, KG, DG etc.\n- waende: Alle Wandabschnitte mit ID (A,B,C,...) und Laenge in Metern\n- hoehe: Raumhoehe oder Fliesenhoehe falls angegeben (sonst 0)\n- flaeche: Grundflaeche in m² falls angegeben (sonst 0)\n- abzuege: Erkannte Tueren und Fenster mit Massen\n- material: Erkannte Materialangaben\n\nWenn keine Raeume erkennbar: leeres Array []\nLies ALLE Masse direkt von der Zeichnung ab!' }
+                            ]
+                        }]
+                    })
+                });
+                var data = await response.json();
+                var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                var cleaned = textContent.replace(/```json|```/g, '').trim();
+                var parsed = JSON.parse(cleaned);
+                if (Array.isArray(parsed)) {
+                    return parsed.map(function(r) {
+                        return {
+                            nr: String(r.nr || ''),
+                            bez: String(r.bez || 'Raum'),
+                            geschoss: String(r.geschoss || '').toUpperCase(),
+                            quelle: 'ki-zeichnung',
+                            fliesenhoehe: Number(r.hoehe) || 0,
+                            raumhoehe: Number(r.hoehe) || 0,
+                            flaeche: Number(r.flaeche) || 0,
+                            waende: Array.isArray(r.waende) ? r.waende.map(function(w) {
+                                return { id: String(w.id || ''), l: String(w.l || '') };
+                            }) : [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}],
+                            abzuege: Array.isArray(r.abzuege) ? r.abzuege : [],
+                            material: String(r.material || ''),
+                            zeichnung: fileName
+                        };
+                    });
+                }
+                return [];
+            } catch (err) {
+                console.error('KI-Zeichnungsanalyse Fehler:', err);
+                return [];
+            }
+        },
+
+        // ══════════════════════════════════════════════
+        // KI-RAUMBLATT-PDF-ANALYSE (Raumblätter → Räume)
+        // ══════════════════════════════════════════════
+        async analyzeRaumblattPdf(pdfBlob, fileName) {
+            if (!this.isOnline()) return [];
+            try {
+                var base64 = await this.pdfToBase64(pdfBlob);
+                var response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 3000,
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+                                { type: 'text', text: 'Du bist ein Bau-Experte fuer Fliesenarbeiten. Analysiere dieses PDF-Dokument (Raumblatt, Grundriss, Aufmass oder Zeichnung).\n\nExtrahiere ALLE erkennbaren Raeume mit deren Informationen.\n\nAntworte NUR mit JSON (kein Markdown, keine Backticks):\n{"raeume":[{"bez":"Bad EG","nr":"0.01","geschoss":"EG","waende":[{"id":"A","l":"3.45"},{"id":"B","l":"2.10"},{"id":"C","l":"3.45"},{"id":"D","l":"2.10"}],"hoehe":0,"raumhoehe":0,"flaeche":7.2,"abzuege":[{"typ":"tuer","bez":"Tuer","b":0.885,"h":2.10},{"typ":"fenster","bez":"Fenster","b":1.20,"h":0.60,"tiefe":0.18}],"material":"Bodenfliese 30x60"}]}\n\nRegeln:\n- Erkenne Raumbezeichnungen, Raumnummern, Geschosse\n- Lese alle Wandmasse ab (Laengen in Metern)\n- Erkenne Tueren und Fenster mit Massen\n- Erkenne Fliesenhoehen, Raumhoehen\n- Erkenne Materialangaben\n- Bei verwinklung Raeumen (5+ Ecken): ALLE Wandabschnitte auflisten\n- Wenn keine Raeume erkennbar: {"raeume":[]}\n- Nutze die EXAKTEN Masse aus dem Dokument!' }
+                            ]
+                        }]
+                    })
+                });
+                var data = await response.json();
+                var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                var cleaned = textContent.replace(/```json|```/g, '').trim();
+                var parsed = JSON.parse(cleaned);
+                if (parsed && parsed.raeume && Array.isArray(parsed.raeume)) {
+                    return parsed.raeume.map(function(r) {
+                        return {
+                            nr: String(r.nr || ''),
+                            bez: String(r.bez || 'Raum'),
+                            geschoss: String(r.geschoss || '').toUpperCase(),
+                            quelle: 'ki-raumblatt-pdf',
+                            fliesenhoehe: Number(r.hoehe) || 0,
+                            raumhoehe: Number(r.raumhoehe || r.hoehe) || 0,
+                            flaeche: Number(r.flaeche) || 0,
+                            waende: Array.isArray(r.waende) ? r.waende.map(function(w) {
+                                return { id: String(w.id || ''), l: String(w.l || '') };
+                            }) : [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}],
+                            abzuege: Array.isArray(r.abzuege) ? r.abzuege : [],
+                            material: String(r.material || ''),
+                            zeichnung: fileName
+                        };
+                    });
+                }
+                return [];
+            } catch (err) {
+                console.error('KI-Raumblatt Fehler:', err);
+                return [];
+            }
+        },
         async processKundenAkte(kunde, onProgress) {
             var processResult = {
                 positionen: [],
@@ -839,19 +1090,19 @@
                 if (onProgress) onProgress('Verarbeite ' + (i + 1) + '/' + allFiles.length + ': ' + file.name);
 
                 try {
-                    // ── PDF-Dateien: LV-Positionen extrahieren ──
+                    // ── PDF-Dateien: LV-Positionen + Räume extrahieren ──
                     if (file.type === 'pdf' && file.id) {
                         var pdfBlob = await window.GoogleDriveService.downloadFile(file.id);
+
+                        // ── LV-Positionen extrahieren ──
                         var lvResult = await this.parseLV(pdfBlob, function(msg) {
                             if (onProgress) onProgress(file.name + ': ' + msg);
                         });
 
                         if (lvResult.positionen.length > 0) {
-                            // Positionen mergen (nicht überschreiben)
                             if (processResult.positionen.length === 0) {
                                 processResult.positionen = lvResult.positionen;
                             } else {
-                                // Zusätzliche Positionen aus weiteren PDFs anhängen
                                 var existingPos = {};
                                 processResult.positionen.forEach(function(p) { existingPos[p.pos] = true; });
                                 lvResult.positionen.forEach(function(p) {
@@ -877,10 +1128,70 @@
                             });
                         }
 
-                        // Räume mergen
+                        // ── RÄUME aus PDF: KI zuerst, Regex nur offline ──
+                        var existingRaumKeys = {};
+                        processResult.raeume.forEach(function(r) {
+                            existingRaumKeys[r.bez.toLowerCase().replace(/\s+/g, '')] = true;
+                        });
+
+                        var mergeRaeume = function(newRaeume) {
+                            newRaeume.forEach(function(r) {
+                                var key = r.bez.toLowerCase().replace(/\s+/g, '');
+                                if (!existingRaumKeys[key]) {
+                                    existingRaumKeys[key] = true;
+                                    processResult.raeume.push(r);
+                                } else {
+                                    var existing = processResult.raeume.find(function(er) {
+                                        return er.bez.toLowerCase().replace(/\s+/g, '') === key;
+                                    });
+                                    if (existing) {
+                                        if (r.waende && r.waende.some(function(w) { return w.l && w.l !== ''; })) existing.waende = r.waende;
+                                        if (r.fliesenhoehe) existing.fliesenhoehe = r.fliesenhoehe;
+                                        if (r.raumhoehe) existing.raumhoehe = r.raumhoehe;
+                                        if (r.abzuege && r.abzuege.length > 0) existing.abzuege = r.abzuege;
+                                        if (r.material) existing.material = r.material;
+                                        existing.quelle = (existing.quelle || '') + ' + ' + (r.quelle || '');
+                                    }
+                                }
+                            });
+                        };
+
+                        if (this.isOnline()) {
+                            // ═══ ONLINE: KI analysiert PDF auf Räume ═══
+                            if (onProgress) onProgress(file.name + ': KI analysiert Räume...');
+                            try {
+                                var kiRaeume = await this.analyzeRaumblattPdf(pdfBlob, file.name);
+                                if (kiRaeume.length > 0) {
+                                    mergeRaeume(kiRaeume);
+                                    processResult.quellenInfo.push({ datei: file.name, typ: 'raumblatt', raeume: kiRaeume.length });
+                                }
+                            } catch (kiErr) {
+                                console.warn('KI-Raumanalyse fehlgeschlagen:', kiErr.message);
+                            }
+                        } else {
+                            // ═══ OFFLINE: Regex erkennt Räume aus PDF-Text ═══
+                            if (onProgress) onProgress(file.name + ': Räume werden erkannt (Offline)...');
+                            var pdfText = await this.extractPdfText(pdfBlob);
+                            var regexRaeume = this.parseRaeumeRegex(pdfText);
+                            if (regexRaeume.length > 0) {
+                                mergeRaeume(regexRaeume);
+                            }
+                        }
+
+                        // Räume aus LV-Bereichen übernehmen (Fallback, immer)
                         if (lvResult.raeume && lvResult.raeume.length > 0) {
                             lvResult.raeume.forEach(function(r) {
-                                if (processResult.raeume.indexOf(r) === -1) processResult.raeume.push(r);
+                                var rName = typeof r === 'string' ? r : (r.bez || '');
+                                if (!rName) return;
+                                var key = rName.toLowerCase().replace(/\s+/g, '');
+                                if (!existingRaumKeys[key]) {
+                                    existingRaumKeys[key] = true;
+                                    processResult.raeume.push(typeof r === 'string' ? {
+                                        nr: '', bez: r, geschoss: '', quelle: 'lv-bereich',
+                                        fliesenhoehe: 0, raumhoehe: 0,
+                                        waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
+                                    } : r);
+                                }
                             });
                         }
 
@@ -900,7 +1211,7 @@
                         xlsxCount++;
                     }
 
-                    // ── Bilddateien: Zeichnungen/Grundrisse speichern ──
+                    // ── Bilddateien: Zeichnungen/Grundrisse → Raum-Erkennung ──
                     if (file.type === 'img' && file.id) {
                         var imgBlob = await window.GoogleDriveService.downloadFile(file.id);
                         var imgUrl = URL.createObjectURL(imgBlob);
@@ -910,6 +1221,47 @@
                             blob: imgBlob,
                             folderName: file.folderName || ''
                         });
+
+                        // ── KI-Analyse IMMER wenn online (KI-first Strategie) ──
+                        if (this.isOnline()) {
+                            if (onProgress) onProgress(file.name + ': KI erkennt Räume aus Zeichnung...');
+                            try {
+                                var imgRaeume = await this.analyzeDrawingForRooms(imgBlob, file.name);
+                                if (imgRaeume.length > 0) {
+                                    var existingKeys = {};
+                                    processResult.raeume.forEach(function(r) {
+                                        existingKeys[r.bez.toLowerCase().replace(/\s+/g, '')] = true;
+                                    });
+                                    imgRaeume.forEach(function(r) {
+                                        var key = r.bez.toLowerCase().replace(/\s+/g, '');
+                                        if (!existingKeys[key]) {
+                                            existingKeys[key] = true;
+                                            processResult.raeume.push(r);
+                                        } else {
+                                            // Merge: KI-Zeichnungsdaten in bestehenden Raum
+                                            var existing = processResult.raeume.find(function(er) {
+                                                return er.bez.toLowerCase().replace(/\s+/g, '') === key;
+                                            });
+                                            if (existing) {
+                                                if (r.waende && r.waende.some(function(w) { return w.l && w.l !== ''; })) {
+                                                    existing.waende = r.waende;
+                                                }
+                                                if (r.abzuege && r.abzuege.length > 0) existing.abzuege = r.abzuege;
+                                                if (r.fliesenhoehe) existing.fliesenhoehe = r.fliesenhoehe;
+                                                if (r.flaeche) existing.flaeche = r.flaeche;
+                                                if (r.material) existing.material = r.material;
+                                                existing.zeichnung = file.name;
+                                                existing.quelle = (existing.quelle || '') + ' + Zeichnung';
+                                            }
+                                        }
+                                    });
+                                    processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung-analyse', raeume: imgRaeume.length });
+                                }
+                            } catch (imgErr) {
+                                console.warn('Zeichnungsanalyse fehlgeschlagen für ' + file.name + ':', imgErr.message);
+                            }
+                        }
+
                         processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung' });
                         imgCount++;
                     }
@@ -5715,6 +6067,51 @@
                                 </div>
                             )}
                         </div>
+
+                        {/* ═══ PROJEKTDATEN / KONTAKTE (aus Import) ═══ */}
+                        {(kunde.auftraggeber || kunde.bauleitung || kunde.architekt) && (
+                            <div className="kunde-preview" style={{marginTop:'12px', textAlign:'left'}}>
+                                <div className="kunde-preview-header">📋 Projektdaten</div>
+
+                                {/* Auftraggeber */}
+                                <div className="contact-section">
+                                    <div className="contact-role" style={{fontSize:'11px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'4px'}}>Auftraggeber</div>
+                                    <div style={{fontWeight:600, fontSize:'15px', marginBottom:'4px'}}>{kunde.auftraggeber || '–'}</div>
+                                    {kunde.ag_adresse && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📍 {kunde.ag_adresse}</div>}
+                                    {kunde.ag_telefon && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📞 {kunde.ag_telefon}</div>}
+                                    {kunde.ag_email && <div style={{fontSize:'13px', color:'var(--text-light)'}}>✉️ {kunde.ag_email}</div>}
+                                </div>
+
+                                {/* Bauleitung */}
+                                {kunde.bauleitung && (
+                                    <div className="contact-section" style={{marginTop:'10px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
+                                        <div className="contact-role" style={{fontSize:'11px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'4px'}}>Bauleitung</div>
+                                        <div style={{fontWeight:600, fontSize:'15px', marginBottom:'4px'}}>{kunde.bauleitung}</div>
+                                        {kunde.bl_adresse && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📍 {kunde.bl_adresse}</div>}
+                                        {kunde.bl_telefon && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📞 {kunde.bl_telefon}</div>}
+                                        {kunde.bl_email && <div style={{fontSize:'13px', color:'var(--text-light)'}}>✉️ {kunde.bl_email}</div>}
+                                    </div>
+                                )}
+
+                                {/* Architekt */}
+                                {kunde.architekt && (
+                                    <div className="contact-section" style={{marginTop:'10px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
+                                        <div className="contact-role" style={{fontSize:'11px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'4px'}}>Architekt / Planer</div>
+                                        <div style={{fontWeight:600, fontSize:'15px', marginBottom:'4px'}}>{kunde.architekt}</div>
+                                        {kunde.arch_adresse && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📍 {kunde.arch_adresse}</div>}
+                                        {kunde.arch_telefon && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📞 {kunde.arch_telefon}</div>}
+                                        {kunde.arch_email && <div style={{fontSize:'13px', color:'var(--text-light)'}}>✉️ {kunde.arch_email}</div>}
+                                    </div>
+                                )}
+
+                                {/* Fehlende Daten Hinweis */}
+                                {(!kunde.bauleitung || !kunde.architekt) && (
+                                    <div style={{marginTop:'10px', padding:'8px 12px', background:'rgba(230,126,34,0.08)', borderRadius:'6px', fontSize:'12px', color:'var(--accent-orange)'}}>
+                                        ⚠️ Nicht alle Kontaktdaten konnten aus den Dokumenten extrahiert werden. Fehlende Daten können auf dem Raumblatt ergänzt werden.
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <button className="action-btn-full" style={{marginTop:'24px'}} onClick={onStartAufmass}>
                             🏗️ Raumblatt erstellen
