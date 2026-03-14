@@ -578,47 +578,33 @@
         // ══════════════════════════════════════════════
         async parseLvAI(text, existingRegexResult) {
             if (!this.isOnline()) return null;
-
             try {
-                var truncated = text.substring(0, 15000); // Token-Limit beachten
                 var regexHint = '';
                 if (existingRegexResult && existingRegexResult.length > 0) {
-                    regexHint = '\n\nEin Regex-Parser hat bereits folgende Positionen gefunden (als Referenz, bitte korrigieren/ergänzen):\n' +
-                        existingRegexResult.slice(0, 20).map(function(p) {
-                            return 'Pos ' + p.pos + ': ' + p.bez + ' (' + p.menge + ' ' + p.einheit + ')';
-                        }).join('\n');
+                    regexHint = '\n\nEin Regex-Parser hat bereits ' + existingRegexResult.length + ' Positionen gefunden. Bitte alle Positionen vollstaendig extrahieren.';
                 }
-
                 var response = await fetch('https://api.anthropic.com/v1/messages', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-20250514',
-                        max_tokens: 4000,
+                        max_tokens: 8000,
                         messages: [{
                             role: 'user',
-                            content: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere den folgenden Text aus einem LV-PDF und extrahiere ALLE Positionen.\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks), exakt in diesem Format:\n[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden"},{"pos":"1.02",...}]\n\nRegeln:\n- pos: Positionsnummer exakt wie im Dokument\n- bez: Volle Positionsbezeichnung\n- einheit: m², m, Stk, psch, lfm, kg, l, t\n- menge: Ausgeschriebene Menge als Zahl\n- bereich: Abschnitt/Bereich aus dem LV (z.B. EG, OG, Allgemein, Becken, etc.)\n- kategorie: Eine von: boden, wand, sockel, abdichtung, silikon, schiene, einbau, verfugung, vorbereitung, estrich, entkopplung, decke, fensterbank, rinne, schwelle, allgemein\n- tags: Array mit Suchbegriffen fuer die Position\n\nWenn Menge oder Einheit nicht erkennbar: menge=0, einheit="?"\nHalte die EXAKTE Reihenfolge aus dem Dokument ein!' + regexHint + '\n\nLV-TEXT:\n' + truncated
+                            content: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere den folgenden Text und extrahiere ALLE Positionen. Es ist KRITISCH, dass du JEDE EINZELNE Position findest - ueberspringe KEINE!\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument\n- bez: VOLLSTAENDIGE Positionsbezeichnung\n- einheit: m², m, Stk, psch, lfm, kg, l, t\n- menge: Ausgeschriebene Menge als Zahl (0 wenn unklar)\n- bereich: Abschnitt/Bereich (EG, OG, Allgemein, etc.)\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe als Array\n- EXAKTE Reihenfolge beibehalten!\n- KEINE Position auslassen!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
                         }]
                     })
                 });
-
                 var data = await response.json();
+                if (data.error) { console.error('KI API Fehler:', data.error); return null; }
                 var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
                 var cleaned = textContent.replace(/```json|```/g, '').trim();
                 var parsed = JSON.parse(cleaned);
-
                 if (Array.isArray(parsed) && parsed.length > 0) {
                     return parsed.map(function(p) {
-                        return {
-                            pos: String(p.pos || ''),
-                            bez: String(p.bez || ''),
-                            einheit: String(p.einheit || '?'),
-                            menge: Number(p.menge) || 0,
-                            bereich: String(p.bereich || 'Allgemein'),
-                            kategorie: String(p.kategorie || 'allgemein'),
-                            tags: Array.isArray(p.tags) ? p.tags : [],
-                            quelle: 'ki'
-                        };
+                        return { pos: String(p.pos||''), bez: String(p.bez||''), einheit: String(p.einheit||'?'),
+                            menge: Number(p.menge)||0, bereich: String(p.bereich||'Allgemein'),
+                            kategorie: String(p.kategorie||'allgemein'), tags: Array.isArray(p.tags)?p.tags:[], quelle: 'ki' };
                     });
                 }
                 return null;
@@ -634,17 +620,13 @@
 
             try {
                 var base64 = await this.pdfToBase64(blob);
-                var regexHint = '';
-                if (existingRegexResult && existingRegexResult.length > 0) {
-                    regexHint = '\n\nEin Regex-Parser hat bereits ' + existingRegexResult.length + ' Positionen gefunden. Bitte validiere und korrigiere.';
-                }
 
                 var response = await fetch('https://api.anthropic.com/v1/messages', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-20250514',
-                        max_tokens: 4000,
+                        max_tokens: 8000,
                         messages: [{
                             role: 'user',
                             content: [
@@ -654,7 +636,7 @@
                                 },
                                 {
                                     type: 'text',
-                                    text: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere dieses LV-PDF und extrahiere ALLE Positionen.\n\nExtrahiere ausserdem die Kundenstammdaten, falls vorhanden (Auftraggeber, Baustellenadresse, Baumassnahme, Bauleitung, Architekt/Planer und deren Kontaktdaten).\n\nAntworte NUR mit einem JSON-Objekt (kein Markdown, keine Backticks):\n{"positionen":[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"Name","adresse":"Strasse, PLZ Ort","baumassnahme":"Beschreibung","bauleitung":"Name","bl_telefon":"","bl_email":"","architekt":"Name","arch_telefon":"","arch_email":""},"raeume":["Bad EG","Kueche EG","Flur OG"]}\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument\n- bez: Volle Leistungsbeschreibung\n- einheit: m², m, Stk, psch, lfm\n- menge: Ausgeschriebene Menge (0 wenn nicht erkennbar)\n- bereich: Abschnitt aus dem LV\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe\n- raeume: Erkannte Raumbezeichnungen aus dem LV\n- EXAKTE Reihenfolge beibehalten!' + regexHint
+                                    text: 'WICHTIG: Analysiere dieses Dokument VOLLSTAENDIG und gruendlich. Es handelt sich um ein Dokument aus dem Bereich Fliesenarbeiten/Bauwesen.\n\nExtrahiere ALLES was du finden kannst:\n\n1. ALLE LV-Positionen (Leistungsverzeichnis) - ueberspringe KEINE EINZIGE Position! Jede Zeile mit einer Positionsnummer MUSS erfasst werden.\n2. ALLE Kundenstammdaten - Auftraggeber, Bauherr, Baustellenadresse, Baumassnahme, Bauleitung, Architekt/Planer mit ALLEN Kontaktdaten (Name, Firma, Adresse, Telefon, Fax, E-Mail, Mobilnummer)\n3. ALLE erkennbaren Raeume mit Bezeichnung und Geschoss\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks, KEIN erklaerrender Text):\n{"positionen":[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"Firmenname oder Person","ag_adresse":"Strasse Nr, PLZ Ort","ag_telefon":"Nummer","ag_email":"email@domain","adresse":"Baustellenadresse","baumassnahme":"Bezeichnung der Baumassnahme","bauleitung":"Name/Firma","bl_adresse":"Adresse","bl_telefon":"Nummer","bl_email":"email","architekt":"Name/Firma","arch_adresse":"Adresse","arch_telefon":"Nummer","arch_email":"email"},"raeume":["Bad EG","Kueche EG","Flur OG"]}\n\nKRITISCHE Regeln:\n- JEDE Position mit Positionsnummer MUSS in die Liste!\n- Positionsnummern EXAKT wie im Dokument (z.B. 01.001 oder 1.01 oder 1.1)\n- Vollstaendige Leistungsbeschreibung, nicht abkuerzen!\n- einheit: m², m, Stk, psch, lfm, kg, l, t (EXAKT wie im Dokument)\n- menge: Ausgeschriebene Menge als Zahl (0 wenn nicht erkennbar)\n- bereich: EG, OG, KG, DG, Allgemein, oder Abschnittsname aus dem LV\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- Kundendaten: ALLE Felder die du findest, auch aus Briefkoepfen, Fussnoten, Stempeln\n- EXAKTE Reihenfolge der Positionen beibehalten!'
                                 }
                             ]
                         }]
@@ -662,10 +644,24 @@
                 });
 
                 var data = await response.json();
+                if (data.error) {
+                    console.error('KI API Fehler:', JSON.stringify(data.error));
+                    return null;
+                }
                 var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                if (!textContent) {
+                    console.error('KI: Leere Antwort erhalten');
+                    return null;
+                }
                 var cleaned = textContent.replace(/```json|```/g, '').trim();
-                var parsed = JSON.parse(cleaned);
-                return parsed; // {positionen: [...], kundendaten: {...}, raeume: [...]}
+                try {
+                    var parsed = JSON.parse(cleaned);
+                    console.log('KI PDF-Ergebnis:', (parsed.positionen||[]).length, 'Positionen,', Object.keys(parsed.kundendaten||{}).length, 'Kundendaten-Felder,', (parsed.raeume||[]).length, 'Räume');
+                    return parsed;
+                } catch (jsonErr) {
+                    console.error('KI JSON-Parse Fehler. Antwort:', cleaned.substring(0, 500));
+                    return null;
+                }
             } catch (err) {
                 console.error('KI PDF-Parser Fehler:', err);
                 return null;
@@ -963,7 +959,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-20250514',
-                        max_tokens: 2000,
+                        max_tokens: 4000,
                         messages: [{
                             role: 'user',
                             content: [
@@ -1015,7 +1011,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-20250514',
-                        max_tokens: 3000,
+                        max_tokens: 8000,
                         messages: [{
                             role: 'user',
                             content: [
@@ -1264,6 +1260,95 @@
 
                         processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung' });
                         imgCount++;
+                    }
+
+                    // ── Word-Dokumente: Kundendaten, Räume, Kontakte per KI extrahieren ──
+                    if (file.type === 'doc' && file.id && this.isOnline()) {
+                        if (onProgress) onProgress(file.name + ': Word-Dokument wird analysiert...');
+                        try {
+                            var docBlob = await window.GoogleDriveService.downloadFile(file.id);
+                            var docBase64 = await this.pdfToBase64(docBlob);
+                            // Word-Docs an KI senden zur Kontaktdaten-Extraktion
+                            var docResponse = await fetch('https://api.anthropic.com/v1/messages', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    model: 'claude-sonnet-4-20250514',
+                                    max_tokens: 4000,
+                                    messages: [{
+                                        role: 'user',
+                                        content: [
+                                            { type: 'document', source: { type: 'base64', media_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data: docBase64 } },
+                                            { type: 'text', text: 'Analysiere dieses Dokument und extrahiere alle Kontakt- und Projektdaten.\n\nAntworte NUR mit JSON (kein Markdown):\n{"kundendaten":{"auftraggeber":"","ag_adresse":"","ag_telefon":"","ag_email":"","adresse":"","baumassnahme":"","bauleitung":"","bl_adresse":"","bl_telefon":"","bl_email":"","architekt":"","arch_adresse":"","arch_telefon":"","arch_email":""},"raeume":["Raum1","Raum2"]}\n\nExtrahiere ALLE Kontaktdaten die du findest: Namen, Firmen, Adressen, Telefonnummern, E-Mail-Adressen, Faxnummern. Ordne sie den richtigen Rollen zu (Auftraggeber/Bauherr, Bauleitung, Architekt/Planer). Leere Felder weglassen.' }
+                                        ]
+                                    }]
+                                })
+                            });
+                            var docData = await docResponse.json();
+                            if (!docData.error) {
+                                var docText = docData.content ? docData.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                                var docCleaned = docText.replace(/```json|```/g, '').trim();
+                                try {
+                                    var docParsed = JSON.parse(docCleaned);
+                                    if (docParsed.kundendaten) {
+                                        Object.keys(docParsed.kundendaten).forEach(function(key) {
+                                            if (docParsed.kundendaten[key] && !processResult.kundendaten[key]) {
+                                                processResult.kundendaten[key] = docParsed.kundendaten[key];
+                                            }
+                                        });
+                                    }
+                                    if (docParsed.raeume && docParsed.raeume.length > 0) {
+                                        docParsed.raeume.forEach(function(r) {
+                                            var rName = typeof r === 'string' ? r : (r.bez || '');
+                                            if (rName) processResult.raeume.push({ nr: '', bez: rName, geschoss: '', quelle: 'word-doc', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
+                                        });
+                                    }
+                                    processResult.quellenInfo.push({ datei: file.name, typ: 'word' });
+                                } catch(je) { console.warn('Word JSON parse:', je.message); }
+                            }
+                        } catch (docErr) {
+                            console.warn('Word-Analyse fehlgeschlagen:', file.name, docErr.message);
+                            processResult.fehler.push({ datei: file.name, fehler: 'Word: ' + docErr.message });
+                        }
+                    }
+
+                    // ── Sonstige Dateien: an KI senden wenn online (E-Mails etc.) ──
+                    if (file.type === 'sonstige' && file.id && this.isOnline()) {
+                        var sonstName = (file.name || '').toLowerCase();
+                        // E-Mails (.eml, .msg) oder Textdateien mit Kontaktdaten
+                        if (sonstName.match(/\.(eml|msg|txt|rtf)$/)) {
+                            if (onProgress) onProgress(file.name + ': wird auf Kontaktdaten untersucht...');
+                            try {
+                                var sonstBlob = await window.GoogleDriveService.downloadFile(file.id);
+                                var sonstText = await sonstBlob.text();
+                                if (sonstText && sonstText.length > 20 && sonstText.length < 50000) {
+                                    var sonstResponse = await fetch('https://api.anthropic.com/v1/messages', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            model: 'claude-sonnet-4-20250514',
+                                            max_tokens: 2000,
+                                            messages: [{ role: 'user', content: 'Extrahiere Kontaktdaten aus diesem Text (E-Mail/Dokument). Antworte NUR mit JSON:\n{"kundendaten":{"auftraggeber":"","ag_adresse":"","ag_telefon":"","ag_email":"","bauleitung":"","bl_telefon":"","bl_email":"","architekt":"","arch_telefon":"","arch_email":""}}\nNur befuellte Felder! Text:\n' + sonstText.substring(0, 15000) }]
+                                        })
+                                    });
+                                    var sonstData = await sonstResponse.json();
+                                    if (!sonstData.error) {
+                                        var sonstContent = sonstData.content ? sonstData.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+                                        try {
+                                            var sonstParsed = JSON.parse(sonstContent.replace(/```json|```/g, '').trim());
+                                            if (sonstParsed.kundendaten) {
+                                                Object.keys(sonstParsed.kundendaten).forEach(function(key) {
+                                                    if (sonstParsed.kundendaten[key] && !processResult.kundendaten[key]) {
+                                                        processResult.kundendaten[key] = sonstParsed.kundendaten[key];
+                                                    }
+                                                });
+                                            }
+                                            processResult.quellenInfo.push({ datei: file.name, typ: 'kontakte' });
+                                        } catch(se) {}
+                                    }
+                                }
+                            } catch(sonstErr) { /* still not critical */ }
+                        }
                     }
 
                 } catch (err) {
