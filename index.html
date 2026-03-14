@@ -11588,97 +11588,138 @@
                 setSelectedKunde(kunde);
                 navigateTo('akte');
 
-                // Wenn echte Drive-Verbindung: Ordner-Inhalt laden
+                // Wenn echte Drive-Verbindung: Ordner-Inhalt laden UND sofort analysieren
                 if (isDriveMode && kunde.id && !kunde.files) {
                     setLoading(true);
+                    setLoadProgress('Ordnerinhalt wird geladen...');
                     try {
                         const contents = await window.GoogleDriveService.listFolderContents(kunde.id);
-                        // Merge folder contents into kunde object
-                        const enriched = {
+                        // Basis-Kunde mit Ordnerstruktur
+                        var enriched = {
                             ...kunde,
                             auftraggeber: kunde.name,
                             adresse: '',
                             folders: contents.folders,
                             files: contents.files,
                             dateien: contents.files.length + contents.folders.reduce((s, f) => s + f.files.length, 0),
-                            _driveFolderId: kunde.id, // Für Upload merken
+                            _driveFolderId: kunde.id,
                         };
                         setSelectedKunde(enriched);
+
+                        // ═══ SOFORT Dateien analysieren (KI-first) ═══
+                        setLoadProgress('Dateien werden analysiert...');
+                        var result = await window.FileProcessor.processKundenAkte(
+                            enriched,
+                            function(msg) { setLoadProgress(msg); }
+                        );
+
+                        // Positionen in LV_POSITIONEN injizieren
+                        if (result.positionen && result.positionen.length > 0) {
+                            var kundeKey = kunde.id || 'drive_import';
+                            LV_POSITIONEN[kundeKey] = result.positionen;
+                        }
+
+                        // Kundendaten + Räume + Zeichnungen in Kunde mergen
+                        var kd = result.kundendaten || {};
+                        var fullyLoaded = Object.assign({}, enriched, {
+                            auftraggeber: kd.auftraggeber || enriched.auftraggeber || kunde.name,
+                            adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
+                            baumassnahme: kd.baumassnahme || '',
+                            bauleitung: kd.bauleitung || '',
+                            bl_adresse: kd.bl_adresse || '',
+                            bl_telefon: kd.bl_telefon || '',
+                            bl_email: kd.bl_email || '',
+                            architekt: kd.architekt || '',
+                            arch_adresse: kd.arch_adresse || '',
+                            arch_telefon: kd.arch_telefon || '',
+                            arch_email: kd.arch_email || '',
+                            ag_adresse: kd.ag_adresse || kd.adresse || '',
+                            ag_telefon: kd.ag_telefon || '',
+                            ag_email: kd.ag_email || '',
+                            raeume: (result.raeume || []).map(function(r, idx) {
+                                // Strings zu Objekten konvertieren
+                                if (typeof r === 'string') {
+                                    return {
+                                        id: 'import_' + idx, nr: String(idx + 1), bez: r,
+                                        geschoss: (r.match(/EG|OG|KG|DG|UG/i) || [''])[0].toUpperCase(),
+                                        fliesenhoehe: 0, raumhoehe: 0,
+                                        waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
+                                    };
+                                }
+                                return Object.assign({ id: 'import_' + idx }, r, {
+                                    nr: r.nr || String(idx + 1),
+                                });
+                            }),
+                            zeichnungen: result.zeichnungen || [],
+                            _importResult: result,
+                            _lvPositionenKey: kunde.id,
+                            _fullyLoaded: true,
+                        });
+                        setSelectedKunde(fullyLoaded);
+                        setImportResult(result);
+                        setLoadProgress('');
+
                     } catch (err) {
-                        console.error('Ordner laden:', err);
+                        console.error('Ordner laden/analysieren:', err);
+                        setLoadProgress('Fehler: ' + err.message);
                     }
                     setLoading(false);
                 }
             };
 
             const handleLoadAkte = async () => {
-                setLoading(true);
-                setLoadProgress('Starte Datenimport...');
+                // ═══ Daten wurden bereits in handleSelectKunde geladen! ═══
+                // Dieser Button dient jetzt nur noch als "Weiter"-Bestätigung
 
-                if (isDriveMode && selectedKunde && selectedKunde._driveFolderId) {
-                    // ═══ ECHTE GOOGLE DRIVE VERARBEITUNG ═══
+                if (isDriveMode && selectedKunde && selectedKunde._fullyLoaded) {
+                    // Daten sind schon da → direkt weiter
+                    navigateTo('geladen');
+                    return;
+                }
+
+                // ═══ DEMO-MODUS oder Daten noch nicht geladen ═══
+                setLoading(true);
+                if (!isDriveMode) {
+                    setLoadProgress('Demo-Daten werden geladen...');
+                    await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+                    setImportResult(null);
+                } else if (selectedKunde && selectedKunde._driveFolderId && !selectedKunde._fullyLoaded) {
+                    // Sicherheits-Fallback: Daten nachladen falls handleSelectKunde fehlschlug
+                    setLoadProgress('Daten werden nachgeladen...');
                     try {
                         var result = await window.FileProcessor.processKundenAkte(
                             selectedKunde,
                             function(msg) { setLoadProgress(msg); }
                         );
-
-                        // Positionen in LV_POSITIONEN injizieren
                         if (result.positionen && result.positionen.length > 0) {
-                            var kundeKey = selectedKunde._driveFolderId || selectedKunde.id || 'drive_import';
+                            var kundeKey = selectedKunde._driveFolderId || selectedKunde.id;
                             LV_POSITIONEN[kundeKey] = result.positionen;
-                            // Auch unter der kunde.id verfügbar machen
-                            if (selectedKunde.id && selectedKunde.id !== kundeKey) {
-                                LV_POSITIONEN[selectedKunde.id] = result.positionen;
-                            }
                         }
-
-                        // Kundendaten in selectedKunde mergen
                         var kd = result.kundendaten || {};
                         var updatedKunde = Object.assign({}, selectedKunde, {
                             auftraggeber: kd.auftraggeber || selectedKunde.auftraggeber || selectedKunde.name,
                             adresse: kd.adresse || kd.baumassnahme || selectedKunde.adresse || '',
-                            baumassnahme: kd.baumassnahme || selectedKunde.baumassnahme || '',
                             bauleitung: kd.bauleitung || selectedKunde.bauleitung || '',
-                            bl_telefon: kd.bl_telefon || selectedKunde.bl_telefon || '',
-                            bl_email: kd.bl_email || selectedKunde.bl_email || '',
+                            bl_telefon: kd.bl_telefon || '', bl_email: kd.bl_email || '',
                             architekt: kd.architekt || selectedKunde.architekt || '',
-                            arch_telefon: kd.arch_telefon || selectedKunde.arch_telefon || '',
-                            arch_email: kd.arch_email || selectedKunde.arch_email || '',
-                            // Räume aus dem Import
+                            arch_telefon: kd.arch_telefon || '', arch_email: kd.arch_email || '',
+                            ag_adresse: kd.ag_adresse || '', ag_telefon: kd.ag_telefon || '', ag_email: kd.ag_email || '',
                             raeume: (result.raeume || []).map(function(r, idx) {
-                                return {
-                                    id: 'import_' + idx,
-                                    nr: String(idx + 1),
-                                    bez: r,
-                                    geschoss: r.match(/EG|OG|KG|DG|UG/i) ? r.match(/EG|OG|KG|DG|UG/i)[0].toUpperCase() : '',
-                                    fliesenhoehe: 0,
-                                    raumhoehe: 0,
-                                    waende: [{ id: 'A', l: '' }, { id: 'B', l: '' }, { id: 'C', l: '' }, { id: 'D', l: '' }]
-                                };
+                                if (typeof r === 'string') return { id: 'import_' + idx, nr: String(idx+1), bez: r, geschoss: '', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] };
+                                return Object.assign({ id: 'import_' + idx }, r, { nr: r.nr || String(idx+1) });
                             }),
-                            // Zeichnungen verfügbar machen
                             zeichnungen: result.zeichnungen || [],
-                            // Import-Metadaten
                             _importResult: result,
                             _lvPositionenKey: selectedKunde._driveFolderId || selectedKunde.id,
+                            _fullyLoaded: true,
                         });
                         setSelectedKunde(updatedKunde);
                         setImportResult(result);
-
-                        setLoadProgress('Import abgeschlossen! ' + (result.positionen || []).length + ' Positionen erkannt');
                     } catch (err) {
-                        console.error('Import-Fehler:', err);
-                        setLoadProgress('Fehler beim Import: ' + err.message);
+                        console.error('Nachladen fehlgeschlagen:', err);
                         setImportResult({ fehler: [{ datei: 'Import', fehler: err.message }], positionen: [], quellenInfo: [] });
                     }
-                } else {
-                    // ═══ DEMO-MODUS ═══
-                    setLoadProgress('Demo-Daten werden geladen...');
-                    await new Promise(function(resolve) { setTimeout(resolve, 1500); });
-                    setImportResult(null);
                 }
-
                 setLoading(false);
                 navigateTo('geladen');
             };
