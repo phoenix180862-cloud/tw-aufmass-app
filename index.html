@@ -96,57 +96,46 @@
 
     // ── KI-API Hilfsfunktion (mit API-Key) ──
     try { window.callAnthropicAPI = async function(messages, maxTokens) {
-        // API-Key aus Config oder localStorage
+        // KI bereits deaktiviert? → sofort raus
+        if (window._anthropicDisabled) return null;
+
         var apiKey = ANTHROPIC_CONFIG.API_KEY || localStorage.getItem('anthropic_api_key') || '';
         if (!apiKey) {
-            // Wurde der Key in dieser Session bereits abgelehnt?
-            if (window._anthropicKeyDeclined) {
-                return null;
-            }
-            // User nach Key fragen (einmalig pro Session)
-            apiKey = prompt('Anthropic API-Key wird benötigt für KI-Analyse.\n\nBitte API-Key eingeben (sk-ant-...):\n\nErstelle einen Key unter:\nhttps://platform.claude.com/settings/keys\n\nOhne Key wird der Regex-Parser verwendet (weniger genau).\nAbbrechen = ohne KI fortfahren.');
-            if (apiKey && apiKey.trim()) {
-                apiKey = apiKey.trim();
-                localStorage.setItem('anthropic_api_key', apiKey);
-                console.log('API-Key gespeichert');
-            } else {
-                console.warn('Kein API-Key → KI-Analyse nicht verfügbar, Regex wird verwendet');
-                window._anthropicKeyDeclined = true;
-                return null;
-            }
-        }
-
-        var headers = {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-        };
-
-        var response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                model: ANTHROPIC_CONFIG.MODEL,
-                max_tokens: maxTokens || 8000,
-                messages: messages,
-            })
-        });
-
-        var data = await response.json();
-
-        if (data.error) {
-            console.error('Anthropic API Fehler:', data.error.type, data.error.message);
-            // Bei ungültigem Key: gespeicherten Key löschen
-            if (data.error.type === 'authentication_error') {
-                localStorage.removeItem('anthropic_api_key');
-                alert('Anthropic API-Key ungültig!\n\n' + data.error.message + '\n\nBitte prüfe den Key unter:\nhttps://console.anthropic.com/settings/keys');
-            }
+            window._anthropicDisabled = true;
             return null;
         }
 
-        var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
-        return textContent;
+        try {
+            var response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true',
+                },
+                body: JSON.stringify({
+                    model: ANTHROPIC_CONFIG.MODEL,
+                    max_tokens: maxTokens || 8000,
+                    messages: messages,
+                })
+            });
+
+            var data = await response.json();
+
+            if (data.error) {
+                console.warn('KI-Fehler:', data.error.type, data.error.message);
+                // Bei Auth-Fehler: KI STILL deaktivieren, kein Popup
+                window._anthropicDisabled = true;
+                return null;
+            }
+
+            var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
+            return textContent;
+        } catch (fetchErr) {
+            console.warn('KI-Netzwerkfehler:', fetchErr.message);
+            return null;
+        }
     };
     } catch(apiSetupErr) { console.warn('API setup:', apiSetupErr); window.callAnthropicAPI = async function() { return null; }; }
 
