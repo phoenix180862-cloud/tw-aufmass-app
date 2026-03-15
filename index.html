@@ -11449,104 +11449,297 @@
 
                     // ══════════════════════════════════════
                     // PDF: EINE DATEI MIT ALLEM
+                    // Keine Position darf ueber Seitenumbruch laufen!
                     // ══════════════════════════════════════
                     try {
                     var jspdfLib = window.jspdf;
                     if (jspdfLib) {
                         var jsPDF = jspdfLib.jsPDF;
                         var pdf = new jsPDF('p', 'mm', 'a4');
+                        var PAGE_BOTTOM = 275; // Max Y bevor Seitenumbruch (Platz fuer Fusszeile)
+                        var PAGE_TOP = 40; // Y nach Header auf neuer Seite
+
+                        // ── Header-Funktion (fuer jede Seite ausser Deckblatt) ──
                         var drawH = function(t) {
                             pdf.setDrawColor(196,30,30); pdf.setLineWidth(1.5); pdf.line(14,12,196,12);
-                            pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(196,30,30); pdf.text('Thomas Willwacher',14,17);
-                            pdf.setTextColor(40,40,40); pdf.text('Fliesenlegermeister e.K.',55,17);
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(196,30,30);
+                            pdf.text('Thomas Willwacher', 14, 17);
+                            pdf.setTextColor(40,40,40); pdf.text('Fliesenlegermeister e.K.', 55, 17);
                             pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(130,130,130);
-                            pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101',196,17,{align:'right'});
-                            pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3); pdf.line(14,19.5,196,19.5);
-                            pdf.setFont('helvetica','bold'); pdf.setFontSize(13); pdf.setTextColor(30,30,30); pdf.text(t,14,27);
-                            pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(80,80,80); pdf.text(kundenName+'  |  '+datum,14,32);
+                            pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101', 196, 17, {align:'right'});
+                            pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3); pdf.line(14, 19.5, 196, 19.5);
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(13); pdf.setTextColor(30,30,30);
+                            pdf.text(t, 14, 27);
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(80,80,80);
+                            pdf.text(kundenName + '  |  ' + datum, 14, 32);
                         };
 
+                        // ── Hilfsfunktion: Neue Seite wenn noetig ──
+                        var ensureSpace = function(currentY, needed, headerTitle) {
+                            if (currentY + needed > PAGE_BOTTOM) {
+                                pdf.addPage();
+                                drawH(headerTitle);
+                                return PAGE_TOP;
+                            }
+                            return currentY;
+                        };
+
+                        // ═══════════════════════════════════
                         // DECKBLATT
-                        pdf.setDrawColor(196,30,30); pdf.setLineWidth(1.5); pdf.line(14,40,196,40);
-                        pdf.setFont('helvetica','bold'); pdf.setFontSize(28); pdf.setTextColor(30,30,30); pdf.text('AUFMASS',105,62,{align:'center'});
-                        pdf.setFontSize(14); pdf.setTextColor(196,30,30); pdf.text(kundenName,105,75,{align:'center'});
-                        pdf.setLineWidth(0.5); pdf.line(50,80,160,80);
-                        var dy=95;
-                        [['Auftraggeber',(kunde && kunde.auftraggeber)||''],['Baustelle',(kunde && kunde.adresse)||''],['Bauleitung',(kunde && kunde.bauleitung)||''],['Architekt',(kunde && kunde.architekt)||''],['Datum',datum],['Raeume',String(gesamtliste.length)],['Positionen',String(sortedPositions.length)]].forEach(function(r){
-                            pdf.setFont('helvetica','normal'); pdf.setFontSize(10); pdf.setTextColor(120,120,120); pdf.text(r[0]+':',40,dy);
-                            pdf.setFont('helvetica','bold'); pdf.setTextColor(30,30,30); pdf.text(r[1],85,dy); dy+=7;
+                        // ═══════════════════════════════════
+                        pdf.setDrawColor(196,30,30); pdf.setLineWidth(1.5); pdf.line(14, 40, 196, 40);
+                        pdf.setFont('helvetica','bold'); pdf.setFontSize(28); pdf.setTextColor(30,30,30);
+                        pdf.text('AUFMASS', 105, 62, {align:'center'});
+                        pdf.setFontSize(14); pdf.setTextColor(196,30,30);
+                        pdf.text(kundenName, 105, 75, {align:'center'});
+                        pdf.setLineWidth(0.5); pdf.line(50, 80, 160, 80);
+                        var dy = 95;
+                        var deckblattRows = [
+                            ['Auftraggeber', (kunde && kunde.auftraggeber) || ''],
+                            ['Baustelle', (kunde && kunde.adresse) || ''],
+                            ['Bauleitung', (kunde && kunde.bauleitung) || ''],
+                            ['Architekt', (kunde && kunde.architekt) || ''],
+                            ['Datum', datum],
+                            ['Raeume', String(gesamtliste.length)],
+                            ['Positionen', String(sortedPositions.length)]
+                        ];
+                        deckblattRows.forEach(function(r) {
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(10); pdf.setTextColor(120,120,120);
+                            pdf.text(r[0] + ':', 40, dy);
+                            pdf.setFont('helvetica','bold'); pdf.setTextColor(30,30,30);
+                            pdf.text(r[1].substring(0, 70), 85, dy);
+                            dy += 7;
                         });
-                        pdf.setDrawColor(196,30,30); pdf.setLineWidth(0.8); pdf.line(14,250,196,250);
-                        pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(196,30,30); pdf.text('Thomas Willwacher',14,257);
-                        pdf.setTextColor(30,30,30); pdf.text('Fliesenlegermeister e.K.',55,257);
+                        // Fusszeile Deckblatt
+                        pdf.setDrawColor(196,30,30); pdf.setLineWidth(0.8); pdf.line(14, 250, 196, 250);
+                        pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(196,30,30);
+                        pdf.text('Thomas Willwacher', 14, 257);
+                        pdf.setTextColor(30,30,30); pdf.text('Fliesenlegermeister e.K.', 55, 257);
                         pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(100,100,100);
-                        pdf.text('Flurweg 14a, 56472 Nisterau  |  Tel. 02661-63101  |  0170-2024161',14,263);
+                        pdf.text('Flurweg 14a, 56472 Nisterau  |  Tel. 02661-63101  |  0170-2024161', 14, 263);
 
-                        // GESAMTMASSEN
+                        // ═══════════════════════════════════
+                        // GESAMTMASSEN-UEBERSICHT
+                        // ═══════════════════════════════════
                         pdf.addPage(); drawH('Gesamtmassen - Uebersicht');
-                        var gy=40;
-                        sortedPositions.forEach(function(p){
-                            if(gy>260){pdf.addPage();drawH('Gesamtmassen (Forts.)');gy=40;}
-                            pdf.setFillColor(244,244,244);pdf.rect(14,gy-3,182,7,'F');
-                            pdf.setFillColor(196,30,30);pdf.rect(14,gy-3,2,7,'F');
-                            pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(196,30,30);pdf.text('Pos. '+p.pos,19,gy+1);
-                            pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,60,60);pdf.text(p.bez.substring(0,70),38,gy+1);
-                            pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(196,30,30);pdf.text(fmtDe(p.total)+' '+p.einheit,194,gy+1,{align:'right'});
-                            gy+=7;
-                            pdf.setFont('helvetica','normal');pdf.setFontSize(7);
-                            p.rooms.forEach(function(r){if(gy>275){pdf.addPage();drawH('Gesamtmassen (Forts.)');gy=40;}pdf.setTextColor(130,130,130);pdf.text(r.raum,24,gy);pdf.setTextColor(60,60,60);pdf.text(fmtDe(r.erg)+' '+p.einheit,130,gy,{align:'right'});gy+=3.5;});
-                            gy+=3;
-                        });
+                        var gy = PAGE_TOP;
 
-                        // RAUMBLAETTER
-                        gesamtliste.forEach(function(room,ri){
-                            pdf.addPage();
-                            var rNr=String(ri+1).padStart(2,'0');
-                            drawH('Raumblatt '+rNr+': '+room.raumName);
-                            pdf.setDrawColor(196,30,30);pdf.setLineWidth(0.5);pdf.line(14,35,196,35);
-                            var ry=42;
-                            var posE=(room.positionen||[]).filter(function(p){return p.ergebnis>0;});
-                            posE.forEach(function(pos){
-                                if(ry>245){pdf.addPage();drawH('Raumblatt '+rNr+' (Forts.)');ry=40;}
-                                // Kopf
-                                pdf.setFillColor(244,244,244);pdf.rect(14,ry-3,182,13,'F');
-                                pdf.setFillColor(196,30,30);pdf.rect(14,ry-3,2.5,13,'F');
-                                pdf.setFont('helvetica','bold');pdf.setFontSize(11);pdf.setTextColor(196,30,30);pdf.text('Pos. '+pos.pos,19,ry+1);
-                                pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(60,60,60);pdf.text(pos.bez.substring(0,85),19,ry+6);
-                                pdf.setFont('helvetica','bold');pdf.setFontSize(12);pdf.setTextColor(196,30,30);pdf.text(fmtDe(pos.ergebnis)+' '+pos.einheit,194,ry+1,{align:'right'});
-                                ry+=16;
-                                // RW Header
-                                pdf.setFont('helvetica','normal');pdf.setFontSize(6.5);pdf.setTextColor(170,170,170);
-                                pdf.text('+/-',17,ry);pdf.text('Bezeichnung',24,ry);pdf.text('Formel',92,ry);pdf.text('Ergebnis',194,ry,{align:'right'});
-                                pdf.setDrawColor(220,220,220);pdf.setLineWidth(0.2);pdf.line(16,ry+1,194,ry+1);ry+=4;
-                                // RW Zeilen
-                                var isM=pos.hasManualRW&&pos.manualRechenweg&&pos.manualRechenweg.length>0;
-                                if(isM){pos.manualRechenweg.forEach(function(z){if(ry>272){pdf.addPage();drawH(room.raumName+' (Forts.)');ry=40;}var a=z.vorzeichen==='minus';if(a){pdf.setFillColor(249,236,235);pdf.rect(16,ry-2,178,5,'F');}pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(a?180:39,a?40:130,a?40:72);pdf.text(a?'-':'+',18,ry);pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,60,60);pdf.text(z.text.substring(0,55),24,ry);pdf.setDrawColor(240,240,240);pdf.setLineWidth(0.1);pdf.line(24,ry+1.5,194,ry+1.5);ry+=5;});}
-                                else if(pos.rechenwegSteps&&pos.rechenwegSteps.length>0){pos.rechenwegSteps.forEach(function(st){if(st.type==='vob-info'||st.type==='total')return;if(ry>272){pdf.addPage();drawH(room.raumName+' (Forts.)');ry=40;}var a=st.type==='abzug';if(a){pdf.setFillColor(249,236,235);}else{pdf.setFillColor(234,247,239);}pdf.rect(16,ry-2,178,5,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(a?180:39,a?40:130,a?40:72);pdf.text(a?'-':'+',18,ry);pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(60,60,60);pdf.text((st.label||'').substring(0,42),24,ry);pdf.setFont('courier','normal');pdf.setFontSize(7);pdf.setTextColor(100,100,100);if(st.formel)pdf.text(st.formel.substring(0,32),92,ry);pdf.setFont('helvetica','bold');pdf.setFontSize(7.5);pdf.setTextColor(a?180:50,a?40:50,a?40:50);if(st.ergebnis)pdf.text(st.ergebnis,194,ry,{align:'right'});pdf.setDrawColor(240,240,240);pdf.setLineWidth(0.1);pdf.line(24,ry+1.5,194,ry+1.5);ry+=5;});}
-                                // Ergebnis
-                                ry+=1;pdf.setDrawColor(196,30,30);pdf.setLineWidth(0.6);pdf.line(110,ry,194,ry);ry+=4;
-                                pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(30,30,30);pdf.text('ERGEBNIS:',112,ry);
-                                pdf.setTextColor(196,30,30);pdf.text(fmtDe(pos.ergebnis)+' '+pos.einheit,194,ry,{align:'right'});
-                                pdf.setLineWidth(0.6);pdf.line(110,ry+2,194,ry+2);ry+=10;
+                        sortedPositions.forEach(function(p) {
+                            // Hoehe fuer diese Position vorab berechnen:
+                            // Header (7mm) + Raeume (je 3.5mm) + Abstand (3mm)
+                            var posBlockHeight = 7 + (p.rooms.length * 3.5) + 3;
+
+                            // Passt der Block komplett auf die aktuelle Seite?
+                            gy = ensureSpace(gy, posBlockHeight, 'Gesamtmassen - Uebersicht (Forts.)');
+
+                            // Positions-Header
+                            pdf.setFillColor(244,244,244); pdf.rect(14, gy - 3, 182, 7, 'F');
+                            pdf.setFillColor(196,30,30); pdf.rect(14, gy - 3, 2, 7, 'F');
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(196,30,30);
+                            pdf.text('Pos. ' + p.pos, 19, gy + 1);
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); pdf.setTextColor(60,60,60);
+                            pdf.text(p.bez.substring(0, 70), 38, gy + 1);
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(196,30,30);
+                            pdf.text(fmtDe(p.total) + ' ' + p.einheit, 194, gy + 1, {align:'right'});
+                            gy += 7;
+
+                            // Raum-Zeilen
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(7);
+                            p.rooms.forEach(function(r) {
+                                pdf.setTextColor(130,130,130); pdf.text(r.raum, 24, gy);
+                                pdf.setTextColor(60,60,60); pdf.text(fmtDe(r.erg) + ' ' + p.einheit, 130, gy, {align:'right'});
+                                gy += 3.5;
                             });
-                            // Zusammenfassung
-                            if(ry>230){pdf.addPage();drawH(room.raumName+' Zusammenfassung');ry=40;}
-                            ry+=2;pdf.setDrawColor(196,30,30);pdf.setLineWidth(0.8);pdf.line(14,ry,196,ry);ry+=5;
-                            pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(30,30,30);pdf.text('Zusammenfassung: '+room.raumName,14,ry);ry+=7;
-                            pdf.setFillColor(196,30,30);pdf.rect(14,ry-3,182,7,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(255,255,255);
-                            pdf.text('Pos.',16,ry+1);pdf.text('Bezeichnung',30,ry+1);pdf.text('Einheit',145,ry+1);pdf.text('Menge',194,ry+1,{align:'right'});ry+=7;
-                            posE.forEach(function(p,pi){if(ry>275){pdf.addPage();ry=20;}if(pi%2===0){pdf.setFillColor(245,245,245);pdf.rect(14,ry-2.5,182,5.5,'F');}pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(196,30,30);pdf.text(p.pos,16,ry);pdf.setFont('helvetica','normal');pdf.setTextColor(50,50,50);pdf.text(p.bez.substring(0,65),30,ry);pdf.setTextColor(100,100,100);pdf.text(p.einheit,145,ry);pdf.setFont('helvetica','bold');pdf.setTextColor(196,30,30);pdf.text(fmtDe(p.ergebnis),194,ry,{align:'right'});ry+=5.5;});
+                            gy += 3;
                         });
 
-                        // Seitenzahlen
-                        var tp=pdf.internal.getNumberOfPages();
-                        for(var pg=1;pg<=tp;pg++){pdf.setPage(pg);pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(160,160,160);pdf.text('Seite '+pg+' von '+tp,196,287,{align:'right'});if(pg>1){pdf.text(kundenName,14,287);pdf.text(datum,105,287,{align:'center'});}}
+                        // ═══════════════════════════════════
+                        // RAUMBLAETTER
+                        // ═══════════════════════════════════
+                        gesamtliste.forEach(function(room, ri) {
+                            pdf.addPage();
+                            var rNr = String(ri + 1).padStart(2, '0');
+                            var raumTitle = 'Raumblatt ' + rNr + ': ' + room.raumName;
+                            drawH(raumTitle);
+                            pdf.setDrawColor(196,30,30); pdf.setLineWidth(0.5); pdf.line(14, 35, 196, 35);
+                            var ry = 42;
 
-                        pdf.save('Aufmass_Komplett_'+datumFile+'_'+safeName+'.pdf');
-                        // PDF-Blob für Drive-Upload erzeugen
+                            var posE = (room.positionen || []).filter(function(p) { return p.ergebnis > 0; });
+
+                            posE.forEach(function(pos) {
+                                // ── Hoehe des gesamten Positions-Blocks vorab berechnen ──
+                                var posHeader = 16; // Positions-Kopf
+                                var rwHeader = 4;   // Rechenweg-Spaltenheader
+                                var rwHeight = 0;   // Rechenweg-Zeilen
+
+                                var isM = pos.hasManualRW && pos.manualRechenweg && pos.manualRechenweg.length > 0;
+                                if (isM) {
+                                    rwHeight = (pos.manualRechenweg || []).length * 5;
+                                } else if (pos.rechenwegSteps && pos.rechenwegSteps.length > 0) {
+                                    rwHeight = pos.rechenwegSteps.filter(function(st) {
+                                        return st.type !== 'vob-info' && st.type !== 'total';
+                                    }).length * 5;
+                                }
+
+                                var ergebnisBlock = 15; // Ergebnis-Linie + Text + Abstand
+                                var totalBlockHeight = posHeader + rwHeader + rwHeight + ergebnisBlock;
+
+                                // ── Entscheidung: Passt der Block auf die aktuelle Seite? ──
+                                var freshPageSpace = PAGE_BOTTOM - PAGE_TOP; // ~235mm
+
+                                if (totalBlockHeight <= freshPageSpace && ry + totalBlockHeight > PAGE_BOTTOM) {
+                                    // Block passt auf eine frische Seite, aber nicht mehr auf aktuelle → neue Seite
+                                    pdf.addPage();
+                                    drawH(raumTitle + ' (Forts.)');
+                                    ry = PAGE_TOP;
+                                } else if (totalBlockHeight > freshPageSpace && ry > PAGE_TOP + 30) {
+                                    // Block ist sehr gross (passt nie auf eine Seite) UND wir sind nicht am Anfang
+                                    // → neue Seite starten, dann mit Seitenumbruch innerhalb
+                                    pdf.addPage();
+                                    drawH(raumTitle + ' (Forts.)');
+                                    ry = PAGE_TOP;
+                                }
+
+                                // ── Positions-Kopf zeichnen ──
+                                pdf.setFillColor(244,244,244); pdf.rect(14, ry - 3, 182, 13, 'F');
+                                pdf.setFillColor(196,30,30); pdf.rect(14, ry - 3, 2.5, 13, 'F');
+                                pdf.setFont('helvetica','bold'); pdf.setFontSize(11); pdf.setTextColor(196,30,30);
+                                pdf.text('Pos. ' + pos.pos, 19, ry + 1);
+                                pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(60,60,60);
+                                pdf.text(pos.bez.substring(0, 85), 19, ry + 6);
+                                pdf.setFont('helvetica','bold'); pdf.setFontSize(12); pdf.setTextColor(196,30,30);
+                                pdf.text(fmtDe(pos.ergebnis) + ' ' + pos.einheit, 194, ry + 1, {align:'right'});
+                                ry += posHeader;
+
+                                // ── Rechenweg-Header ──
+                                pdf.setFont('helvetica','normal'); pdf.setFontSize(6.5); pdf.setTextColor(170,170,170);
+                                pdf.text('+/-', 17, ry);
+                                pdf.text('Bezeichnung', 24, ry);
+                                pdf.text('Formel', 92, ry);
+                                pdf.text('Ergebnis', 194, ry, {align:'right'});
+                                pdf.setDrawColor(220,220,220); pdf.setLineWidth(0.2); pdf.line(16, ry + 1, 194, ry + 1);
+                                ry += rwHeader;
+
+                                // ── Rechenweg-Zeilen ──
+                                var drawRWZeile = function(isAbzug, label, formel, ergebnis) {
+                                    // Seitenumbruch NUR bei sehr langen Rechenwegen
+                                    if (ry + 5 > PAGE_BOTTOM) {
+                                        pdf.addPage();
+                                        drawH(raumTitle + ' (Forts.)');
+                                        ry = PAGE_TOP;
+                                    }
+                                    if (isAbzug) {
+                                        pdf.setFillColor(249,236,235); pdf.rect(16, ry - 2, 178, 5, 'F');
+                                    } else {
+                                        pdf.setFillColor(234,247,239); pdf.rect(16, ry - 2, 178, 5, 'F');
+                                    }
+                                    pdf.setFont('helvetica','bold'); pdf.setFontSize(9);
+                                    pdf.setTextColor(isAbzug ? 180 : 39, isAbzug ? 40 : 130, isAbzug ? 40 : 72);
+                                    pdf.text(isAbzug ? '-' : '+', 18, ry);
+                                    pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); pdf.setTextColor(60,60,60);
+                                    pdf.text((label || '').substring(0, 42), 24, ry);
+                                    if (formel) {
+                                        pdf.setFont('courier','normal'); pdf.setFontSize(7); pdf.setTextColor(100,100,100);
+                                        pdf.text(formel.substring(0, 32), 92, ry);
+                                    }
+                                    if (ergebnis) {
+                                        pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+                                        pdf.setTextColor(isAbzug ? 180 : 50, isAbzug ? 40 : 50, isAbzug ? 40 : 50);
+                                        pdf.text(ergebnis, 194, ry, {align:'right'});
+                                    }
+                                    pdf.setDrawColor(240,240,240); pdf.setLineWidth(0.1); pdf.line(24, ry + 1.5, 194, ry + 1.5);
+                                    ry += 5;
+                                };
+
+                                if (isM) {
+                                    (pos.manualRechenweg || []).forEach(function(z) {
+                                        drawRWZeile(z.vorzeichen === 'minus', z.text, '', '');
+                                    });
+                                } else if (pos.rechenwegSteps && pos.rechenwegSteps.length > 0) {
+                                    pos.rechenwegSteps.forEach(function(st) {
+                                        if (st.type === 'vob-info' || st.type === 'total') return;
+                                        drawRWZeile(st.type === 'abzug', st.label, st.formel, st.ergebnis);
+                                    });
+                                }
+
+                                // ── Ergebnis-Block ──
+                                // Sicherheit: Ergebnis nie allein auf neuer Seite ohne Kontext
+                                if (ry + 10 > PAGE_BOTTOM) {
+                                    pdf.addPage();
+                                    drawH(raumTitle + ' (Forts.)');
+                                    ry = PAGE_TOP;
+                                }
+                                ry += 1;
+                                pdf.setDrawColor(196,30,30); pdf.setLineWidth(0.6); pdf.line(110, ry, 194, ry);
+                                ry += 4;
+                                pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(30,30,30);
+                                pdf.text('ERGEBNIS:', 112, ry);
+                                pdf.setTextColor(196,30,30);
+                                pdf.text(fmtDe(pos.ergebnis) + ' ' + pos.einheit, 194, ry, {align:'right'});
+                                pdf.setLineWidth(0.6); pdf.line(110, ry + 2, 194, ry + 2);
+                                ry += 10;
+                            });
+
+                            // ── Zusammenfassung pro Raum ──
+                            var summaryHeight = 14 + (posE.length * 5.5) + 5; // Header + Zeilen + Puffer
+                            ry = ensureSpace(ry, Math.min(summaryHeight, 60), raumTitle + ' - Zusammenfassung');
+
+                            ry += 2;
+                            pdf.setDrawColor(196,30,30); pdf.setLineWidth(0.8); pdf.line(14, ry, 196, ry);
+                            ry += 5;
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(30,30,30);
+                            pdf.text('Zusammenfassung: ' + room.raumName, 14, ry);
+                            ry += 7;
+
+                            // Tabellen-Header
+                            pdf.setFillColor(196,30,30); pdf.rect(14, ry - 3, 182, 7, 'F');
+                            pdf.setFont('helvetica','bold'); pdf.setFontSize(8); pdf.setTextColor(255,255,255);
+                            pdf.text('Pos.', 16, ry + 1);
+                            pdf.text('Bezeichnung', 30, ry + 1);
+                            pdf.text('Einheit', 145, ry + 1);
+                            pdf.text('Menge', 194, ry + 1, {align:'right'});
+                            ry += 7;
+
+                            // Zusammenfassung-Zeilen
+                            posE.forEach(function(p, pi) {
+                                if (ry + 5.5 > PAGE_BOTTOM) {
+                                    pdf.addPage();
+                                    drawH(raumTitle + ' - Zusammenfassung (Forts.)');
+                                    ry = PAGE_TOP;
+                                }
+                                if (pi % 2 === 0) {
+                                    pdf.setFillColor(245,245,245); pdf.rect(14, ry - 2.5, 182, 5.5, 'F');
+                                }
+                                pdf.setFont('helvetica','bold'); pdf.setFontSize(8); pdf.setTextColor(196,30,30);
+                                pdf.text(p.pos, 16, ry);
+                                pdf.setFont('helvetica','normal'); pdf.setTextColor(50,50,50);
+                                pdf.text(p.bez.substring(0, 65), 30, ry);
+                                pdf.setTextColor(100,100,100); pdf.text(p.einheit, 145, ry);
+                                pdf.setFont('helvetica','bold'); pdf.setTextColor(196,30,30);
+                                pdf.text(fmtDe(p.ergebnis), 194, ry, {align:'right'});
+                                ry += 5.5;
+                            });
+                        });
+
+                        // ═══════════════════════════════════
+                        // Seitenzahlen auf allen Seiten
+                        // ═══════════════════════════════════
+                        var tp = pdf.internal.getNumberOfPages();
+                        for (var pg = 1; pg <= tp; pg++) {
+                            pdf.setPage(pg);
+                            pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(160,160,160);
+                            pdf.text('Seite ' + pg + ' von ' + tp, 196, 287, {align:'right'});
+                            if (pg > 1) {
+                                pdf.text(kundenName, 14, 287);
+                                pdf.text(datum, 105, 287, {align:'center'});
+                            }
+                        }
+
+                        pdf.save('Aufmass_Komplett_' + datumFile + '_' + safeName + '.pdf');
+                        // PDF-Blob fuer Drive-Upload erzeugen
                         var pdfBlob = pdf.output('blob');
                     }
-                    } catch(pdfErr) { console.error('PDF:',pdfErr); alert('PDF Fehler: '+pdfErr.message); }
+                    } catch(pdfErr) { console.error('PDF:', pdfErr); alert('PDF Fehler: ' + pdfErr.message); }
 
                     // ══════════════════════════════════════
                     // GOOGLE DRIVE UPLOAD
