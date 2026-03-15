@@ -7202,10 +7202,12 @@
                                                 fliesenhoehe: lastRaumData.hoehe,
                                                 raumhoehe: lastRaumData.raumhoehe || lastRaumData.hoehe || 0,
                                                 abdichtungshoehe: lastRaumData.abdichtungshoehe || 0,
+                                                sockelhoehe: lastRaumData.sockelhoehe || 0,
                                                 fliesenUmlaufend: lastRaumData.fliesenUmlaufend !== undefined ? lastRaumData.fliesenUmlaufend : true,
                                                 abdichtungUmlaufend: lastRaumData.abdichtungUmlaufend !== undefined ? lastRaumData.abdichtungUmlaufend : true,
                                                 fliesenDeckenhoch: lastRaumData.fliesenDeckenhoch || false,
                                                 abdichtungDeckenhoch: lastRaumData.abdichtungDeckenhoch || false,
+                                                bodenPlusTuerlaibung: lastRaumData.bodenPlusTuerlaibung || false,
                                                 abzuege: (lastRaumData.abzuege || []).map(function(a) { return Object.assign({}, a, { id: Date.now() + Math.random() }); }),
                                                 material: lastRaumData.material || '',
                                                 sonstiges: bgSonstiges,
@@ -7214,6 +7216,8 @@
                                                 sonstigeDefaults: lastRaumData.sonstigeDefaults || null,
                                                 tuerenEntries: lastRaumData.tuerenEntries || null,
                                                 fensterEntries: lastRaumData.fensterEntries || null,
+                                                // Komplette Masse für Länge/Breite/Höhen-Übernahme
+                                                _masse: lastRaumData.masse || null,
                                             };
                                             setShowBaugleich(false);
                                             setActiveRaum(baugleichRaum);
@@ -7572,8 +7576,22 @@
             const [masse, setMasse] = useState(() => {
                 // ═══ RE-EDIT aus Gesamtliste: Gespeicherte Maße direkt übernehmen ═══
                 if (reEdit && reEdit.masse) return { ...reEdit.masse };
+                // ═══ BAUGLEICH: _masse direkt vom Vorraum übernehmen ═══
+                if (raum && raum._masse) {
+                    return {
+                        laenge: raum._masse.laenge || '',
+                        breite: raum._masse.breite || '',
+                        hoehe: raum._masse.hoehe || '',
+                        raumhoehe: raum._masse.raumhoehe || '',
+                        abdichtungshoehe: raum._masse.abdichtungshoehe || '',
+                        sockelhoehe: raum._masse.sockelhoehe || '',
+                        bodenManual: raum._masse.bodenManual || '',
+                    };
+                }
                 if (raum) {
-                    if (hasData && raum.waende.length === 4) {
+                    // Wände mit TATSÄCHLICHEN Werten vorhanden?
+                    var waendeHaveValues = raum.waende && raum.waende.length > 0 && raum.waende.some(function(w) { return w.l && parseMass(w.l) > 0; });
+                    if (hasData && waendeHaveValues && raum.waende.length === 4) {
                         return {
                             laenge: formatMass(raum.waende[0].l), breite: formatMass(raum.waende[1].l),
                             hoehe: formatMass(raum.fliesenhoehe || raum.hoehe || ''),
@@ -7584,10 +7602,10 @@
                         };
                     }
                     // Fallback: Höhen aus Raum oder lastRaumData, Länge/Breite aus lastRaumData.masse
-                    var fallbackMasse = (lastRaumData && lastRaumData.masse) || {};
+                    var fallbackMasse = (raum && raum._masse) || (lastRaumData && lastRaumData.masse) || {};
                     return {
-                        laenge: raum.waende && raum.waende.length > 0 ? formatMass(raum.waende[0].l) : (fallbackMasse.laenge || ''),
-                        breite: raum.waende && raum.waende.length > 1 ? formatMass(raum.waende[1].l) : (fallbackMasse.breite || ''),
+                        laenge: (waendeHaveValues && raum.waende.length > 0) ? formatMass(raum.waende[0].l) : (fallbackMasse.laenge || ''),
+                        breite: (waendeHaveValues && raum.waende.length > 1) ? formatMass(raum.waende[1].l) : (fallbackMasse.breite || ''),
                         hoehe: raum.fliesenhoehe ? formatMass(raum.fliesenhoehe) : (raum.hoehe ? formatMass(raum.hoehe) : (fallbackMasse.hoehe || '')),
                         raumhoehe: raum.raumhoehe ? formatMass(raum.raumhoehe) : (raum.hoehe ? formatMass(raum.hoehe) : (fallbackMasse.raumhoehe || '')),
                         abdichtungshoehe: raum.abdichtungshoehe ? formatMass(raum.abdichtungshoehe) : (fallbackMasse.abdichtungshoehe || ''),
@@ -12164,8 +12182,10 @@
                 const rState = (roomResult && roomResult.raumState) || {};
                 // Wandmaße: aus raumState.wandMasse ODER aus masse.laenge/breite aufbauen
                 var savedWaende = (rState.wandMasse || []).map(function(w) { return { id: w.id, l: w.l }; });
-                // WENN wandMasse leer aber Länge/Breite vorhanden → 4 Wände generieren
-                if (savedWaende.length === 0 && (m.laenge || m.breite)) {
+                // Prüfe ob Wände TATSÄCHLICH Werte haben (nicht nur leere Einträge)
+                var waendeHaveValues = savedWaende.some(function(w) { return w.l && parseMass(w.l) > 0; });
+                // WENN wandMasse leer/ohne Werte ABER Länge/Breite vorhanden → 4 Wände generieren
+                if (!waendeHaveValues && (m.laenge || m.breite)) {
                     savedWaende = [
                         { id: 'A', l: m.laenge || '' },
                         { id: 'B', l: m.breite || '' },
