@@ -8273,8 +8273,8 @@
             const buildRechenweg = (pos) => {
                 const steps = [];
                 const kat = pos.kategorie;
-                const isAbdWand = kat === 'abdichtung' && (pos.tags && pos.tags.includes)('wand');
-                const isAbdBoden = kat === 'abdichtung' && (pos.tags && pos.tags.includes)('boden');
+                const isAbdWand = kat === 'abdichtung' && (pos.tags && pos.tags.includes('wand'));
+                const isAbdBoden = kat === 'abdichtung' && (pos.tags && pos.tags.includes('boden'));
 
                 // ── WAND (Fliesen) ──
                 if (kat === 'wand') {
@@ -8532,7 +8532,7 @@
                     const silikonTotal = steps.filter(s => s.sign).reduce((s, st) => s + (st.value || 0) * (st.sign || 0), 0);
                     steps.push({ label: 'ERGEBNIS', formel: '', ergebnis: fmtDe(silikonTotal) + ' m', type: 'total', value: silikonTotal });
 
-                } else if (kat === 'dichtband' || kat === 'manschette' || (kat === 'abdichtung' && (pos.tags && pos.tags.includes)('dichtband')) || (kat === 'abdichtung' && (pos.tags && pos.tags.includes)('manschette'))) {
+                } else if (kat === 'dichtband' || kat === 'manschette' || (kat === 'abdichtung' && (pos.tags && pos.tags.includes('dichtband'))) || (kat === 'abdichtung' && (pos.tags && pos.tags.includes('manschette')))) {
                     if (pos.einheit === 'm') {
                         // ── DICHTBAND (m) ──
                         // Gleiche Struktur wie Dehnungsfugen, aber mit Abdichtungshöhe + ALLE Türen
@@ -8825,8 +8825,8 @@
                     case 'sockel':
                         return sockelErgebnis;
                     case 'abdichtung':
-                        if ((pos.tags && pos.tags.includes)('boden')) return vobRound(Math.max(0, bodenBasis - posSonstAbzugSum + posSonstZurechSum));
-                        if ((pos.tags && pos.tags.includes)('wand')) {
+                        if ((pos.tags && pos.tags.includes('boden'))) return vobRound(Math.max(0, bodenBasis - posSonstAbzugSum + posSonstZurechSum));
+                        if ((pos.tags && pos.tags.includes('wand'))) {
                             const useH = AH > 0 ? AH : H;
                             const useFlaeche = AH > 0 ? abdichtungWandflaeche : wandflaeche;
                             // Abzüge mit Höhenüberschreitungs-Logik für Abdichtung
@@ -8856,7 +8856,7 @@
                             aZurech += posSonstZurechSum;
                             return vobRound(Math.max(0, useFlaeche - aAbzug + aZurech));
                         }
-                        if ((pos.tags && pos.tags.includes)('dichtband') && pos.einheit === 'm') {
+                        if ((pos.tags && pos.tags.includes('dichtband')) && pos.einheit === 'm') {
                             const umf = isMultiWall ? perimeter : 2 * (L + B);
                             const useAH = AH > 0 ? AH : H;
                             const raumEck = isMultiWall ? wandMasse.length : 4;
@@ -8865,14 +8865,14 @@
                             tueren.forEach(t => { db += parseMass(t.tiefe)*2; });
                             return vobRound(db);
                         }
-                        if ((pos.tags && pos.tags.includes)('dichtband') && (pos.einheit === 'Stk' || pos.einheit === 'St')) {
+                        if ((pos.tags && pos.tags.includes('dichtband')) && (pos.einheit === 'Stk' || pos.einheit === 'St')) {
                             // Dichtband Ecken
                             let ecken = isMultiWall ? wandMasse.length : 4;
                             tueren.forEach(t => { if (t.hatLaibung && parseMass(t.tiefe) > 0) ecken += 2; });
                             calcFenster.forEach(f => { if (f.hatLaibung && parseMass(f.tiefe) > 0) ecken += 4; });
                             return ecken;
                         }
-                        if ((pos.tags && pos.tags.includes)('manschette')) return 0;
+                        if ((pos.tags && pos.tags.includes('manschette'))) return 0;
                         return 0;
                     case 'silikon': {
                         // Auto-Berechnung (NUR Raum-Innenecken!)
@@ -10585,7 +10585,7 @@
                                                     <div className="rechenweg-container" style={{borderLeftColor:'var(--accent-orange)'}}>
                                                         <div className="rechenweg-header">
                                                             <span className="rechenweg-badge" style={{background:'rgba(230,126,34,0.12)', color:'var(--accent-orange)'}}>✏️ Rechenweg bearbeiten</span>
-                                                            <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{(pos.kategorie && pos.kategorie.toUpperCase)() || '—'}</span>
+                                                            <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{(pos.kategorie && pos.kategorie.toUpperCase()) || '—'}</span>
                                                         </div>
                                                         {editSteps.map((step, idx) => {
                                                             const stepVal = parseFormel(step.formel);
@@ -10663,7 +10663,7 @@
                                                     <div className="rechenweg-container">
                                                         <div className="rechenweg-header">
                                                             <span className="rechenweg-badge">VOB/C DIN 18352</span>
-                                                            <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{(pos.kategorie && pos.kategorie.toUpperCase)() || '—'}</span>
+                                                            <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{(pos.kategorie && pos.kategorie.toUpperCase()) || '—'}</span>
                                                         </div>
                                                         {rwSteps.map((step, idx) => (
                                                             <div key={idx} className={`rechenweg-step ${step.type || ''}`}>
@@ -11639,7 +11639,7 @@
                                                     <div className="gl-pos-body">
                                                         <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'6px', display:'flex', gap:'6px', alignItems:'center'}}>
                                                             <span style={{padding:'1px 6px', borderRadius:'3px', background:'rgba(230,126,34,0.1)', color:'var(--accent-orange)', fontSize:'10px', fontWeight:600}}>
-                                                                {(pos.kategorie && pos.kategorie.toUpperCase)() || '—'}
+                                                                {(pos.kategorie && pos.kategorie.toUpperCase()) || '—'}
                                                             </span>
                                                             {isManual && <span style={{padding:'1px 6px', borderRadius:'3px', background:'rgba(155,89,182,0.12)', color:'#9b59b6', fontSize:'10px', fontWeight:600}}>✏️ Manuell</span>}
                                                             {hasEditedRW && <span style={{padding:'1px 6px', borderRadius:'3px', background:'rgba(230,126,34,0.12)', color:'var(--accent-orange)', fontSize:'10px', fontWeight:600}}>✏️ Bearbeitet</span>}
@@ -11648,7 +11648,7 @@
                                                         {isManual ? (
                                                             <div>
                                                                 {pos.manualRechenweg.map((z, zi) => {
-                                                                    const val = parseMass((z.text && z.text.replace)(/[^0-9,.\-+*/() ]/g, ''));
+                                                                    const val = parseMass(z.text ? z.text.replace(/[^0-9, .\-+*/() ]/g, '') : '');
                                                                     return (<div key={zi} className={`gl-rw-step ${z.vorzeichen === 'minus' ? 'abzug' : 'zurechnung'}`}>
                                                                         <span className="gl-rw-label">{z.vorzeichen === 'minus' ? '−' : '+'}</span>
                                                                         <span className="gl-rw-formel">{z.text}</span>
