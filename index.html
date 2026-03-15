@@ -7583,14 +7583,16 @@
                             bodenManual: raum.bodenManual ? formatMass(raum.bodenManual) : '',
                         };
                     }
+                    // Fallback: Höhen aus Raum oder lastRaumData, Länge/Breite aus lastRaumData.masse
+                    var fallbackMasse = (lastRaumData && lastRaumData.masse) || {};
                     return {
-                        laenge: '',
-                        breite: '',
-                        hoehe: raum.fliesenhoehe ? formatMass(raum.fliesenhoehe) : (raum.hoehe ? formatMass(raum.hoehe) : ''),
-                        raumhoehe: raum.raumhoehe ? formatMass(raum.raumhoehe) : (raum.hoehe ? formatMass(raum.hoehe) : ''),
-                        abdichtungshoehe: raum.abdichtungshoehe ? formatMass(raum.abdichtungshoehe) : '',
-                        sockelhoehe: raum.sockelhoehe ? formatMass(raum.sockelhoehe) : '',
-                        bodenManual: raum.bodenManual ? formatMass(raum.bodenManual) : '',
+                        laenge: raum.waende && raum.waende.length > 0 ? formatMass(raum.waende[0].l) : (fallbackMasse.laenge || ''),
+                        breite: raum.waende && raum.waende.length > 1 ? formatMass(raum.waende[1].l) : (fallbackMasse.breite || ''),
+                        hoehe: raum.fliesenhoehe ? formatMass(raum.fliesenhoehe) : (raum.hoehe ? formatMass(raum.hoehe) : (fallbackMasse.hoehe || '')),
+                        raumhoehe: raum.raumhoehe ? formatMass(raum.raumhoehe) : (raum.hoehe ? formatMass(raum.hoehe) : (fallbackMasse.raumhoehe || '')),
+                        abdichtungshoehe: raum.abdichtungshoehe ? formatMass(raum.abdichtungshoehe) : (fallbackMasse.abdichtungshoehe || ''),
+                        sockelhoehe: raum.sockelhoehe ? formatMass(raum.sockelhoehe) : (fallbackMasse.sockelhoehe || ''),
+                        bodenManual: raum.bodenManual ? formatMass(raum.bodenManual) : (fallbackMasse.bodenManual || ''),
                     };
                 }
                 return { laenge: '', breite: '', hoehe: '', raumhoehe: '', abdichtungshoehe: '', sockelhoehe: '', bodenManual: '' };
@@ -12158,17 +12160,29 @@
                 }
 
                 // ═══ ALLE Einstellungen für nächsten Raum übernehmen ═══
-                // KRITISCH: Hier werden SÄMTLICHE Raumblatt-Einstellungen gespeichert,
-                // damit der Folgeraum identisch konfiguriert ist (außer Raummaße aus Zeichnung).
                 const m = (roomResult && roomResult.masse) || {};
+                const rState = (roomResult && roomResult.raumState) || {};
+                // Wandmaße: aus raumState.wandMasse ODER aus masse.laenge/breite aufbauen
+                var savedWaende = (rState.wandMasse || []).map(function(w) { return { id: w.id, l: w.l }; });
+                // WENN wandMasse leer aber Länge/Breite vorhanden → 4 Wände generieren
+                if (savedWaende.length === 0 && (m.laenge || m.breite)) {
+                    savedWaende = [
+                        { id: 'A', l: m.laenge || '' },
+                        { id: 'B', l: m.breite || '' },
+                        { id: 'C', l: m.laenge || '' },
+                        { id: 'D', l: m.breite || '' }
+                    ];
+                }
                 setLastRaumData({
-                    // ── Höhen aus dem Raumblatt (wichtigste Übernahme) ──
+                    // ── Höhen aus dem Raumblatt ──
                     hoehe: parseMass(m.hoehe) || (selectedRaum && selectedRaum.fliesenhoehe) || 0,
                     raumhoehe: parseMass(m.raumhoehe) || (selectedRaum && selectedRaum.raumhoehe) || 0,
                     abdichtungshoehe: parseMass(m.abdichtungshoehe) || 0,
                     sockelhoehe: parseMass(m.sockelhoehe) || 0,
                     // ── Wände (KRITISCH für Baugleich-Raum!) ──
-                    waende: (((roomResult && roomResult.raumState) && (roomResult && roomResult.raumState).wandMasse) || (selectedRaum && selectedRaum.waende) || []).map(function(w) { return { id: w.id, l: w.l }; }),
+                    waende: savedWaende,
+                    // ── Komplette Masse (für Länge/Breite Übernahme) ──
+                    masse: { laenge: m.laenge || '', breite: m.breite || '', hoehe: m.hoehe || '', raumhoehe: m.raumhoehe || '', abdichtungshoehe: m.abdichtungshoehe || '', sockelhoehe: m.sockelhoehe || '', bodenManual: m.bodenManual || '' },
                     // ── Abzüge/Einbauten für Baugleich ──
                     abzuege: ((roomResult && roomResult.raumState) && (roomResult && roomResult.raumState).abzuege) || [],
                     material: (selectedRaum && selectedRaum.material) || '',
