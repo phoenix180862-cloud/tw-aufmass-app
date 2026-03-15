@@ -11469,9 +11469,9 @@
                             pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101', 196, 17, {align:'right'});
                             pdf.setDrawColor(200,200,200); pdf.setLineWidth(0.3); pdf.line(14, 19.5, 196, 19.5);
                             pdf.setFont('helvetica','bold'); pdf.setFontSize(13); pdf.setTextColor(30,30,30);
-                            pdf.text(t, 14, 27);
+                            pdf.text(fitText(t, 180), 14, 27);
                             pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(80,80,80);
-                            pdf.text(kundenName + '  |  ' + datum, 14, 32);
+                            pdf.text(fitText(kundenName + '  |  ' + datum, 180), 14, 32);
                         };
 
                         // ── Hilfsfunktion: Neue Seite wenn noetig ──
@@ -11484,6 +11484,19 @@
                             return currentY;
                         };
 
+                        // ── Hilfsfunktion: Text auf maxWidth kuerzen ──
+                        var fitText = function(text, maxWidthMm) {
+                            if (!text) return '';
+                            text = String(text);
+                            var w = pdf.getTextWidth(text);
+                            if (w <= maxWidthMm) return text;
+                            var t = text;
+                            while (t.length > 1 && pdf.getTextWidth(t + '..') > maxWidthMm) {
+                                t = t.substring(0, t.length - 1);
+                            }
+                            return t + '..';
+                        };
+
                         // ═══════════════════════════════════
                         // DECKBLATT
                         // ═══════════════════════════════════
@@ -11491,7 +11504,7 @@
                         pdf.setFont('helvetica','bold'); pdf.setFontSize(28); pdf.setTextColor(30,30,30);
                         pdf.text('AUFMASS', 105, 62, {align:'center'});
                         pdf.setFontSize(14); pdf.setTextColor(196,30,30);
-                        pdf.text(kundenName, 105, 75, {align:'center'});
+                        pdf.text(fitText(kundenName, 150), 105, 75, {align:'center'});
                         pdf.setLineWidth(0.5); pdf.line(50, 80, 160, 80);
                         var dy = 95;
                         var deckblattRows = [
@@ -11507,7 +11520,7 @@
                             pdf.setFont('helvetica','normal'); pdf.setFontSize(10); pdf.setTextColor(120,120,120);
                             pdf.text(r[0] + ':', 40, dy);
                             pdf.setFont('helvetica','bold'); pdf.setTextColor(30,30,30);
-                            pdf.text(r[1].substring(0, 70), 85, dy);
+                            pdf.text(fitText(r[1], 109), 85, dy);
                             dy += 7;
                         });
                         // Fusszeile Deckblatt
@@ -11538,7 +11551,7 @@
                             pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(196,30,30);
                             pdf.text('Pos. ' + p.pos, 19, gy + 1);
                             pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); pdf.setTextColor(60,60,60);
-                            pdf.text(p.bez.substring(0, 70), 38, gy + 1);
+                            pdf.text(fitText(p.bez, 120), 38, gy + 1);
                             pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(196,30,30);
                             pdf.text(fmtDe(p.total) + ' ' + p.einheit, 194, gy + 1, {align:'right'});
                             gy += 7;
@@ -11606,7 +11619,7 @@
                                 pdf.setFont('helvetica','bold'); pdf.setFontSize(11); pdf.setTextColor(196,30,30);
                                 pdf.text('Pos. ' + pos.pos, 19, ry + 1);
                                 pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(60,60,60);
-                                pdf.text(pos.bez.substring(0, 85), 19, ry + 6);
+                                pdf.text(fitText(pos.bez, 173), 19, ry + 6);
                                 pdf.setFont('helvetica','bold'); pdf.setFontSize(12); pdf.setTextColor(196,30,30);
                                 pdf.text(fmtDe(pos.ergebnis) + ' ' + pos.einheit, 194, ry + 1, {align:'right'});
                                 ry += posHeader;
@@ -11636,16 +11649,19 @@
                                     pdf.setFont('helvetica','bold'); pdf.setFontSize(9);
                                     pdf.setTextColor(isAbzug ? 180 : 39, isAbzug ? 40 : 130, isAbzug ? 40 : 72);
                                     pdf.text(isAbzug ? '-' : '+', 18, ry);
+                                    // Label: x=24 bis x=88 (vor Formel-Spalte) = max 64mm
                                     pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); pdf.setTextColor(60,60,60);
-                                    pdf.text((label || '').substring(0, 42), 24, ry);
+                                    pdf.text(fitText(label || '', 64), 24, ry);
+                                    // Formel: x=92 bis x=165 (vor Ergebnis) = max 73mm
                                     if (formel) {
                                         pdf.setFont('courier','normal'); pdf.setFontSize(7); pdf.setTextColor(100,100,100);
-                                        pdf.text(formel.substring(0, 32), 92, ry);
+                                        pdf.text(fitText(formel, 73), 92, ry);
                                     }
+                                    // Ergebnis: rechtsbündig x=194, max 28mm
                                     if (ergebnis) {
                                         pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
                                         pdf.setTextColor(isAbzug ? 180 : 50, isAbzug ? 40 : 50, isAbzug ? 40 : 50);
-                                        pdf.text(ergebnis, 194, ry, {align:'right'});
+                                        pdf.text(fitText(ergebnis, 28), 194, ry, {align:'right'});
                                     }
                                     pdf.setDrawColor(240,240,240); pdf.setLineWidth(0.1); pdf.line(24, ry + 1.5, 194, ry + 1.5);
                                     ry += 5;
@@ -11713,7 +11729,7 @@
                                 pdf.setFont('helvetica','bold'); pdf.setFontSize(8); pdf.setTextColor(196,30,30);
                                 pdf.text(p.pos, 16, ry);
                                 pdf.setFont('helvetica','normal'); pdf.setTextColor(50,50,50);
-                                pdf.text(p.bez.substring(0, 65), 30, ry);
+                                pdf.text(fitText(p.bez, 112), 30, ry);
                                 pdf.setTextColor(100,100,100); pdf.text(p.einheit, 145, ry);
                                 pdf.setFont('helvetica','bold'); pdf.setTextColor(196,30,30);
                                 pdf.text(fmtDe(p.ergebnis), 194, ry, {align:'right'});
@@ -11730,7 +11746,7 @@
                             pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(160,160,160);
                             pdf.text('Seite ' + pg + ' von ' + tp, 196, 287, {align:'right'});
                             if (pg > 1) {
-                                pdf.text(kundenName, 14, 287);
+                                pdf.text(fitText(kundenName, 85), 14, 287);
                                 pdf.text(datum, 105, 287, {align:'center'});
                             }
                         }
