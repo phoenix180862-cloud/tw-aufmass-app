@@ -7541,21 +7541,25 @@
             const hasData = raum && !raum.manuell && raum.waende && raum.waende.length > 0;
             const reEdit = (raum && raum.reEditState) || null; // Gespeicherter Zustand aus Gesamtliste
 
-            // ── Globaler Enter-Key Handler für ALLE Eingabefelder ──
+            // ── Globaler Enter-Key Handler für ALLE Eingabefelder im Raumblatt ──
             React.useEffect(() => {
+                const inputSelector = 'input:not([disabled]):not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([readonly]),textarea:not([disabled]):not([readonly]),select:not([disabled])';
                 const handleEnterNav = (e) => {
                     if (e.key !== 'Enter') return;
+                    if (e.defaultPrevented) return; // Bereits von anderem Handler behandelt
                     const el = e.target;
-                    if (!el.matches('.masse-input, .abzug-modal-input, .rw-modal-input')) return;
-                    // Finde Container: oeffnung-body > masse-section > modal > raumblatt
-                    const container = el.closest('.oeffnung-body') || el.closest('.modal') || el.closest('.rw-modal-body') || el.closest('.masse-section') || el.closest('.raumblatt-content');
+                    if (el.tagName === 'TEXTAREA') return; // Mehrzeiler: kein Enter-Nav
+                    if (el.tagName !== 'INPUT' && el.tagName !== 'SELECT') return;
+                    if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return;
+                    // Finde Container: Modal > Oeffnung > Masse-Section > Raumblatt
+                    const container = el.closest('.modal-overlay') || el.closest('.modal') || el.closest('.oeffnung-body') || el.closest('.rw-modal-body') || el.closest('.masse-section') || el.closest('.raumblatt-content') || el.closest('.page-container');
                     if (!container) return;
-                    const allInputs = [...container.querySelectorAll('.masse-input, .abzug-modal-input, .rw-modal-input')];
+                    const allInputs = [...container.querySelectorAll(inputSelector)].filter(inp => inp.offsetParent !== null || inp.offsetWidth > 0);
                     const idx = allInputs.indexOf(el);
                     if (idx >= 0 && allInputs[idx + 1]) {
                         e.preventDefault();
                         allInputs[idx + 1].focus();
-                        allInputs[idx + 1].select();
+                        if (allInputs[idx + 1].select) allInputs[idx + 1].select();
                     } else {
                         e.preventDefault();
                         el.blur();
@@ -7837,16 +7841,29 @@
                         setTimeout(() => el.classList.remove('laser-field-highlight'), 600);
                     }
 
-                    // Nächstes Feld
-                    const container = el.closest('.masse-section') || el.closest('.raumblatt-content');
+                    // Nächstes Feld — erst .masse-input im Container, dann beliebiges sichtbares Input
+                    const container = el.closest('.masse-section') || el.closest('.raumblatt-content') || el.closest('.page-container');
                     if (container) {
-                        const allInputs = [...container.querySelectorAll('.masse-input')];
-                        const idx = allInputs.indexOf(el);
-                        if (idx >= 0 && allInputs[idx + 1]) {
+                        const masseInputs = [...container.querySelectorAll('.masse-input')];
+                        const idx = masseInputs.indexOf(el);
+                        if (idx >= 0 && masseInputs[idx + 1]) {
                             setTimeout(() => {
-                                allInputs[idx + 1].focus();
-                                allInputs[idx + 1].select();
+                                masseInputs[idx + 1].focus();
+                                masseInputs[idx + 1].select();
                             }, 50);
+                        } else {
+                            // Letztes Masse-Feld: zum nächsten beliebigen sichtbaren Input springen
+                            const allSelector = 'input:not([disabled]):not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([readonly]),select:not([disabled])';
+                            const allInputs = [...container.querySelectorAll(allSelector)].filter(inp => inp.offsetParent !== null || inp.offsetWidth > 0);
+                            const globalIdx = allInputs.indexOf(el);
+                            if (globalIdx >= 0 && allInputs[globalIdx + 1]) {
+                                setTimeout(() => {
+                                    allInputs[globalIdx + 1].focus();
+                                    if (allInputs[globalIdx + 1].select) allInputs[globalIdx + 1].select();
+                                }, 50);
+                            } else {
+                                el.blur();
+                            }
                         }
                     }
                 };
@@ -11846,40 +11863,93 @@
             const [importResult, setImportResult] = useState(null);
             const [kiAnalyse, setKiAnalyse] = useState(true); // KI-Analyse ja/nein Toggle
 
-            /* ── Global Enter-Key Handler ── */
-            useEffect(() => {
-                const handleGlobalEnter = (e) => {
+            /* ══════════════════════════════════════════════════
+               GLOBALER AUTO-FOCUS & ENTER-NAVIGATION
+               ══════════════════════════════════════════════════ */
+
+            // ── 1. Auto-Focus: Bei Seitenwechsel erstes Eingabefeld fokussieren ──
+            useEffect(function() {
+                var timer = setTimeout(function() {
+                    // Container finden (Modal hat Vorrang, sonst Seite)
+                    var container = document.querySelector('.modal-overlay') || document.querySelector('.page-container') || document.getElementById('root');
+                    if (!container) return;
+                    // Erstes sichtbares, nicht-deaktiviertes Eingabefeld finden
+                    var firstInput = container.querySelector(
+                        'input:not([disabled]):not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([readonly]),' +
+                        'textarea:not([disabled]):not([readonly]),' +
+                        'select:not([disabled])'
+                    );
+                    if (firstInput && firstInput.offsetParent !== null) {
+                        firstInput.focus();
+                        if (firstInput.select) firstInput.select();
+                    }
+                }, 200); // Kurze Verzögerung damit DOM gerendert ist
+                return function() { clearTimeout(timer); };
+            }, [page, showGesamtliste, showAuth]);
+
+            // ── 2. Enter-Navigation: Enter = nächstes Eingabefeld auf der aktuellen Seite ──
+            useEffect(function() {
+                var handleGlobalEnter = function(e) {
                     if (e.key !== 'Enter') return;
-                    const tag = e.target.tagName;
-                    const isInput = (tag === 'INPUT' || tag === 'TEXTAREA');
+                    // Wenn ein Komponenten-Handler das Event bereits behandelt hat → überspringen
+                    if (e.defaultPrevented) return;
 
-                    // Bei Textarea kein Auto-Submit (Mehrzeiler)
+                    var el = e.target;
+                    var tag = el.tagName;
+
+                    // Nur für Eingabefelder (nicht Textareas = Mehrzeiler, nicht Buttons)
                     if (tag === 'TEXTAREA') return;
+                    if (tag === 'BUTTON') return;
 
+                    // ── FALL A: Wir sind in einem Eingabefeld (INPUT/SELECT) ──
+                    if (tag === 'INPUT' || tag === 'SELECT') {
+                        // Checkboxen, Radios, File-Inputs → ignorieren
+                        if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return;
+
+                        e.preventDefault();
+
+                        // Container bestimmen: Modal → Seite → Root
+                        var container = el.closest('.modal-overlay') || el.closest('.modal') || el.closest('.manual-raum-card') || el.closest('.page-container') || document.getElementById('root');
+                        if (!container) return;
+
+                        // Alle sichtbaren, nicht-deaktivierten Eingabefelder im Container sammeln
+                        var allInputs = [];
+                        var candidates = container.querySelectorAll(
+                            'input:not([disabled]):not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([readonly]),' +
+                            'textarea:not([disabled]):not([readonly]),' +
+                            'select:not([disabled])'
+                        );
+                        for (var i = 0; i < candidates.length; i++) {
+                            // Nur sichtbare Elemente (offsetParent !== null für sichtbare, ODER in fixed/sticky Position)
+                            if (candidates[i].offsetParent !== null || candidates[i].offsetWidth > 0) {
+                                allInputs.push(candidates[i]);
+                            }
+                        }
+
+                        var idx = allInputs.indexOf(el);
+                        if (idx >= 0 && idx < allInputs.length - 1) {
+                            // Nächstes Feld fokussieren
+                            allInputs[idx + 1].focus();
+                            if (allInputs[idx + 1].select) allInputs[idx + 1].select();
+                        } else {
+                            // Letztes Feld → Aktion je nach Seite
+                            el.blur();
+                            switch(page) {
+                                case 'akte':
+                                    if (!loading) handleLoadAkte();
+                                    break;
+                                case 'geladen':
+                                    handleStartAufmass();
+                                    break;
+                            }
+                        }
+                        return;
+                    }
+
+                    // ── FALL B: Kein Eingabefeld fokussiert → Seiten-Aktion auslösen ──
                     switch(page) {
                         case 'start':
                             if (!showAuth) { e.preventDefault(); handleKundeClick(); }
-                            break;
-                        case 'auswahl':
-                            // Suche-Eingabe hat eigenen Enter-Handler → nur wenn NICHT im Input
-                            if (!isInput) break;
-                            break;
-                        case 'akte':
-                            if (isInput) {
-                                // In Kontaktfeldern: zum nächsten Feld springen
-                                const container = e.target.closest('.kunde-preview') || e.target.closest('.page-container');
-                                if (container) {
-                                    const allInputs = [...container.querySelectorAll('input, textarea')];
-                                    const idx = allInputs.indexOf(e.target);
-                                    if (idx >= 0 && idx < allInputs.length - 1) {
-                                        e.preventDefault();
-                                        allInputs[idx + 1].focus();
-                                        allInputs[idx + 1].select && allInputs[idx + 1].select();
-                                        return;
-                                    }
-                                }
-                            }
-                            if (!loading) { e.preventDefault(); handleLoadAkte(); }
                             break;
                         case 'geladen':
                             e.preventDefault();
@@ -11888,7 +11958,7 @@
                     }
                 };
                 window.addEventListener('keydown', handleGlobalEnter);
-                return () => window.removeEventListener('keydown', handleGlobalEnter);
+                return function() { window.removeEventListener('keydown', handleGlobalEnter); };
             });
 
             const navigateTo = useCallback((newPage) => {
