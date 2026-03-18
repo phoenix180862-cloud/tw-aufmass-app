@@ -12297,47 +12297,49 @@
                     var rx = pw - mr;
 
                     // ═══ LOGO ═══
-                    var y = 12;
+                    var y = 10;
 
-                    // "wiLLwacher" — EXTRA KRÄFTIG durch doppeltes Drucken
+                    // "wiLLwacher" — 50% GRÖSSER, EXTRA KRÄFTIG
                     pdf.setFont('helvetica', 'bold'); pdf.setTextColor(15, 15, 15);
-                    var logoY = y + 12;
+                    var logoY = y + 16;
 
                     var boldText = function(text, x, ty, size) {
                         pdf.setFontSize(size);
                         pdf.text(text, x, ty);
-                        pdf.text(text, x + 0.2, ty);
-                        pdf.text(text, x + 0.1, ty + 0.1);
+                        pdf.text(text, x + 0.25, ty);
+                        pdf.text(text, x + 0.12, ty + 0.12);
                         return pdf.getTextWidth(text);
                     };
 
+                    // Buchstaben einzeln setzen — 50% größer als vorher
                     var curX = ml;
-                    var wW = boldText('w', curX, logoY, 34); curX += wW;
-                    var iW = boldText('i', curX, logoY, 34);
-                    // Roter i-Punkt — exakt so breit wie das i
+                    var wW = boldText('w', curX, logoY, 50); curX += wW;
+                    var iStartX = curX;
+                    var iW = boldText('i', curX, logoY, 50);
+                    // Roter i-Punkt — exakt so breit wie der i-Strich
                     pdf.setFillColor(196, 30, 30);
-                    pdf.setFontSize(34);
+                    pdf.setFontSize(50);
                     var iActualW = pdf.getTextWidth('i');
-                    var dotSize = 2;
-                    var dotX = curX + (iActualW / 2) - (dotSize / 2);
-                    var dotY = y + 3;
+                    var dotSize = iActualW * 0.55;
+                    var dotX = curX + (iActualW - dotSize) / 2;
+                    var dotY = y + 2.5;
                     pdf.rect(dotX, dotY, dotSize, dotSize, 'F');
                     curX += iW;
-                    var llW = boldText('LL', curX, logoY, 42); curX += llW;
-                    var wacherW = boldText('wacher', curX, logoY, 34); curX += wacherW;
+                    // "LL" größer
+                    var llW = boldText('LL', curX, logoY, 62); curX += llW;
+                    // "wacher"
+                    var wacherW = boldText('wacher', curX, logoY, 50); curX += wacherW;
                     var logoEndX = curX;
 
-                    // "Thomas" — gleiche Größe wie "Fliesenlegermeister e.K."
-                    // Direkt VOR dem roten i-Punkt, auf gleicher Höhe wie der Punkt
+                    // "Thomas" rot kursiv — T beginnt bei Vorderkante "w", endet vor i-Punkt
                     pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
-                    var thomasW = pdf.getTextWidth('Thomas');
-                    pdf.text('Thomas', dotX - thomasW - 1, dotY + dotSize);
+                    pdf.text('Thomas', ml, dotY + dotSize + 0.5);
 
                     // "Fliesenlegermeister e.K." rot — RECHTSBÜNDIG mit "r" von wacher
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
                     var fmText = 'Fliesenlegermeister e.K.';
                     var fmWidth = pdf.getTextWidth(fmText);
-                    pdf.text(fmText, logoEndX - fmWidth, logoY + 5);
+                    pdf.text(fmText, logoEndX - fmWidth, logoY + 6);
 
                     // Kontaktdaten rechts
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
@@ -12346,8 +12348,8 @@
                     pdf.text('Tel. 02661-63101', rx, y + 10, {align:'right'});
                     pdf.text('Mobil 0170-2024161', rx, y + 14, {align:'right'});
 
-                    // Rote Trennlinie
-                    y += 22;
+                    // Rote Trennlinie — nach dem größeren Logo mehr Abstand
+                    y = logoY + 10;
                     pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.5);
                     pdf.line(ml, y, rx, y);
                     y += 5;
@@ -12448,7 +12450,7 @@
                     }
 
                     // ═══ SUMMENBLOCK — Zahlen bündig mit GP-Spalte der Tabelle ═══
-                    var sL = 80; var sR = rx - 2; // -2mm = bündig mit GP-Zelleninhalt (wg. cellPadding)
+                    var sL = 65; var sR = rx - 2;
                     pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
                     pdf.line(sL, y - 2, sR, y - 2);
 
