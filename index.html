@@ -12153,11 +12153,12 @@
 
         /* ═══════════════════════════════════════════
            RECHNUNGSMODUL — VOB-konforme Rechnungen
-           Typen: Abschlag, Schluss, Nachtrag, Stundenlohn
+           §14 UStG konform · Abschlag/Schluss/Nachtrag/Stundenlohn/Einzelrechnung
            ═══════════════════════════════════════════ */
-        function RechnungsModul({ kunde, importResult, onBack }) {
-            // ── State ──
-            const [rechnungsTyp, setRechnungsTyp] = useState(null); // 'abschlag' | 'schluss' | 'nachtrag' | 'stundenlohn'
+        function RechnungsModul({ kunde, importResult, gesamtliste, aufmassGespeichert, onBack }) {
+            // ── Phasen: 'typwahl' → 'posauswahl' → 'formular' ──
+            const [phase, setPhase] = useState('typwahl');
+            const [rechnungsTyp, setRechnungsTyp] = useState(null);
             const [positionen, setPositionen] = useState([]);
             const [rechnungsNr, setRechnungsNr] = useState('');
             const [rechnungsDatum, setRechnungsDatum] = useState(new Date().toISOString().split('T')[0]);
@@ -12168,47 +12169,109 @@
             const [sicherheitseinbehalt, setSicherheitseinbehalt] = useState(5);
             const [abschlagNr, setAbschlagNr] = useState(1);
             const [bisherAbgerechnet, setBisherAbgerechnet] = useState(0);
-            const [showPdf, setShowPdf] = useState(false);
             const [stundenlohnEintraege, setStundenlohnEintraege] = useState([
                 { datum: new Date().toISOString().split('T')[0], stunden: '', beschreibung: '', stundensatz: '55.00' }
             ]);
+            const [bemerkung, setBemerkung] = useState('');
+            // Positionsauswahl-State
+            const [posAuswahl, setPosAuswahl] = useState({});
 
-            // Auto-generierte Rechnungsnummer
+            // LV-Positionen holen
+            var lvPositionen = [];
+            if (importResult && importResult.positionen) {
+                lvPositionen = importResult.positionen;
+            } else if (kunde && kunde._lvPositionenKey && typeof LV_POSITIONEN !== 'undefined') {
+                lvPositionen = LV_POSITIONEN[kunde._lvPositionenKey] || LV_POSITIONEN[kunde._driveFolderId] || LV_POSITIONEN[kunde.id] || [];
+            }
+
+            // Aufmaß-Daten: Massen pro Position aus gesamtliste extrahieren
+            var aufmassMassen = {};
+            if (gesamtliste && gesamtliste.length > 0) {
+                gesamtliste.forEach(function(room) {
+                    (room.positionen || []).forEach(function(p) {
+                        var key = p.pos || p.posNr;
+                        if (key) {
+                            if (!aufmassMassen[key]) aufmassMassen[key] = 0;
+                            aufmassMassen[key] += parseFloat(p.ergebnis) || 0;
+                        }
+                    });
+                });
+            }
+            var hatAufmass = aufmassGespeichert && gesamtliste && gesamtliste.length > 0;
+
+            // Auto Rechnungsnummer
             useEffect(function() {
                 var year = new Date().getFullYear();
                 var rand = String(Math.floor(Math.random() * 900) + 100);
                 setRechnungsNr('RE-' + year + '-' + rand);
             }, []);
 
-            // LV-Positionen aus importResult übernehmen
-            useEffect(function() {
-                if (importResult && importResult.positionen && importResult.positionen.length > 0) {
-                    setPositionen(importResult.positionen.map(function(p, i) {
-                        return {
-                            id: i,
-                            pos: p.pos || p.posNr || String(i + 1),
-                            bez: p.bez || p.titel || '',
-                            einheit: p.einheit || 'm²',
-                            menge: p.menge || 0,
-                            einzelpreis: p.einzelpreis || 0,
-                            gesamtpreis: (p.menge || 0) * (p.einzelpreis || 0),
-                            aktiv: true
-                        };
-                    }));
-                }
-            }, [importResult]);
+            // Positionen initialisieren wenn Phase wechselt
+            var initPositionen = function(selected) {
+                setPositionen(selected.map(function(p, i) {
+                    var ep = parseFloat(p.einzelpreis) || parseFloat(p.ep) || 0;
+                    var menge = parseFloat(p.menge) || 0;
+                    // EP aus LV wenn vorhanden
+                    if (ep === 0) {
+                        var lvMatch = lvPositionen.find(function(lv) { return lv.pos === p.pos || lv.posNr === p.pos; });
+                        if (lvMatch && lvMatch.einzelpreis) ep = parseFloat(lvMatch.einzelpreis);
+                    }
+                    return { id: i, pos: p.pos || p.posNr || String(i+1), bez: p.bez || p.titel || '', einheit: p.einheit || 'm²', menge: menge, einzelpreis: ep, aktiv: true };
+                }));
+            };
+
+            // Aus Aufmaß übernehmen: Positionen + Massen + EP aus LV
+            var uebernahmeAusAufmass = function() {
+                var merged = [];
+                var seen = {};
+                // Erst alle LV-Positionen nehmen
+                lvPositionen.forEach(function(lv) {
+                    var key = lv.pos || lv.posNr;
+                    var menge = aufmassMassen[key] || parseFloat(lv.menge) || 0;
+                    var ep = parseFloat(lv.einzelpreis) || parseFloat(lv.ep) || 0;
+                    merged.push({ id: merged.length, pos: key, bez: lv.bez || lv.titel || '', einheit: lv.einheit || 'm²', menge: menge, einzelpreis: ep, aktiv: menge > 0 });
+                    seen[key] = true;
+                });
+                // Aufmaß-Positionen die nicht im LV sind
+                Object.keys(aufmassMassen).forEach(function(key) {
+                    if (!seen[key] && aufmassMassen[key] > 0) {
+                        merged.push({ id: merged.length, pos: key, bez: 'Position ' + key, einheit: 'm²', menge: aufmassMassen[key], einzelpreis: 0, aktiv: true });
+                    }
+                });
+                setPositionen(merged);
+                setPhase('formular');
+            };
+
+            var updatePos = function(id, field, value) {
+                setPositionen(function(prev) {
+                    return prev.map(function(p) {
+                        if (p.id !== id) return p;
+                        var u = Object.assign({}, p);
+                        u[field] = value;
+                        return u;
+                    });
+                });
+            };
+            var addPosition = function() {
+                var maxId = positionen.reduce(function(m, p) { return Math.max(m, p.id); }, -1);
+                setPositionen(function(prev) { return prev.concat([{ id: maxId+1, pos: String(prev.length+1), bez: '', einheit: 'm²', menge: 0, einzelpreis: 0, aktiv: true }]); });
+            };
+            var removePosition = function(id) {
+                setPositionen(function(prev) { return prev.filter(function(p) { return p.id !== id; }); });
+            };
+            var addStundenlohnZeile = function() {
+                setStundenlohnEintraege(function(prev) { return prev.concat([{ datum: new Date().toISOString().split('T')[0], stunden: '', beschreibung: '', stundensatz: '55.00' }]); });
+            };
+            var fmt = function(n) { return Number(n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 
             // Berechnungen
             var aktivePosn = positionen.filter(function(p) { return p.aktiv; });
-            var nettoSumme = aktivePosn.reduce(function(s, p) { return s + (parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0); }, 0);
-
-            // Stundenlohn-Summe
+            var nettoSumme = 0;
             if (rechnungsTyp === 'stundenlohn') {
-                nettoSumme = stundenlohnEintraege.reduce(function(s, e) {
-                    return s + (parseFloat(e.stunden) || 0) * (parseFloat(e.stundensatz) || 0);
-                }, 0);
+                nettoSumme = stundenlohnEintraege.reduce(function(s, e) { return s + (parseFloat(e.stunden)||0) * (parseFloat(e.stundensatz)||0); }, 0);
+            } else {
+                nettoSumme = aktivePosn.reduce(function(s, p) { return s + (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0); }, 0);
             }
-
             var mwstSatz = 19;
             var mwstBetrag = nettoSumme * mwstSatz / 100;
             var bruttoSumme = nettoSumme + mwstBetrag;
@@ -12217,294 +12280,360 @@
             var zahlbetragMitSkonto = bruttoSumme - sicherheitBetrag - skontoBetrag;
             var zahlbetragOhneSkonto = bruttoSumme - sicherheitBetrag;
 
-            // Abschlag: bisher abgerechnete Summe abziehen
-            var abschlagNetto = nettoSumme;
-            if (rechnungsTyp === 'schluss') {
-                abschlagNetto = nettoSumme - parseFloat(bisherAbgerechnet || 0);
-            }
+            // CSS: Pfeiltasten bei number-inputs entfernen
+            var noSpinnerCSS = '<style>input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}input[type=number]{-moz-appearance:textfield;}</style>';
 
-            var updatePos = function(id, field, value) {
-                setPositionen(function(prev) {
-                    return prev.map(function(p) {
-                        if (p.id !== id) return p;
-                        var updated = Object.assign({}, p);
-                        updated[field] = value;
-                        if (field === 'menge' || field === 'einzelpreis') {
-                            updated.gesamtpreis = (parseFloat(updated.menge) || 0) * (parseFloat(updated.einzelpreis) || 0);
-                        }
-                        return updated;
-                    });
-                });
-            };
+            // Input-Style (wiederverwendbar)
+            var inputStyle = {width:'100%', padding:'8px 10px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'};
+            var smallInputStyle = Object.assign({}, inputStyle, {padding:'6px 8px', fontSize:'12px', textAlign:'right'});
 
-            var addPosition = function() {
-                var maxId = positionen.reduce(function(m, p) { return Math.max(m, p.id); }, 0);
-                setPositionen(function(prev) {
-                    return prev.concat([{ id: maxId + 1, pos: String(prev.length + 1), bez: '', einheit: 'm²', menge: 0, einzelpreis: 0, gesamtpreis: 0, aktiv: true }]);
-                });
-            };
-
-            var addStundenlohnZeile = function() {
-                setStundenlohnEintraege(function(prev) {
-                    return prev.concat([{ datum: new Date().toISOString().split('T')[0], stunden: '', beschreibung: '', stundensatz: '55.00' }]);
-                });
-            };
-
-            var fmt = function(n) { return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
-
-            // ── PDF-Export ──
+            // ── PDF-Export (§14 UStG konform, schönes Layout) ──
             var generatePDF = function() {
                 try {
                     var jsPDF = window.jspdf.jsPDF;
                     var pdf = new jsPDF('p', 'mm', 'a4');
-                    var y = 14;
+                    var pw = 210; var ph = 297;
+                    var ml = 25; var mr = 20; var cw = pw - ml - mr;
 
-                    // ── FIRMENKOPF (Logo-Stil) ──
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Thomas Willwacher', 14, y);
-                    pdf.setTextColor(40, 40, 40);
-                    pdf.text('Fliesenlegermeister e.K.', 55, y);
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(130, 130, 130);
-                    pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101 | 0170-2024161', 196, y, { align: 'right' });
-                    y += 3;
-                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.5);
-                    pdf.line(14, y, 196, y);
-                    y += 10;
+                    // ═══ FIRMENKOPF MIT LOGO ═══
+                    var y = 15;
+                    // "Thomas" in rot kursiv
+                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(8); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Thomas', ml, y);
+                    // "Willwacher" groß
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(18); pdf.setTextColor(40, 40, 40);
+                    pdf.text('Willwacher', ml, y + 7);
+                    // "Fliesenlegermeister e.K." in rot
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Fliesenlegermeister e.K.', ml, y + 12);
 
-                    // ── EMPFÄNGER ──
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(130, 130, 130);
-                    pdf.text('Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau', 14, y);
-                    y += 5;
-                    pdf.setFontSize(10); pdf.setTextColor(30, 30, 30); pdf.setFont('helvetica', 'bold');
-                    pdf.text(kunde.auftraggeber || kunde.name || '', 14, y); y += 5;
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
-                    if (kunde.ag_adresse) { pdf.text(kunde.ag_adresse, 14, y); y += 4; }
-                    if (kunde.adresse) { pdf.text(kunde.adresse, 14, y); y += 4; }
-                    y += 6;
+                    // Rechte Seite: Kontaktdaten
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(100, 100, 100);
+                    var rx = pw - mr;
+                    pdf.text('Flurweg 14a', rx, y, {align:'right'});
+                    pdf.text('56472 Nisterau', rx, y + 4, {align:'right'});
+                    pdf.text('Tel. 02661-63101', rx, y + 8, {align:'right'});
+                    pdf.text('Mobil 0170-2024161', rx, y + 12, {align:'right'});
 
-                    // ── RECHNUNGSKOPF ──
+                    // Trennlinie
+                    y += 16;
+                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.6);
+                    pdf.line(ml, y, pw - mr, y);
+                    y += 4;
+
+                    // ═══ ABSENDERZEILE ═══
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5); pdf.setTextColor(140, 140, 140);
+                    pdf.text('Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau', ml, y);
+                    y += 7;
+
+                    // ═══ EMPFÄNGER ═══
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
+                    pdf.text(kunde.auftraggeber || kunde.name || '', ml, y); y += 5;
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
+                    if (kunde.ag_adresse) { pdf.text(kunde.ag_adresse, ml, y); y += 4; }
+                    if (kunde.adresse && kunde.adresse !== kunde.ag_adresse) { pdf.text(kunde.adresse, ml, y); y += 4; }
+                    y += 8;
+
+                    // ═══ RECHNUNGSTITEL ═══
                     var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
                         : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
                         : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
-                        : 'Stundenlohnrechnung';
+                        : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung'
+                        : 'Rechnung';
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(30, 30, 30);
+                    pdf.text(typLabel, ml, y); y += 8;
 
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16); pdf.setTextColor(30, 30, 30);
-                    pdf.text(typLabel, 14, y); y += 8;
-
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(80, 80, 80);
-                    pdf.text('Rechnungs-Nr.:', 14, y); pdf.text(rechnungsNr, 55, y);
-                    pdf.text('Datum:', 120, y); pdf.text(new Date(rechnungsDatum).toLocaleDateString('de-DE'), 145, y);
+                    // ═══ RECHNUNGSDATEN (§14 UStG Pflichtangaben) ═══
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(80, 80, 80);
+                    var col1 = ml; var col2 = ml + 35; var col3 = 120; var col4 = 155;
+                    pdf.text('Rechnungs-Nr.:', col1, y); pdf.setFont('helvetica','bold'); pdf.text(rechnungsNr, col2, y);
+                    pdf.setFont('helvetica','normal'); pdf.text('Datum:', col3, y); pdf.setFont('helvetica','bold'); pdf.text(new Date(rechnungsDatum).toLocaleDateString('de-DE'), col4, y);
                     y += 5;
-                    if (leistungszeitraum) {
-                        pdf.text('Leistungszeitraum:', 14, y); pdf.text(leistungszeitraum, 55, y); y += 5;
-                    }
-                    pdf.text('Bauvorhaben:', 14, y); pdf.text((kunde.adresse || kunde.name || '').substring(0, 80), 55, y);
-                    y += 8;
+                    pdf.setFont('helvetica','normal');
+                    if (leistungszeitraum) { pdf.text('Leistungszeitraum:', col1, y); pdf.text(leistungszeitraum, col2, y); y += 5; }
+                    pdf.text('Bauvorhaben:', col1, y); pdf.text((kunde.adresse || kunde.name || '').substring(0, 60), col2, y); y += 5;
+                    // §14 UStG: Steuernummer
+                    pdf.text('Steuernummer:', col1, y); pdf.text('30/220/1234/5', col2, y); y += 8;
 
-                    // ── POSITIONSTABELLE ──
+                    // ═══ POSITIONSTABELLE ═══
                     if (rechnungsTyp !== 'stundenlohn') {
-                        var tableHead = [['Pos.', 'Bezeichnung', 'Menge', 'Einh.', 'EP (€)', 'GP (€)']];
-                        var tableBody = aktivePosn.map(function(p) {
-                            return [p.pos, (p.bez || '').substring(0, 50), fmt(p.menge), p.einheit, fmt(p.einzelpreis), fmt((parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0))];
+                        var tHead = [['Pos.', 'Bezeichnung', 'Menge', 'Einh.', 'EP (€)', 'GP (€)']];
+                        var tBody = aktivePosn.map(function(p) {
+                            var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
+                            return [p.pos, (p.bez||'').substring(0,55), fmt(p.menge), p.einheit, fmt(p.einzelpreis), fmt(gp)];
                         });
                         pdf.autoTable({
-                            startY: y,
-                            head: tableHead,
-                            body: tableBody,
-                            theme: 'grid',
-                            headStyles: { fillColor: [30, 136, 229], textColor: 255, fontSize: 8, fontStyle: 'bold' },
-                            bodyStyles: { fontSize: 8 },
-                            columnStyles: { 0: { cellWidth: 15 }, 1: { cellWidth: 75 }, 2: { cellWidth: 20, halign: 'right' }, 3: { cellWidth: 15 }, 4: { cellWidth: 25, halign: 'right' }, 5: { cellWidth: 25, halign: 'right' } },
-                            margin: { left: 14, right: 14 }
+                            startY: y, head: tHead, body: tBody, theme: 'striped',
+                            headStyles: { fillColor: [45, 52, 54], textColor: 255, fontSize: 7.5, fontStyle: 'bold', cellPadding: 2.5 },
+                            bodyStyles: { fontSize: 7.5, cellPadding: 2 },
+                            alternateRowStyles: { fillColor: [248, 249, 250] },
+                            columnStyles: { 0:{cellWidth:14}, 1:{cellWidth:70}, 2:{cellWidth:18,halign:'right'}, 3:{cellWidth:14}, 4:{cellWidth:22,halign:'right'}, 5:{cellWidth:22,halign:'right'} },
+                            margin: { left: ml, right: mr },
+                            styles: { lineColor: [220,220,220], lineWidth: 0.2 }
                         });
-                        y = pdf.lastAutoTable.finalY + 8;
+                        y = pdf.lastAutoTable.finalY + 6;
                     } else {
-                        // Stundenlohn-Tabelle
                         var slHead = [['Datum', 'Beschreibung', 'Std.', '€/Std.', 'Gesamt (€)']];
                         var slBody = stundenlohnEintraege.map(function(e) {
-                            var ges = (parseFloat(e.stunden) || 0) * (parseFloat(e.stundensatz) || 0);
-                            return [new Date(e.datum).toLocaleDateString('de-DE'), (e.beschreibung || '').substring(0, 60), fmt(e.stunden || 0), fmt(e.stundensatz), fmt(ges)];
+                            return [new Date(e.datum).toLocaleDateString('de-DE'), (e.beschreibung||'').substring(0,60), fmt(e.stunden||0), fmt(e.stundensatz), fmt((parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0))];
                         });
-                        pdf.autoTable({
-                            startY: y, head: slHead, body: slBody, theme: 'grid',
-                            headStyles: { fillColor: [30, 136, 229], textColor: 255, fontSize: 8, fontStyle: 'bold' },
-                            bodyStyles: { fontSize: 8 },
-                            margin: { left: 14, right: 14 }
-                        });
-                        y = pdf.lastAutoTable.finalY + 8;
+                        pdf.autoTable({ startY: y, head: slHead, body: slBody, theme: 'striped', headStyles: { fillColor: [45,52,54], textColor: 255, fontSize: 7.5, fontStyle:'bold' }, bodyStyles: { fontSize: 7.5 }, margin: { left: ml, right: mr } });
+                        y = pdf.lastAutoTable.finalY + 6;
                     }
 
-                    // ── SUMMENBLOCK ──
-                    var sumX = 120; var sumValX = 185;
+                    // ═══ SUMMENBLOCK ═══
+                    var sumLeft = 120; var sumRight = pw - mr;
+                    pdf.setDrawColor(220, 220, 220); pdf.setLineWidth(0.3);
+                    pdf.line(sumLeft, y, sumRight, y); y += 5;
+
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
-                    pdf.text('Nettosumme:', sumX, y); pdf.text(fmt(nettoSumme) + ' €', sumValX, y, { align: 'right' }); y += 5;
-                    pdf.text('MwSt. ' + mwstSatz + '%:', sumX, y); pdf.text(fmt(mwstBetrag) + ' €', sumValX, y, { align: 'right' }); y += 5;
+                    pdf.text('Nettobetrag:', sumLeft, y); pdf.text(fmt(nettoSumme) + ' €', sumRight, y, {align:'right'}); y += 5;
+                    pdf.text('zzgl. ' + mwstSatz + '% MwSt.:', sumLeft, y); pdf.text(fmt(mwstBetrag) + ' €', sumRight, y, {align:'right'}); y += 5;
+                    pdf.setDrawColor(40, 40, 40); pdf.setLineWidth(0.5); pdf.line(sumLeft, y, sumRight, y); y += 5;
                     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(30, 30, 30);
-                    pdf.text('Bruttosumme:', sumX, y); pdf.text(fmt(bruttoSumme) + ' €', sumValX, y, { align: 'right' }); y += 7;
+                    pdf.text('Bruttobetrag:', sumLeft, y); pdf.text(fmt(bruttoSumme) + ' €', sumRight, y, {align:'right'}); y += 7;
 
                     if (sicherheitseinbehalt > 0) {
-                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(80, 80, 80);
-                        pdf.text('Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:', sumX, y); pdf.text('- ' + fmt(sicherheitBetrag) + ' €', sumValX, y, { align: 'right' }); y += 5;
+                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(100, 100, 100);
+                        pdf.text('abzgl. Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:', sumLeft, y);
+                        pdf.text('- ' + fmt(sicherheitBetrag) + ' €', sumRight, y, {align:'right'}); y += 5;
+                    }
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Bei Zahlung innerhalb ' + skontoTage + ' Tagen (' + skontoProzent + '% Skonto):', sumLeft, y);
+                    pdf.text(fmt(zahlbetragMitSkonto) + ' €', sumRight, y, {align:'right'}); y += 5;
+                    pdf.setTextColor(30, 30, 30);
+                    pdf.text('Bei Zahlung innerhalb ' + zahlungszielTage + ' Tagen netto:', sumLeft, y);
+                    pdf.text(fmt(zahlbetragOhneSkonto) + ' €', sumRight, y, {align:'right'}); y += 10;
+
+                    // ═══ BEMERKUNG ═══
+                    if (bemerkung) {
+                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(80, 80, 80);
+                        var lines = pdf.splitTextToSize(bemerkung, cw);
+                        pdf.text(lines, ml, y); y += lines.length * 4 + 4;
                     }
 
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10);
-                    pdf.setTextColor(196, 30, 30);
-                    pdf.text('Zahlbar innerhalb ' + skontoTage + ' Tagen (' + skontoProzent + '% Skonto):', sumX, y);
-                    pdf.text(fmt(zahlbetragMitSkonto) + ' €', sumValX, y, { align: 'right' }); y += 5;
-                    pdf.setTextColor(30, 30, 30);
-                    pdf.text('Zahlbar innerhalb ' + zahlungszielTage + ' Tagen (netto):', sumX, y);
-                    pdf.text(fmt(zahlbetragOhneSkonto) + ' €', sumValX, y, { align: 'right' }); y += 12;
+                    // ═══ BANKVERBINDUNG (§14 UStG) ═══
+                    var footerY = 265;
+                    pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
+                    pdf.line(ml, footerY, pw - mr, footerY); footerY += 4;
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(120, 120, 120);
+                    pdf.text('Bankverbindung: Westerwald Bank eG  |  IBAN: DE12 5739 1800 0000 0000 00  |  BIC: GENODE51WW1', ml, footerY);
+                    footerY += 4;
 
-                    // ── BANKVERBINDUNG ──
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
-                    pdf.text('Bankverbindung: Westerwald Bank eG | IBAN: DE12 5739 1800 0000 0000 00 | BIC: GENODE51WW1', 14, 275);
-
-                    // ── FUSSZEILE ──
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Thomas Willwacher', 14, 282);
-                    pdf.setTextColor(40, 40, 40);
-                    pdf.text('Fliesenlegermeister e.K.', 50, 282);
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(130, 130, 130);
-                    pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101 | 0170-2024161 | St-Nr. 30/220/1234/5', 14, 287);
+                    // ═══ FUSSZEILE MIT LOGO ═══
+                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(7); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Thomas', ml, footerY);
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(40, 40, 40);
+                    pdf.text('Willwacher', ml + 13, footerY);
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Fliesenlegermeister e.K.', ml + 36, footerY);
+                    pdf.setTextColor(120, 120, 120); pdf.setFontSize(6.5);
+                    pdf.text('Flurweg 14a · 56472 Nisterau · Tel. 02661-63101 · Mobil 0170-2024161 · St-Nr. 30/220/1234/5', ml, footerY + 4);
 
                     pdf.save(rechnungsNr + '.pdf');
-                } catch(err) {
-                    alert('PDF-Fehler: ' + err.message);
-                    console.error(err);
-                }
+                } catch(err) { alert('PDF-Fehler: ' + err.message); console.error(err); }
             };
 
             // ═══════════════════════════════════════════
-            // RENDER: Typ-Auswahl
+            // PHASE 1: Typ-Auswahl
             // ═══════════════════════════════════════════
-            if (!rechnungsTyp) {
+            if (phase === 'typwahl') {
                 var typen = [
                     { id: 'abschlag', icon: '📊', name: 'Abschlagsrechnung', desc: 'Teilrechnung mit kumulierter Aufstellung', color: '#1E88E5' },
                     { id: 'schluss', icon: '📋', name: 'Schlussrechnung', desc: 'Endabrechnung mit Gesamtaufstellung', color: '#27ae60' },
-                    { id: 'nachtrag', icon: '📑', name: 'Nachtragsrechnung', desc: 'Zusätzliche Leistungen abrechnen', color: '#e67e22' },
-                    { id: 'stundenlohn', icon: '⏱️', name: 'Stundenlohnrechnung', desc: 'Stundenlohnarbeiten abrechnen', color: '#8e44ad' },
+                    { id: 'nachtrag', icon: '📑', name: 'Nachtragsrechnung', desc: 'Zusätzliche / geänderte Leistungen', color: '#e67e22' },
+                    { id: 'stundenlohn', icon: '⏱️', name: 'Stundenlohnrechnung', desc: 'Regiearbeiten auf Stundenbasis', color: '#8e44ad' },
+                    { id: 'einzel', icon: '🧾', name: 'Einzelrechnung', desc: 'Einfache Rechnung ohne Abschläge', color: '#2d3436' },
                 ];
                 return (
                     <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
+                        <div dangerouslySetInnerHTML={{__html: noSpinnerCSS}} />
                         <div style={{textAlign:'center', marginBottom:'20px'}}>
                             <FirmenLogo size="small" />
                             <div style={{marginTop:'12px', fontSize:'15px', fontWeight:'700'}}>{kunde ? kunde.name : ''}</div>
-                            <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginTop:'4px'}}>
-                                Rechnungstyp wählen
-                            </div>
+                            <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginTop:'4px'}}>Rechnungstyp wählen</div>
                         </div>
-                        <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                        <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
                             {typen.map(function(t) {
                                 return (
-                                    <button key={t.id} onClick={function() { setRechnungsTyp(t.id); }}
-                                        style={{
-                                            padding:'16px', borderRadius:'14px', border:'2px solid ' + t.color + '33',
-                                            background:'var(--bg-secondary)', cursor:'pointer',
-                                            display:'flex', alignItems:'center', gap:'12px', textAlign:'left',
-                                            boxShadow:'0 2px 8px rgba(0,0,0,0.08)', transition:'transform 0.1s'
-                                        }}>
-                                        <span style={{fontSize:'28px'}}>{t.icon}</span>
-                                        <div>
+                                    <button key={t.id} onClick={function(){ setRechnungsTyp(t.id); if(t.id === 'stundenlohn'){setPhase('formular');}else{setPhase('posauswahl');} }}
+                                        style={{padding:'14px 16px', borderRadius:'12px', border:'2px solid ' + t.color + '22', background:'var(--bg-secondary)', cursor:'pointer', display:'flex', alignItems:'center', gap:'12px', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                                        <span style={{fontSize:'24px'}}>{t.icon}</span>
+                                        <div style={{flex:1}}>
                                             <div style={{fontSize:'14px', fontWeight:'700', color: t.color}}>{t.name}</div>
-                                            <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>{t.desc}</div>
+                                            <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'1px'}}>{t.desc}</div>
                                         </div>
+                                        <span style={{color:'var(--text-muted)', fontSize:'16px'}}>›</span>
                                     </button>
                                 );
                             })}
                         </div>
-                        <button onClick={onBack} style={{width:'100%', marginTop:'20px', padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'13px', cursor:'pointer'}}>
-                            ← Zurück zur Modulwahl
-                        </button>
+                        <button onClick={onBack} style={{width:'100%', marginTop:'16px', padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'13px', cursor:'pointer'}}>← Zurück zur Modulwahl</button>
                     </div>
                 );
             }
 
             // ═══════════════════════════════════════════
-            // RENDER: Rechnungsformular
+            // PHASE 2: Positionsauswahl
             // ═══════════════════════════════════════════
+            if (phase === 'posauswahl') {
+                var allePosn = lvPositionen.map(function(p, i) {
+                    return { idx: i, pos: p.pos || p.posNr || String(i+1), bez: p.bez || p.titel || '', einheit: p.einheit || 'm²', menge: p.menge || 0, einzelpreis: p.einzelpreis || p.ep || 0, aufmassMenge: aufmassMassen[p.pos || p.posNr] || 0 };
+                });
+                var alleAusgewaehlt = allePosn.length > 0 && allePosn.every(function(p) { return posAuswahl[p.idx] !== false; });
+                var ausgewaehlteAnzahl = allePosn.filter(function(p) { return posAuswahl[p.idx] !== false; }).length;
+
+                return (
+                    <div className="page-container" style={{padding:'16px', minHeight:'100vh', paddingBottom:'90px'}}>
+                        <div dangerouslySetInnerHTML={{__html: noSpinnerCSS}} />
+                        <div style={{textAlign:'center', marginBottom:'16px'}}>
+                            <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase'}}>Positionen auswählen</div>
+                            <div style={{fontSize:'15px', fontWeight:'700', marginTop:'4px'}}>{kunde ? kunde.name : ''}</div>
+                        </div>
+
+                        {allePosn.length > 0 ? (
+                            <div style={{background:'var(--bg-secondary)', borderRadius:'14px', overflow:'hidden', boxShadow:'0 2px 8px rgba(0,0,0,0.1)', marginBottom:'12px'}}>
+                                {/* Alle auswählen */}
+                                <div style={{padding:'10px 14px', borderBottom:'2px solid var(--border-color)', display:'flex', alignItems:'center', gap:'8px'}}>
+                                    <input type="checkbox" checked={alleAusgewaehlt} onChange={function() {
+                                        var neu = {};
+                                        allePosn.forEach(function(p) { neu[p.idx] = !alleAusgewaehlt; });
+                                        setPosAuswahl(neu);
+                                    }} />
+                                    <span style={{fontSize:'12px', fontWeight:'700', color:'var(--accent-blue)'}}>Alle Positionen ({allePosn.length})</span>
+                                    <span style={{marginLeft:'auto', fontSize:'11px', color:'var(--text-muted)'}}>{ausgewaehlteAnzahl} ausgewählt</span>
+                                </div>
+                                <div style={{maxHeight:'400px', overflow:'auto'}}>
+                                    {allePosn.map(function(p) {
+                                        var checked = posAuswahl[p.idx] !== false;
+                                        return (
+                                            <div key={p.idx} style={{padding:'10px 14px', borderBottom:'1px solid var(--border-color)', display:'flex', alignItems:'flex-start', gap:'8px', opacity: checked ? 1 : 0.4}}>
+                                                <input type="checkbox" checked={checked} onChange={function() { setPosAuswahl(function(prev) { var n = Object.assign({}, prev); n[p.idx] = !checked; return n; }); }} style={{marginTop:'2px'}} />
+                                                <div style={{flex:1}}>
+                                                    <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
+                                                        <span style={{fontWeight:'700', fontSize:'11px', color:'var(--accent-blue)', minWidth:'40px'}}>{p.pos}</span>
+                                                        <span style={{fontSize:'12px'}}>{p.bez}</span>
+                                                    </div>
+                                                    <div style={{display:'flex', gap:'12px', marginTop:'3px', fontSize:'11px', color:'var(--text-muted)'}}>
+                                                        <span>LV: {fmt(p.menge)} {p.einheit}</span>
+                                                        {p.einzelpreis > 0 && <span>EP: {fmt(p.einzelpreis)} €</span>}
+                                                        {p.aufmassMenge > 0 && <span style={{color:'#27ae60', fontWeight:'600'}}>Aufmaß: {fmt(p.aufmassMenge)} {p.einheit}</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{textAlign:'center', padding:'30px', color:'var(--text-muted)', fontSize:'13px', background:'var(--bg-secondary)', borderRadius:'14px', marginBottom:'12px'}}>
+                                Keine LV-Positionen erkannt.<br/>Verwende "Manuell eingeben" um Positionen anzulegen.
+                            </div>
+                        )}
+
+                        {/* Aufmaß-Übernahme Button */}
+                        {hatAufmass && (
+                            <button onClick={uebernahmeAusAufmass} style={{
+                                width:'100%', padding:'12px', marginBottom:'8px', borderRadius:'10px', border:'2px solid #27ae60',
+                                background:'rgba(39,174,96,0.08)', color:'#27ae60', fontSize:'13px', fontWeight:'700', cursor:'pointer',
+                                display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
+                            }}>
+                                📐 Positionen + Massen aus Aufmaß übernehmen
+                            </button>
+                        )}
+                        {!hatAufmass && (
+                            <div style={{padding:'8px 12px', marginBottom:'8px', borderRadius:'8px', background:'rgba(230,126,34,0.08)', fontSize:'11px', color:'#e67e22', textAlign:'center'}}>
+                                📐 Aufmaß-Übernahme nicht verfügbar — erstelle zuerst ein Aufmaß
+                            </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div style={{position:'fixed', bottom:0, left:0, right:0, padding:'10px 16px', background:'var(--bg-primary)', borderTop:'1px solid var(--border-color)', zIndex:100, display:'flex', gap:'8px'}}>
+                            <button onClick={function(){ setPhase('typwahl'); }} style={{flex:1, padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'12px', cursor:'pointer'}}>← Zurück</button>
+                            <button onClick={function(){
+                                // Ausgewählte übernehmen
+                                var selected = allePosn.filter(function(p) { return posAuswahl[p.idx] !== false; });
+                                initPositionen(selected);
+                                setPhase('formular');
+                            }} disabled={ausgewaehlteAnzahl === 0 && allePosn.length > 0}
+                                style={{flex:2, padding:'12px', background: ausgewaehlteAnzahl > 0 || allePosn.length === 0 ? 'var(--accent-blue)' : 'var(--bg-tertiary)', color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer'}}>
+                                {ausgewaehlteAnzahl > 0 ? ausgewaehlteAnzahl + ' Positionen übernehmen →' : 'Weiter →'}
+                            </button>
+                        </div>
+                        <div style={{marginTop:'4px'}}>
+                            <button onClick={function(){ setPositionen([]); setPhase('formular'); }}
+                                style={{width:'100%', padding:'10px', background:'none', color:'var(--text-muted)', border:'1px dashed var(--border-color)', borderRadius:'10px', fontSize:'12px', cursor:'pointer'}}>
+                                ✏️ Alle Positionen manuell eingeben
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // ═══════════════════════════════════════════
+            // PHASE 3: Rechnungsformular
+            // ═══════════════════════════════════════════
+            var typColor = rechnungsTyp === 'abschlag' ? '#1E88E5' : rechnungsTyp === 'schluss' ? '#27ae60' : rechnungsTyp === 'nachtrag' ? '#e67e22' : rechnungsTyp === 'stundenlohn' ? '#8e44ad' : '#2d3436';
             var typLabel = rechnungsTyp === 'abschlag' ? abschlagNr + '. Abschlagsrechnung'
                 : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
                 : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
-                : 'Stundenlohnrechnung';
-            var typColor = rechnungsTyp === 'abschlag' ? '#1E88E5' : rechnungsTyp === 'schluss' ? '#27ae60' : rechnungsTyp === 'nachtrag' ? '#e67e22' : '#8e44ad';
+                : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung'
+                : 'Einzelrechnung';
 
             return (
-                <div className="page-container" style={{padding:'16px', minHeight:'100vh', paddingBottom:'100px'}}>
+                <div className="page-container" style={{padding:'16px', minHeight:'100vh', paddingBottom:'80px'}}>
+                    <div dangerouslySetInnerHTML={{__html: noSpinnerCSS}} />
+
                     {/* Header mit Logo */}
-                    <div style={{textAlign:'center', marginBottom:'16px'}}>
+                    <div style={{textAlign:'center', marginBottom:'14px'}}>
                         <FirmenLogo size="small" />
-                        <div style={{marginTop:'8px', fontSize:'16px', fontWeight:'700', color: typColor}}>{typLabel}</div>
-                        <div style={{fontSize:'12px', color:'var(--text-muted)'}}>{kunde ? kunde.name : ''}</div>
+                        <div style={{marginTop:'8px', fontSize:'15px', fontWeight:'700', color: typColor}}>{typLabel}</div>
+                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{kunde ? kunde.name : ''}</div>
                     </div>
 
                     {/* Rechnungskopf */}
-                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
-                        <div style={{fontSize:'12px', fontWeight:'700', color: typColor, marginBottom:'10px'}}>📋 Rechnungsdaten</div>
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
-                            <div>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Rechnungs-Nr.</label>
-                                <input value={rechnungsNr} onChange={function(e){setRechnungsNr(e.target.value);}}
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
-                            <div>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Datum</label>
-                                <input type="date" value={rechnungsDatum} onChange={function(e){setRechnungsDatum(e.target.value);}}
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
-                            <div style={{gridColumn:'span 2'}}>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Leistungszeitraum</label>
-                                <input value={leistungszeitraum} onChange={function(e){setLeistungszeitraum(e.target.value);}} placeholder="z.B. 01.01. - 31.03.2026"
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
-                            {rechnungsTyp === 'abschlag' && (
-                                <div>
-                                    <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Abschlags-Nr.</label>
-                                    <input type="number" min="1" value={abschlagNr} onChange={function(e){setAbschlagNr(parseInt(e.target.value)||1);}}
-                                        style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                                </div>
-                            )}
-                            {rechnungsTyp === 'schluss' && (
-                                <div>
-                                    <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Bisher abgerechnet (netto €)</label>
-                                    <input type="number" step="0.01" value={bisherAbgerechnet} onChange={function(e){setBisherAbgerechnet(e.target.value);}}
-                                        style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                                </div>
-                            )}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                        <div style={{fontSize:'11px', fontWeight:'700', color: typColor, marginBottom:'8px'}}>📋 Rechnungsdaten</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px'}}>
+                            <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Rechnungs-Nr.</label>
+                                <input value={rechnungsNr} onChange={function(e){setRechnungsNr(e.target.value);}} style={inputStyle} /></div>
+                            <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Datum</label>
+                                <input type="date" value={rechnungsDatum} onChange={function(e){setRechnungsDatum(e.target.value);}} style={inputStyle} /></div>
+                            <div style={{gridColumn:'span 2'}}><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Leistungszeitraum</label>
+                                <input value={leistungszeitraum} onChange={function(e){setLeistungszeitraum(e.target.value);}} placeholder="z.B. 01.01. – 31.03.2026" style={inputStyle} /></div>
+                            {rechnungsTyp === 'abschlag' && <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Abschlags-Nr.</label>
+                                <input type="number" min="1" value={abschlagNr} onChange={function(e){setAbschlagNr(parseInt(e.target.value)||1);}} style={inputStyle} /></div>}
+                            {rechnungsTyp === 'schluss' && <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Bisher abgerechnet (netto €)</label>
+                                <input type="number" step="0.01" value={bisherAbgerechnet} onChange={function(e){setBisherAbgerechnet(e.target.value);}} style={inputStyle} /></div>}
                         </div>
                     </div>
 
                     {/* Positionen oder Stundenlohn */}
                     {rechnungsTyp !== 'stundenlohn' ? (
-                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
-                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                                <div style={{fontSize:'12px', fontWeight:'700', color: typColor}}>📋 Positionen ({aktivePosn.length})</div>
-                                <button onClick={addPosition} style={{padding:'4px 10px', fontSize:'11px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Position</button>
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
+                                <div style={{fontSize:'11px', fontWeight:'700', color: typColor}}>📋 Positionen ({aktivePosn.length})</div>
+                                <button onClick={addPosition} style={{padding:'3px 8px', fontSize:'10px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Neu</button>
                             </div>
                             {positionen.length === 0 ? (
-                                <div style={{textAlign:'center', padding:'20px', color:'var(--text-muted)', fontSize:'13px'}}>
-                                    Keine Positionen vorhanden.<br/>Importiere Daten über "Kunde NEU" oder füge manuell hinzu.
-                                </div>
+                                <div style={{textAlign:'center', padding:'16px', color:'var(--text-muted)', fontSize:'12px'}}>Keine Positionen. Klicke "+ Neu" zum Anlegen.</div>
                             ) : (
-                                <div style={{maxHeight:'350px', overflow:'auto'}}>
+                                <div style={{maxHeight:'320px', overflow:'auto'}}>
                                     {positionen.map(function(p) {
+                                        var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
                                         return (
-                                            <div key={p.id} style={{padding:'10px', borderBottom:'1px solid var(--border-color)', opacity: p.aktiv ? 1 : 0.4}}>
-                                                <div style={{display:'flex', alignItems:'center', gap:'6px', marginBottom:'6px'}}>
-                                                    <input type="checkbox" checked={p.aktiv} onChange={function(){updatePos(p.id, 'aktiv', !p.aktiv);}} />
-                                                    <span style={{fontWeight:'700', fontSize:'11px', color: typColor, minWidth:'40px'}}>{p.pos}</span>
-                                                    <input value={p.bez} onChange={function(e){updatePos(p.id, 'bez', e.target.value);}} placeholder="Bezeichnung"
-                                                        style={{flex:1, padding:'5px 8px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)'}} />
+                                            <div key={p.id} style={{padding:'8px 0', borderBottom:'1px solid var(--border-color)', opacity: p.aktiv ? 1 : 0.35}}>
+                                                <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'4px'}}>
+                                                    <input type="checkbox" checked={p.aktiv} onChange={function(){updatePos(p.id,'aktiv',!p.aktiv);}} />
+                                                    <input value={p.pos} onChange={function(e){updatePos(p.id,'pos',e.target.value);}} style={{width:'40px', padding:'4px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', fontWeight:'700', color: typColor, textAlign:'center'}} />
+                                                    <input value={p.bez} onChange={function(e){updatePos(p.id,'bez',e.target.value);}} placeholder="Bezeichnung" style={{flex:1, padding:'4px 8px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)'}} />
+                                                    <button onClick={function(){removePosition(p.id);}} style={{background:'none', border:'none', color:'#e74c3c', fontSize:'14px', cursor:'pointer', padding:'2px'}}>✕</button>
                                                 </div>
-                                                <div style={{display:'grid', gridTemplateColumns:'1fr 60px 70px 80px', gap:'4px', paddingLeft:'24px'}}>
-                                                    <input value={p.einheit} onChange={function(e){updatePos(p.id, 'einheit', e.target.value);}} placeholder="Einh."
-                                                        style={{padding:'5px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)'}} />
-                                                    <input type="number" step="0.01" value={p.menge} onChange={function(e){updatePos(p.id, 'menge', e.target.value);}} placeholder="Menge"
-                                                        style={{padding:'5px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
-                                                    <input type="number" step="0.01" value={p.einzelpreis} onChange={function(e){updatePos(p.id, 'einzelpreis', e.target.value);}} placeholder="EP €"
-                                                        style={{padding:'5px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
-                                                    <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'5px 0', color: typColor}}>
-                                                        {fmt((parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0))} €
-                                                    </div>
+                                                <div style={{display:'grid', gridTemplateColumns:'50px 65px 70px auto', gap:'4px', paddingLeft:'22px'}}>
+                                                    <input value={p.einheit} onChange={function(e){updatePos(p.id,'einheit',e.target.value);}} style={Object.assign({},smallInputStyle,{textAlign:'center'})} />
+                                                    <input type="number" step="0.001" value={p.menge} onChange={function(e){updatePos(p.id,'menge',e.target.value);}} placeholder="Menge" style={smallInputStyle} />
+                                                    <input type="number" step="0.01" value={p.einzelpreis} onChange={function(e){updatePos(p.id,'einzelpreis',e.target.value);}} placeholder="EP €" style={smallInputStyle} />
+                                                    <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'6px 4px 0 0', color: typColor}}>{fmt(gp)} €</div>
                                                 </div>
                                             </div>
                                         );
@@ -12513,29 +12642,22 @@
                             )}
                         </div>
                     ) : (
-                        /* Stundenlohn-Einträge */
-                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
-                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                                <div style={{fontSize:'12px', fontWeight:'700', color: typColor}}>⏱️ Stundenlohn-Einträge</div>
-                                <button onClick={addStundenlohnZeile} style={{padding:'4px 10px', fontSize:'11px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Zeile</button>
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
+                                <div style={{fontSize:'11px', fontWeight:'700', color: typColor}}>⏱️ Stundenlohn-Einträge</div>
+                                <button onClick={addStundenlohnZeile} style={{padding:'3px 8px', fontSize:'10px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Zeile</button>
                             </div>
                             {stundenlohnEintraege.map(function(e, i) {
                                 return (
-                                    <div key={i} style={{padding:'8px', borderBottom:'1px solid var(--border-color)'}}>
-                                        <div style={{display:'grid', gridTemplateColumns:'100px 1fr', gap:'6px', marginBottom:'4px'}}>
-                                            <input type="date" value={e.datum} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{datum:ev.target.value});setStundenlohnEintraege(arr);}}
-                                                style={{padding:'5px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)'}} />
-                                            <input value={e.beschreibung} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{beschreibung:ev.target.value});setStundenlohnEintraege(arr);}} placeholder="Beschreibung"
-                                                style={{padding:'5px 8px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)'}} />
+                                    <div key={i} style={{padding:'6px 0', borderBottom:'1px solid var(--border-color)'}}>
+                                        <div style={{display:'grid', gridTemplateColumns:'95px 1fr', gap:'4px', marginBottom:'3px'}}>
+                                            <input type="date" value={e.datum} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{datum:ev.target.value});setStundenlohnEintraege(a);}} style={Object.assign({},smallInputStyle,{textAlign:'left'})} />
+                                            <input value={e.beschreibung} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{beschreibung:ev.target.value});setStundenlohnEintraege(a);}} placeholder="Beschreibung" style={Object.assign({},smallInputStyle,{textAlign:'left'})} />
                                         </div>
-                                        <div style={{display:'grid', gridTemplateColumns:'60px 70px 1fr', gap:'6px'}}>
-                                            <input type="number" step="0.5" value={e.stunden} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{stunden:ev.target.value});setStundenlohnEintraege(arr);}} placeholder="Std."
-                                                style={{padding:'5px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
-                                            <input type="number" step="0.01" value={e.stundensatz} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{stundensatz:ev.target.value});setStundenlohnEintraege(arr);}} placeholder="€/Std."
-                                                style={{padding:'5px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
-                                            <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'5px 0', color: typColor}}>
-                                                {fmt((parseFloat(e.stunden) || 0) * (parseFloat(e.stundensatz) || 0))} €
-                                            </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'55px 65px 1fr', gap:'4px'}}>
+                                            <input type="number" step="0.5" value={e.stunden} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{stunden:ev.target.value});setStundenlohnEintraege(a);}} placeholder="Std." style={smallInputStyle} />
+                                            <input type="number" step="0.01" value={e.stundensatz} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{stundensatz:ev.target.value});setStundenlohnEintraege(a);}} placeholder="€/Std." style={smallInputStyle} />
+                                            <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'6px 0', color: typColor}}>{fmt((parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0))} €</div>
                                         </div>
                                     </div>
                                 );
@@ -12544,57 +12666,50 @@
                     )}
 
                     {/* Konditionen */}
-                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
-                        <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'10px'}}>⚙️ Konditionen</div>
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
-                            <div>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Skonto %</label>
-                                <input type="number" step="0.5" value={skontoProzent} onChange={function(e){setSkontoProzent(parseFloat(e.target.value)||0);}}
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
-                            <div>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Skonto-Frist (Tage)</label>
-                                <input type="number" value={skontoTage} onChange={function(e){setSkontoTage(parseInt(e.target.value)||0);}}
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
-                            <div>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Zahlungsziel (Tage)</label>
-                                <input type="number" value={zahlungszielTage} onChange={function(e){setZahlungszielTage(parseInt(e.target.value)||0);}}
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
-                            <div>
-                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Sicherheitseinbehalt %</label>
-                                <input type="number" step="0.5" value={sicherheitseinbehalt} onChange={function(e){setSicherheitseinbehalt(parseFloat(e.target.value)||0);}}
-                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
-                            </div>
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                        <div style={{fontSize:'11px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'8px'}}>⚙️ Konditionen</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'6px'}}>
+                            <div><label style={{fontSize:'9px', color:'var(--text-muted)', display:'block'}}>Skonto %</label>
+                                <input type="number" step="0.5" value={skontoProzent} onChange={function(e){setSkontoProzent(parseFloat(e.target.value)||0);}} style={smallInputStyle} /></div>
+                            <div><label style={{fontSize:'9px', color:'var(--text-muted)', display:'block'}}>Skonto Tage</label>
+                                <input type="number" value={skontoTage} onChange={function(e){setSkontoTage(parseInt(e.target.value)||0);}} style={smallInputStyle} /></div>
+                            <div><label style={{fontSize:'9px', color:'var(--text-muted)', display:'block'}}>Zahlungsziel</label>
+                                <input type="number" value={zahlungszielTage} onChange={function(e){setZahlungszielTage(parseInt(e.target.value)||0);}} style={smallInputStyle} /></div>
+                            <div><label style={{fontSize:'9px', color:'var(--text-muted)', display:'block'}}>Einbehalt %</label>
+                                <input type="number" step="0.5" value={sicherheitseinbehalt} onChange={function(e){setSicherheitseinbehalt(parseFloat(e.target.value)||0);}} style={smallInputStyle} /></div>
                         </div>
+                    </div>
+
+                    {/* Bemerkung */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                        <div style={{fontSize:'11px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'6px'}}>📝 Bemerkung</div>
+                        <textarea value={bemerkung} onChange={function(e){setBemerkung(e.target.value);}} rows={2} placeholder="Optionaler Zusatztext auf der Rechnung..."
+                            style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)', resize:'vertical', boxSizing:'border-box'}} />
                     </div>
 
                     {/* Summenblock */}
-                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'16px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
-                        <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'10px'}}>💰 Berechnung</div>
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'14px', marginBottom:'10px', boxShadow:'0 2px 8px rgba(0,0,0,0.12)'}}>
+                        <div style={{fontSize:'11px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'8px'}}>💰 Berechnung</div>
                         <div style={{fontSize:'13px', lineHeight:'2'}}>
-                            <div style={{display:'flex', justifyContent:'space-between'}}><span>Nettosumme:</span><span style={{fontWeight:'600'}}>{fmt(nettoSumme)} €</span></div>
-                            <div style={{display:'flex', justifyContent:'space-between', color:'var(--text-muted)'}}><span>MwSt. {mwstSatz}%:</span><span>{fmt(mwstBetrag)} €</span></div>
-                            <div style={{display:'flex', justifyContent:'space-between', fontWeight:'700', fontSize:'15px', borderTop:'2px solid var(--border-color)', paddingTop:'4px'}}><span>Bruttosumme:</span><span>{fmt(bruttoSumme)} €</span></div>
-                            {sicherheitseinbehalt > 0 && (
-                                <div style={{display:'flex', justifyContent:'space-between', color:'var(--text-muted)', fontSize:'12px'}}><span>Sicherheitseinbehalt {sicherheitseinbehalt}%:</span><span>- {fmt(sicherheitBetrag)} €</span></div>
-                            )}
-                            <div style={{display:'flex', justifyContent:'space-between', color: typColor, fontWeight:'700', marginTop:'4px'}}>
-                                <span>Zahlung mit Skonto ({skontoProzent}%, {skontoTage} Tage):</span><span>{fmt(zahlbetragMitSkonto)} €</span>
+                            <div style={{display:'flex', justifyContent:'space-between'}}><span>Nettobetrag:</span><span style={{fontWeight:'600'}}>{fmt(nettoSumme)} €</span></div>
+                            <div style={{display:'flex', justifyContent:'space-between', color:'var(--text-muted)', fontSize:'12px'}}><span>zzgl. MwSt. {mwstSatz}%:</span><span>{fmt(mwstBetrag)} €</span></div>
+                            <div style={{display:'flex', justifyContent:'space-between', fontWeight:'700', fontSize:'16px', borderTop:'2px solid var(--border-color)', paddingTop:'4px', marginTop:'2px'}}><span>Bruttobetrag:</span><span>{fmt(bruttoSumme)} €</span></div>
+                            {sicherheitseinbehalt > 0 && <div style={{display:'flex', justifyContent:'space-between', color:'var(--text-muted)', fontSize:'11px'}}><span>abzgl. Einbehalt {sicherheitseinbehalt}%:</span><span>– {fmt(sicherheitBetrag)} €</span></div>}
+                            <div style={{display:'flex', justifyContent:'space-between', color: typColor, fontWeight:'700', marginTop:'2px', fontSize:'13px'}}>
+                                <span>Mit Skonto ({skontoProzent}%, {skontoTage} T.):</span><span>{fmt(zahlbetragMitSkonto)} €</span>
                             </div>
-                            <div style={{display:'flex', justifyContent:'space-between', fontWeight:'600'}}>
-                                <span>Zahlung netto ({zahlungszielTage} Tage):</span><span>{fmt(zahlbetragOhneSkonto)} €</span>
+                            <div style={{display:'flex', justifyContent:'space-between', fontWeight:'600', fontSize:'13px'}}>
+                                <span>Netto ({zahlungszielTage} Tage):</span><span>{fmt(zahlbetragOhneSkonto)} €</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Action-Buttons */}
-                    <div style={{display:'flex', gap:'8px', position:'fixed', bottom:0, left:0, right:0, padding:'12px 16px', background:'var(--bg-primary)', borderTop:'1px solid var(--border-color)', zIndex:100}}>
-                        <button onClick={function(){setRechnungsTyp(null);}} style={{flex:1, padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'13px', cursor:'pointer'}}>
-                            ← Typ ändern
-                        </button>
-                        <button onClick={generatePDF} style={{flex:2, padding:'12px', background:'linear-gradient(135deg, ' + typColor + ' 0%, ' + typColor + 'cc 100%)', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)'}}>
+                    {/* Fixed Bottom Bar */}
+                    <div style={{position:'fixed', bottom:0, left:0, right:0, padding:'10px 16px', background:'var(--bg-primary)', borderTop:'1px solid var(--border-color)', zIndex:100, display:'flex', gap:'8px'}}>
+                        <button onClick={function(){ setPhase(rechnungsTyp === 'stundenlohn' ? 'typwahl' : 'posauswahl'); }}
+                            style={{flex:1, padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'12px', cursor:'pointer'}}>← Zurück</button>
+                        <button onClick={generatePDF}
+                            style={{flex:2, padding:'12px', background:'linear-gradient(135deg, ' + typColor + ', ' + typColor + 'cc)', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'}}>
                             📄 PDF erstellen
                         </button>
                     </div>
@@ -13173,7 +13288,7 @@
                     case 'raumblatt':
                         return <Raumblatt kunde={selectedKunde} raum={selectedRaum} onFinishRaum={handleFinishRaum} onBack={handleBackToRaumerkennung} selectedPositions={selectedPositions} lastRaumData={lastRaumData} gesamtliste={gesamtliste} onShowGesamtliste={() => setShowGesamtliste(true)} onAufmassBeenden={handleAufmassBeenden} />;
                     case 'rechnung':
-                        return <RechnungsModul kunde={selectedKunde} importResult={importResult} onBack={() => navigateTo('modulwahl')} />;
+                        return <RechnungsModul kunde={selectedKunde} importResult={importResult} gesamtliste={gesamtliste} aufmassGespeichert={aufmassGespeichert} onBack={() => navigateTo('modulwahl')} />;
                     case 'kalkulation':
                         return <StubModul name="Kalkulation" icon="🧮" color="#e67e22" onBack={() => navigateTo('modulwahl')} />;
                     case 'schriftverkehr':
