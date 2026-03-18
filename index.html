@@ -12298,35 +12298,46 @@
 
                     // ═══ LOGO ═══
                     var y = 12;
-                    // "Thomas" klein rot kursiv — über dem "w" (nicht über dem "l"!)
-                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(10); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Thomas', ml, y);
 
-                    // "wiLLwacher" — KRÄFTIG, schwarz, bold, groß
-                    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(20, 20, 20);
-                    // "w" normal
-                    pdf.setFontSize(32); pdf.text('w', ml, y + 12);
-                    var wW = pdf.getTextWidth('w');
-                    // "i" (ohne Punkt, dotless)
-                    pdf.setFontSize(32); pdf.text('i', ml + wW, y + 12);
-                    var iW = pdf.getTextWidth('i');
-                    // Roter Quadrat-Punkt auf dem i
+                    // "wiLLwacher" — EXTRA KRÄFTIG durch doppeltes Drucken mit Mini-Offset
+                    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(15, 15, 15);
+                    var logoY = y + 12;
+
+                    // Hilfsfunktion: Text doppelt drucken für extra Bold-Effekt
+                    var boldText = function(text, x, ty, size) {
+                        pdf.setFontSize(size);
+                        pdf.text(text, x, ty);
+                        pdf.text(text, x + 0.2, ty); // leichter Offset = dicker
+                        pdf.text(text, x + 0.1, ty + 0.1);
+                        return pdf.getTextWidth(text);
+                    };
+
+                    // "w"
+                    var curX = ml;
+                    var wW = boldText('w', curX, logoY, 34); curX += wW;
+                    // "i"
+                    var iW = boldText('i', curX, logoY, 34); 
+                    // Roter Punkt auf dem i — exakt so breit wie das i
                     pdf.setFillColor(196, 30, 30);
-                    pdf.rect(ml + wW + 1, y + 2.5, 3, 3, 'F');
-                    // "LL" größer
-                    pdf.setFontSize(40); pdf.text('LL', ml + wW + iW, y + 12);
-                    var llW = pdf.getTextWidth('LL');
+                    pdf.setFontSize(34);
+                    var iActualW = pdf.getTextWidth('i');
+                    pdf.rect(curX + (iActualW / 2) - 1, y + 3, 2, 2, 'F');
+                    curX += iW;
+                    // "LL" — größer
+                    var llW = boldText('LL', curX, logoY, 42); curX += llW;
                     // "wacher"
-                    pdf.setFontSize(32); pdf.text('wacher', ml + wW + iW + llW, y + 12);
-                    var wacherW = pdf.getTextWidth('wacher');
-                    // Gesamtbreite des Logo-Textes berechnen
-                    var logoEndX = ml + wW + iW + llW + wacherW;
+                    var wacherW = boldText('wacher', curX, logoY, 34); curX += wacherW;
+                    var logoEndX = curX;
+
+                    // "Thomas" klein rot kursiv — TIEFER, knapp über dem "wi"
+                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(10); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Thomas', ml, logoY - 9);
 
                     // "Fliesenlegermeister e.K." rot — RECHTSBÜNDIG mit dem "r" von wacher
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
                     var fmText = 'Fliesenlegermeister e.K.';
                     var fmWidth = pdf.getTextWidth(fmText);
-                    pdf.text(fmText, logoEndX - fmWidth, y + 17);
+                    pdf.text(fmText, logoEndX - fmWidth, logoY + 5);
 
                     // Kontaktdaten rechts
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
@@ -12438,8 +12449,7 @@
                     }
 
                     // ═══ SUMMENBLOCK — bündig mit Tabelle rechts ═══
-                    // Tabelle endet bei rx (195mm), Summenblock startet weiter links
-                    var sL = 95; var sR = rx;
+                    var sL = 80; var sR = rx;
                     pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
                     pdf.line(sL, y - 2, sR, y - 2);
 
