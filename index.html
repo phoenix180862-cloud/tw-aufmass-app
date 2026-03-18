@@ -12298,26 +12298,35 @@
 
                     // ═══ LOGO ═══
                     var y = 12;
-                    // "Thomas" klein rot kursiv
+                    // "Thomas" klein rot kursiv — über dem "w" (nicht über dem "l"!)
                     pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(10); pdf.setTextColor(196, 30, 30);
                     pdf.text('Thomas', ml, y);
-                    // "wiLLwacher" groß bold
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(28); pdf.setTextColor(40, 40, 40);
-                    pdf.text('wi', ml, y + 11);
-                    // Roter i-Punkt (Quadrat)
+
+                    // "wiLLwacher" — KRÄFTIG, schwarz, bold, groß
+                    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(20, 20, 20);
+                    // "w" normal
+                    pdf.setFontSize(32); pdf.text('w', ml, y + 12);
+                    var wW = pdf.getTextWidth('w');
+                    // "i" (ohne Punkt, dotless)
+                    pdf.setFontSize(32); pdf.text('i', ml + wW, y + 12);
+                    var iW = pdf.getTextWidth('i');
+                    // Roter Quadrat-Punkt auf dem i
                     pdf.setFillColor(196, 30, 30);
-                    pdf.rect(ml + 9, y + 2, 2.8, 2.8, 'F');
-                    // "LL" etwas größer
-                    pdf.setFontSize(34);
-                    pdf.text('LL', ml + 13.5, y + 11);
+                    pdf.rect(ml + wW + 1, y + 2.5, 3, 3, 'F');
+                    // "LL" größer
+                    pdf.setFontSize(40); pdf.text('LL', ml + wW + iW, y + 12);
+                    var llW = pdf.getTextWidth('LL');
                     // "wacher"
-                    pdf.setFontSize(28);
-                    pdf.text('wacher', ml + 28, y + 11);
-                    // "Fliesenlegermeister e.K." rot rechts unter Logo
+                    pdf.setFontSize(32); pdf.text('wacher', ml + wW + iW + llW, y + 12);
+                    var wacherW = pdf.getTextWidth('wacher');
+                    // Gesamtbreite des Logo-Textes berechnen
+                    var logoEndX = ml + wW + iW + llW + wacherW;
+
+                    // "Fliesenlegermeister e.K." rot — RECHTSBÜNDIG mit dem "r" von wacher
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
                     var fmText = 'Fliesenlegermeister e.K.';
                     var fmWidth = pdf.getTextWidth(fmText);
-                    pdf.text(fmText, ml + 72 - fmWidth, y + 16);
+                    pdf.text(fmText, logoEndX - fmWidth, y + 17);
 
                     // Kontaktdaten rechts
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
@@ -12327,7 +12336,7 @@
                     pdf.text('Mobil 0170-2024161', rx, y + 14, {align:'right'});
 
                     // Rote Trennlinie
-                    y += 21;
+                    y += 22;
                     pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.5);
                     pdf.line(ml, y, rx, y);
                     y += 5;
@@ -12339,24 +12348,36 @@
                     pdf.line(ml, y + 1.5, ml + 90, y + 1.5);
                     y += 7;
 
-                    // ═══ EMPFÄNGER (Kundenadresse!) ═══
+                    // ═══ EMPFÄNGER — POSTALISCH KORREKT ═══
                     var empfY = y;
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
+                    // Kundenname bereinigen
                     var kundenName = kunde.auftraggeber || kunde.name || '';
-                    // Nur den echten Namen nehmen (ohne "Datum, Unterschrift..." etc.)
-                    if (kundenName.indexOf('Datum') === 0 || kundenName.indexOf('Unterschrift') !== -1) {
+                    if (kundenName.indexOf('Datum') === 0 || kundenName.indexOf('Unterschrift') !== -1 || kundenName.indexOf('Stempel') !== -1) {
                         kundenName = kunde.name || '';
                     }
+                    // Name (fett)
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
                     pdf.text(kundenName, ml, y); y += 5;
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
-                    if (kunde.ag_adresse && kunde.ag_adresse.indexOf('Datum') === -1 && kunde.ag_adresse.indexOf('Unterschrift') === -1) {
-                        pdf.text(kunde.ag_adresse, ml, y); y += 4.5;
+                    // Adresszeilen (normal)
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(50, 50, 50);
+                    // Straße
+                    var strasse = kunde.ag_adresse || '';
+                    if (strasse && strasse.indexOf('Datum') === -1 && strasse.indexOf('Unterschrift') === -1) {
+                        pdf.text(strasse, ml, y); y += 4.5;
                     }
-                    if (kunde.adresse && kunde.adresse !== kunde.ag_adresse) {
-                        pdf.text(kunde.adresse.substring(0, 90), ml, y); y += 4.5;
+                    // PLZ + Ort (aus adresse extrahieren oder direkt nehmen)
+                    var plzOrt = kunde.adresse || '';
+                    if (plzOrt && plzOrt !== strasse) {
+                        // Versuche PLZ Ort zu extrahieren (5-stellige Zahl + Text)
+                        var plzMatch = plzOrt.match(/\d{5}\s+\S+/);
+                        if (plzMatch) {
+                            pdf.text(plzMatch[0], ml, y); y += 4.5;
+                        } else {
+                            pdf.text(plzOrt.substring(0, 80), ml, y); y += 4.5;
+                        }
                     }
 
-                    // Datum rechtsbündig auf gleicher Höhe
+                    // Datum rechtsbündig auf Empfänger-Höhe
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(80, 80, 80);
                     pdf.text(new Date(rechnungsDatum).toLocaleDateString('de-DE'), rx, empfY, {align:'right'});
                     pdf.setFontSize(7); pdf.setTextColor(140, 140, 140);
@@ -12416,8 +12437,9 @@
                         y = pdf.lastAutoTable.finalY + 8;
                     }
 
-                    // ═══ SUMMENBLOCK ═══
-                    var sL = 115; var sR = rx;
+                    // ═══ SUMMENBLOCK — bündig mit Tabelle rechts ═══
+                    // Tabelle endet bei rx (195mm), Summenblock startet weiter links
+                    var sL = 95; var sR = rx;
                     pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
                     pdf.line(sL, y - 2, sR, y - 2);
 
