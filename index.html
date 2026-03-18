@@ -12289,236 +12289,144 @@
 
             // ── PDF-Export (§14 UStG konform, schönes Layout) ──
             var generatePDF = function() {
-                try {
-                    var jsPDF = window.jspdf.jsPDF;
-                    var pdf = new jsPDF('p', 'mm', 'a4');
-                    var pw = 210; var ph = 297;
-                    var ml = 20; var mr = 15; var cw = pw - ml - mr;
-                    var rx = pw - mr;
+                // ═══ HTML → PDF via Browser-Print (pixelgenau!) ═══
+                var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
+                    : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
+                    : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
+                    : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung' : 'Rechnung';
 
-                    // ═══ LOGO ═══
-                    var y = 10;
+                var kundenName = kunde.auftraggeber || kunde.name || '';
+                if (kundenName.indexOf('Datum') === 0 || kundenName.indexOf('Unterschrift') !== -1) kundenName = kunde.name || '';
 
-                    // "wiLLwacher" — 50% GRÖSSER, EXTRA KRÄFTIG
-                    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(15, 15, 15);
-                    var logoY = y + 16;
+                var adressFull = kunde.ag_adresse || kunde.adresse || '';
+                if (adressFull.indexOf('Datum') !== -1 || adressFull.indexOf('Unterschrift') !== -1) adressFull = kunde.adresse || '';
+                var adressLines = [];
+                if (adressFull) {
+                    var plzM = adressFull.match(/^(.*?)[\s,]+(\d{5}\s+.*)$/);
+                    if (plzM) { adressLines.push(plzM[1].trim()); adressLines.push(plzM[2].trim()); }
+                    else { adressFull.split(',').forEach(function(s){ if(s.trim()) adressLines.push(s.trim()); }); }
+                }
 
-                    var boldText = function(text, x, ty, size) {
-                        pdf.setFontSize(size);
-                        pdf.text(text, x, ty);
-                        pdf.text(text, x + 0.25, ty);
-                        pdf.text(text, x + 0.12, ty + 0.12);
-                        return pdf.getTextWidth(text);
-                    };
+                var posHTML = '';
+                if (rechnungsTyp !== 'stundenlohn') {
+                    aktivePosn.forEach(function(p) {
+                        var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
+                        posHTML += '<tr><td class="c">' + (p.pos||'') + '</td><td class="r">' + fmt(p.menge) + '</td><td class="c">' + (p.einheit||'') + '</td><td class="bez">' + (p.bez||'').replace(/</g,'&lt;') + '</td><td class="r">' + fmt(p.einzelpreis) + '</td><td class="r b">' + fmt(gp) + '</td></tr>';
+                    });
+                } else {
+                    stundenlohnEintraege.forEach(function(e) {
+                        var ges = (parseFloat(e.stunden)||0) * (parseFloat(e.stundensatz)||0);
+                        posHTML += '<tr><td>' + new Date(e.datum).toLocaleDateString('de-DE') + '</td><td class="bez">' + (e.beschreibung||'').replace(/</g,'&lt;') + '</td><td class="r">' + fmt(e.stunden||0) + '</td><td class="r">' + fmt(e.stundensatz) + '</td><td class="r b">' + fmt(ges) + '</td></tr>';
+                    });
+                }
 
-                    // Buchstaben einzeln setzen — 50% größer als vorher
-                    var curX = ml;
-                    var wW = boldText('w', curX, logoY, 50); curX += wW;
-                    var iStartX = curX;
-                    var iW = boldText('i', curX, logoY, 50);
-                    // Roter i-Punkt — exakt so breit wie der i-Strich
-                    pdf.setFillColor(196, 30, 30);
-                    pdf.setFontSize(50);
-                    var iActualW = pdf.getTextWidth('i');
-                    var dotSize = iActualW * 0.55;
-                    var dotX = curX + (iActualW - dotSize) / 2;
-                    var dotY = y + 2.5;
-                    pdf.rect(dotX, dotY, dotSize, dotSize, 'F');
-                    curX += iW;
-                    // "LL" größer
-                    var llW = boldText('LL', curX, logoY, 62); curX += llW;
-                    // "wacher"
-                    var wacherW = boldText('wacher', curX, logoY, 50); curX += wacherW;
-                    var logoEndX = curX;
+                var css = [
+                    '@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,700&display=swap");',
+                    '@page { size: A4; margin: 18mm 15mm 22mm 20mm; }',
+                    '* { box-sizing: border-box; margin: 0; padding: 0; }',
+                    'body { font-family: "Source Sans 3", "Segoe UI", sans-serif; font-size: 9pt; color: #222; line-height: 1.4; }',
+                    '@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }',
+                    '.logo-block { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2mm; }',
+                    '.logo-left { position: relative; }',
+                    '.logo-thomas { font-family: "Source Sans 3", serif; font-style: italic; font-weight: 700; color: #c41e1e; font-size: 11pt; }',
+                    '.logo-name { font-family: "Oswald", sans-serif; font-weight: 700; color: #111; font-size: 38pt; line-height: 1; margin-top: -2mm; letter-spacing: -0.5px; }',
+                    '.logo-name .ll { font-size: 46pt; }',
+                    '.logo-i-wrap { position: relative; display: inline-block; }',
+                    '.logo-i-dot { position: absolute; top: -5px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; background: #c41e1e; }',
+                    '.logo-i-wrap .ichar { color: transparent; }',
+                    '.logo-subtitle { font-family: "Source Sans 3", sans-serif; font-weight: 700; color: #c41e1e; font-size: 10pt; text-align: right; margin-top: 0; letter-spacing: 0.5px; }',
+                    '.logo-right { text-align: right; font-size: 8.5pt; color: #666; line-height: 1.6; padding-top: 4mm; }',
+                    'hr.sep { border: none; border-top: 2px solid #c41e1e; margin: 3mm 0 2mm; }',
+                    '.absender { font-size: 6.5pt; color: #999; border-bottom: 0.5px solid #ccc; display: inline-block; padding-bottom: 1px; margin-bottom: 5mm; }',
+                    '.empf-block { display: flex; justify-content: space-between; margin-bottom: 6mm; }',
+                    '.empf-name { font-weight: 700; font-size: 10.5pt; }',
+                    '.empf-addr { font-size: 9.5pt; color: #333; line-height: 1.5; }',
+                    '.datum-block { text-align: right; }',
+                    '.datum-label { font-size: 7pt; color: #999; }',
+                    '.datum-val { font-size: 10pt; }',
+                    '.re-titel { font-size: 16pt; font-weight: 700; margin-bottom: 4mm; }',
+                    '.re-meta { font-size: 9pt; color: #555; margin-bottom: 5mm; }',
+                    '.re-meta .label { display: inline-block; width: 35mm; color: #888; }',
+                    '.re-meta .val { font-weight: 600; color: #222; }',
+                    'table.pos { width: 100%; border-collapse: collapse; margin-bottom: 6mm; font-size: 8.5pt; }',
+                    'table.pos thead th { background: #2d3436; color: #fff; font-weight: 700; padding: 2.5mm 2mm; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.3px; }',
+                    'table.pos tbody td { padding: 2mm; border-bottom: 0.5px solid #ddd; vertical-align: top; }',
+                    'table.pos .c { text-align: center; }',
+                    'table.pos .r { text-align: right; font-variant-numeric: tabular-nums; }',
+                    'table.pos .b { font-weight: 700; }',
+                    'table.pos .bez { word-wrap: break-word; }',
+                    'table.pos col.cp { width: 12mm; }',
+                    'table.pos col.cm { width: 18mm; }',
+                    'table.pos col.ce { width: 12mm; }',
+                    'table.pos col.cep { width: 22mm; }',
+                    'table.pos col.cgp { width: 26mm; }',
+                    '.summen { margin-left: auto; width: 85mm; font-size: 9.5pt; margin-bottom: 6mm; }',
+                    '.summen .row { display: flex; justify-content: space-between; padding: 1mm 0; }',
+                    '.summen .row .val { font-variant-numeric: tabular-nums; text-align: right; min-width: 32mm; }',
+                    '.summen .row.brutto { font-weight: 700; font-size: 11.5pt; padding: 2mm 0; border-top: 2px double #222; margin-top: 1mm; }',
+                    '.summen .row.skonto { color: #c41e1e; font-weight: 700; }',
+                    '.summen .row.nzahl { font-weight: 700; }',
+                    '.summen .row.klein { font-size: 8.5pt; color: #777; }',
+                    '.bemerkung { font-size: 8.5pt; color: #555; margin-bottom: 8mm; line-height: 1.5; }',
+                    '.footer { position: fixed; bottom: 0; left: 0; right: 0; border-top: 1.5px solid #c41e1e; padding-top: 2mm; font-size: 6.5pt; color: #999; line-height: 1.6; }',
+                    '.footer .ft { font-style: italic; color: #c41e1e; font-weight: 700; }',
+                    '.footer .fn { color: #333; font-weight: 700; }',
+                    '.footer .fm { color: #c41e1e; }',
+                ].join('\n');
 
-                    // "Thomas" rot kursiv — T beginnt bei Vorderkante "w", etwas größer und kräftiger
-                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(11); pdf.setTextColor(180, 20, 20);
-                    pdf.text('Thomas', ml, dotY + dotSize + 1);
+                var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + rechnungsNr + '</title><style>' + css + '</style></head><body>';
 
-                    // Schwarzen i-Strich über dem Punkt verdecken (weißes Rect)
-                    pdf.setFillColor(255, 255, 255);
-                    pdf.rect(dotX - 0.5, dotY - 2, dotSize + 1, 2.2, 'F');
-                    // Roten Punkt nochmal drüber zeichnen (falls weißes Rect ihn angeknabbert hat)
-                    pdf.setFillColor(196, 30, 30);
-                    pdf.rect(dotX, dotY, dotSize, dotSize, 'F');
+                h += '<div class="logo-block"><div class="logo-left">';
+                h += '<div class="logo-thomas">Thomas</div>';
+                h += '<div class="logo-name">w<span class="logo-i-wrap"><span class="ichar">i</span><span class="logo-i-dot"></span></span><span class="ll">LL</span>wacher</div>';
+                h += '<div class="logo-subtitle">Fliesenlegermeister e.K.</div>';
+                h += '</div><div class="logo-right">Flurweg 14a<br>56472 Nisterau<br>Tel. 02661-63101<br>Mobil 0170-2024161</div></div>';
 
-                    // "Fliesenlegermeister e.K." rot — RECHTSBÜNDIG mit "r" von wacher, größer/kräftiger
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(180, 20, 20);
-                    var fmText = 'Fliesenlegermeister e.K.';
-                    var fmWidth = pdf.getTextWidth(fmText);
-                    pdf.text(fmText, logoEndX - fmWidth, logoY + 6);
+                h += '<hr class="sep">';
+                h += '<div class="absender">Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau</div>';
 
-                    // Kontaktdaten rechts
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
-                    pdf.text('Flurweg 14a', rx, y + 2, {align:'right'});
-                    pdf.text('56472 Nisterau', rx, y + 6, {align:'right'});
-                    pdf.text('Tel. 02661-63101', rx, y + 10, {align:'right'});
-                    pdf.text('Mobil 0170-2024161', rx, y + 14, {align:'right'});
+                h += '<div class="empf-block"><div><div class="empf-name">' + kundenName + '</div>';
+                h += '<div class="empf-addr">' + adressLines.join('<br>') + '</div></div>';
+                h += '<div class="datum-block"><div class="datum-label">Datum</div><div class="datum-val">' + new Date(rechnungsDatum).toLocaleDateString('de-DE') + '</div></div></div>';
 
-                    // Rote Trennlinie — nach dem größeren Logo mehr Abstand
-                    y = logoY + 10;
-                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.5);
-                    pdf.line(ml, y, rx, y);
-                    y += 5;
+                h += '<div class="re-titel">' + typLabel + '</div>';
+                h += '<div class="re-meta">';
+                h += '<div><span class="label">Rechnungs-Nr.:</span> <span class="val">' + rechnungsNr + '</span></div>';
+                h += '<div><span class="label">Bauvorhaben:</span> <span class="val">' + (kunde.adresse || kunde.name || '') + '</span></div>';
+                if (leistungszeitraum) h += '<div><span class="label">Leistungszeitraum:</span> <span class="val">' + leistungszeitraum + '</span></div>';
+                h += '<div><span class="label">Steuernummer:</span> <span class="val">30/220/1234/5</span></div>';
+                h += '</div>';
 
-                    // ═══ ABSENDERZEILE (klein, grau, unterstrichen) ═══
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); pdf.setTextColor(150, 150, 150);
-                    pdf.text('Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau', ml, y);
-                    pdf.setDrawColor(180, 180, 180); pdf.setLineWidth(0.15);
-                    pdf.line(ml, y + 1.5, ml + 90, y + 1.5);
-                    y += 7;
+                if (rechnungsTyp !== 'stundenlohn') {
+                    h += '<table class="pos"><colgroup><col class="cp"><col class="cm"><col class="ce"><col><col class="cep"><col class="cgp"></colgroup>';
+                    h += '<thead><tr><th class="c">Pos.</th><th class="r">Menge</th><th class="c">Einh.</th><th>Bezeichnung</th><th class="r">EP (\u20ac)</th><th class="r">GP (\u20ac)</th></tr></thead>';
+                    h += '<tbody>' + posHTML + '</tbody></table>';
+                } else {
+                    h += '<table class="pos"><thead><tr><th>Datum</th><th>Beschreibung</th><th class="r">Std.</th><th class="r">\u20ac/Std.</th><th class="r">Gesamt (\u20ac)</th></tr></thead>';
+                    h += '<tbody>' + posHTML + '</tbody></table>';
+                }
 
-                    // ═══ EMPFÄNGER — DEUTSCHES POSTFORMAT ═══
-                    // Zeile 1: Name / Firma
-                    // Zeile 2: Straße + Hausnummer
-                    // Zeile 3: PLZ + Ort
-                    var empfY = y;
-                    var kundenName = kunde.auftraggeber || kunde.name || '';
-                    if (kundenName.indexOf('Datum') === 0 || kundenName.indexOf('Unterschrift') !== -1 || kundenName.indexOf('Stempel') !== -1) {
-                        kundenName = kunde.name || '';
-                    }
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
-                    pdf.text(kundenName, ml, y); y += 5;
+                h += '<div class="summen">';
+                h += '<div class="row"><span>Nettobetrag:</span><span class="val">' + fmt(nettoSumme) + ' \u20ac</span></div>';
+                h += '<div class="row klein"><span>zzgl. ' + mwstSatz + '% MwSt.:</span><span class="val">' + fmt(mwstBetrag) + ' \u20ac</span></div>';
+                h += '<div class="row brutto"><span>Bruttobetrag:</span><span class="val">' + fmt(bruttoSumme) + ' \u20ac</span></div>';
+                if (sicherheitseinbehalt > 0) h += '<div class="row klein"><span>abzgl. Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:</span><span class="val">\u2013 ' + fmt(sicherheitBetrag) + ' \u20ac</span></div>';
+                h += '<div class="row skonto"><span>Zahlbar ' + skontoTage + ' Tage (' + skontoProzent + '% Skonto):</span><span class="val">' + fmt(zahlbetragMitSkonto) + ' \u20ac</span></div>';
+                h += '<div class="row nzahl"><span>Zahlbar ' + zahlungszielTage + ' Tage netto:</span><span class="val">' + fmt(zahlbetragOhneSkonto) + ' \u20ac</span></div>';
+                h += '</div>';
 
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(50, 50, 50);
-                    var adressFull = kunde.ag_adresse || kunde.adresse || '';
-                    if (adressFull.indexOf('Datum') !== -1 || adressFull.indexOf('Unterschrift') !== -1) adressFull = kunde.adresse || '';
-                    if (adressFull) {
-                        // Trenne Straße und PLZ/Ort: "Straße Nr, PLZ Ort" oder "Straße Nr PLZ Ort"
-                        var plzRegex = /^(.*?)[\s,]+(\d{5}\s+.*)$/;
-                        var addrMatch = adressFull.match(plzRegex);
-                        if (addrMatch) {
-                            pdf.text(addrMatch[1].trim(), ml, y); y += 4.5;
-                            pdf.text(addrMatch[2].trim(), ml, y); y += 4.5;
-                        } else {
-                            var parts = adressFull.split(',').map(function(s){return s.trim();}).filter(function(s){return s.length > 0;});
-                            parts.forEach(function(part) { pdf.text(part, ml, y); y += 4.5; });
-                        }
-                    }
+                if (bemerkung) h += '<div class="bemerkung">' + bemerkung.replace(/\n/g, '<br>') + '</div>';
 
-                    // Datum rechtsbündig auf Empfänger-Höhe
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(80, 80, 80);
-                    pdf.text(new Date(rechnungsDatum).toLocaleDateString('de-DE'), rx, empfY, {align:'right'});
-                    pdf.setFontSize(7); pdf.setTextColor(140, 140, 140);
-                    pdf.text('Datum', rx, empfY - 3, {align:'right'});
+                h += '<div class="footer"><div><span class="ft">Thomas </span><span class="fn">wiLLwacher</span> <span class="fm">Fliesenlegermeister e.K.</span></div>';
+                h += '<div>Flurweg 14a \u00b7 56472 Nisterau \u00b7 Tel. 02661-63101 \u00b7 Mobil 0170-2024161</div>';
+                h += '<div>Steuernummer: 30/220/1234/5 \u00b7 Westerwald Bank eG \u00b7 IBAN: DE12 5739 1800 0000 0000 00 \u00b7 BIC: GENODE51WW1</div></div>';
 
-                    y += 6;
+                h += '</body></html>';
 
-                    // ═══ RECHNUNGSTITEL ═══
-                    var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
-                        : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
-                        : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
-                        : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung' : 'Rechnung';
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(30, 30, 30);
-                    pdf.text(typLabel, ml, y); y += 8;
-
-                    // ═══ RECHNUNGSDATEN ═══
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(80, 80, 80);
-                    var lx = ml; var vx = ml + 38;
-                    pdf.text('Rechnungs-Nr.:', lx, y); pdf.setFont('helvetica','bold'); pdf.text(rechnungsNr, vx, y); y += 4.5;
-                    pdf.setFont('helvetica','normal');
-                    pdf.text('Bauvorhaben:', lx, y); pdf.text((kunde.adresse || kunde.name || '').substring(0, 70), vx, y); y += 4.5;
-                    if (leistungszeitraum) { pdf.text('Leistungszeitraum:', lx, y); pdf.text(leistungszeitraum, vx, y); y += 4.5; }
-                    pdf.text('Steuernummer:', lx, y); pdf.text('30/220/1234/5', vx, y); y += 8;
-
-                    // ═══ POSITIONSTABELLE — Pos | Menge | Einh | Bezeichnung | EP | GP ═══
-                    if (rechnungsTyp !== 'stundenlohn') {
-                        var tHead = [['Pos.', 'Menge', 'Einh.', 'Bezeichnung', 'EP (€)', 'GP (€)']];
-                        var tBody = aktivePosn.map(function(p) {
-                            var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
-                            return [p.pos, fmt(p.menge), p.einheit, p.bez || '', fmt(p.einzelpreis), fmt(gp)];
-                        });
-                        pdf.autoTable({
-                            startY: y, head: tHead, body: tBody, theme: 'grid',
-                            headStyles: { fillColor: [45, 52, 54], textColor: 255, fontSize: 7.5, fontStyle: 'bold', cellPadding: {top:2.5,right:2,bottom:2.5,left:2}, halign: 'center' },
-                            bodyStyles: { fontSize: 7.5, cellPadding: {top:2,right:2,bottom:2,left:2}, overflow: 'linebreak', valign: 'top' },
-                            columnStyles: {
-                                0: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
-                                1: { cellWidth: 18, halign: 'right' },
-                                2: { cellWidth: 12, halign: 'center' },
-                                3: { cellWidth: 73 },
-                                4: { cellWidth: 22, halign: 'right' },
-                                5: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }
-                            },
-                            margin: { left: ml, right: mr },
-                            styles: { lineColor: [200,200,200], lineWidth: 0.15, fontSize: 7.5 }
-                        });
-                        y = pdf.lastAutoTable.finalY + 8;
-                    } else {
-                        var slHead = [['Datum', 'Beschreibung', 'Std.', '€/Std.', 'Gesamt (€)']];
-                        var slBody = stundenlohnEintraege.map(function(e) {
-                            return [new Date(e.datum).toLocaleDateString('de-DE'), e.beschreibung || '', fmt(e.stunden||0), fmt(e.stundensatz), fmt((parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0))];
-                        });
-                        pdf.autoTable({ startY: y, head: slHead, body: slBody, theme: 'grid',
-                            headStyles: { fillColor: [45,52,54], textColor: 255, fontSize: 7.5, fontStyle:'bold' },
-                            bodyStyles: { fontSize: 7.5, overflow: 'linebreak', valign: 'top' },
-                            margin: { left: ml, right: mr } });
-                        y = pdf.lastAutoTable.finalY + 8;
-                    }
-
-                    // ═══ SUMMENBLOCK — Zahlen EXAKT bündig mit GP-Spalte ═══
-                    // GP-Spalte endet bei pw-mr = 195, minus 2mm cellPadding = 193
-                    // Labels links, Beträge rechtsbündig bei gleicher Position wie GP-Werte
-                    var tableRight = pw - mr; // rechte Kante der Tabelle = 195
-                    var sR = tableRight; // Beträge align:right bei Tabellenkante
-                    var sL = sR - 100; // Labels 100mm links davon
-                    pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
-                    pdf.line(sL, y - 2, sR, y - 2);
-
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
-                    pdf.text('Nettobetrag:', sL, y + 4); pdf.text(fmt(nettoSumme) + ' €', sR, y + 4, {align:'right'});
-                    pdf.text('zzgl. ' + mwstSatz + '% MwSt.:', sL, y + 10); pdf.text(fmt(mwstBetrag) + ' €', sR, y + 10, {align:'right'});
-
-                    pdf.setDrawColor(40, 40, 40); pdf.setLineWidth(0.4);
-                    pdf.line(sL, y + 14, sR, y + 14);
-                    pdf.line(sL, y + 14.8, sR, y + 14.8);
-
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(30, 30, 30);
-                    pdf.text('Bruttobetrag:', sL, y + 21); pdf.text(fmt(bruttoSumme) + ' €', sR, y + 21, {align:'right'});
-
-                    var sy = y + 28;
-                    if (sicherheitseinbehalt > 0) {
-                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(100, 100, 100);
-                        pdf.text('abzgl. Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:', sL, sy);
-                        pdf.text('– ' + fmt(sicherheitBetrag) + ' €', sR, sy, {align:'right'}); sy += 7;
-                    }
-                    // Skonto (gut lesbar, größer)
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Zahlbar ' + skontoTage + ' Tage (' + skontoProzent + '% Skonto):', sL, sy);
-                    pdf.text(fmt(zahlbetragMitSkonto) + ' €', sR, sy, {align:'right'}); sy += 7;
-                    // Netto-Zahlung
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(30, 30, 30);
-                    pdf.text('Zahlbar ' + zahlungszielTage + ' Tage netto:', sL, sy);
-                    pdf.text(fmt(zahlbetragOhneSkonto) + ' €', sR, sy, {align:'right'}); sy += 10;
-                    y = sy;
-
-                    // ═══ BEMERKUNG ═══
-                    if (bemerkung) {
-                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(80, 80, 80);
-                        var bLines = pdf.splitTextToSize(bemerkung, cw);
-                        pdf.text(bLines, ml, y); y += bLines.length * 4 + 4;
-                    }
-
-                    // ═══ FUSSZEILE ═══
-                    var fy = 268;
-                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.3);
-                    pdf.line(ml, fy, rx, fy); fy += 4;
-                    // Mini-Logo
-                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(7); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Thomas', ml, fy);
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(40, 40, 40);
-                    pdf.text('wiLLwacher', ml + 14, fy);
-                    pdf.setFillColor(196, 30, 30); pdf.rect(ml + 16.5, fy - 4.5, 1.2, 1.2, 'F');
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Fliesenlegermeister e.K.', ml + 40, fy);
-                    fy += 5;
-                    pdf.setFontSize(6.5); pdf.setTextColor(120, 120, 120);
-                    pdf.text('Flurweg 14a · 56472 Nisterau · Tel. 02661-63101 · Mobil 0170-2024161', ml, fy);
-                    fy += 3.5;
-                    pdf.text('Steuernummer: 30/220/1234/5 · Westerwald Bank eG · IBAN: DE12 5739 1800 0000 0000 00 · BIC: GENODE51WW1', ml, fy);
-
-                    pdf.save(rechnungsNr + '.pdf');
-                } catch(err) { alert('PDF-Fehler: ' + err.message); console.error(err); }
+                var printWin = window.open('', '_blank', 'width=800,height=1100');
+                printWin.document.write(h);
+                printWin.document.close();
+                setTimeout(function() { printWin.print(); }, 600);
             };
 
             // ═══════════════════════════════════════════
