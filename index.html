@@ -11852,7 +11852,7 @@
         function ModulWahl({ kunde, onSelectModul, kiAkte, onShowKiAkte }) {
             const module = [
                 { id: 'aufmass', icon: '📐', name: 'Aufmaß', desc: 'VOB-konforme Aufmaß-Erfassung', color: '#1E88E5', ready: true },
-                { id: 'rechnung', icon: '💶', name: 'Rechnungen', desc: 'Abschlags- & Schlussrechnungen', color: '#27ae60', ready: false },
+                { id: 'rechnung', icon: '💶', name: 'Rechnungen', desc: 'Abschlags- & Schlussrechnungen', color: '#27ae60', ready: true },
                 { id: 'kalkulation', icon: '🧮', name: 'Kalkulation', desc: 'Angebots- & Projektkalkulation', color: '#e67e22', ready: false },
                 { id: 'schriftverkehr', icon: '✉️', name: 'Schriftverkehr', desc: 'Briefe, E-Mails, Protokolle', color: '#8e44ad', ready: false },
                 { id: 'baustelle', icon: '📱', name: 'Baustellen-App', desc: 'Admin-Panel für Mitarbeiter', color: '#e74c3c', ready: false },
@@ -12152,7 +12152,458 @@
         }
 
         /* ═══════════════════════════════════════════
-           STUB-MODULE — Platzhalter für Rechnung, Kalkulation, Schriftverkehr, Baustellen-App
+           RECHNUNGSMODUL — VOB-konforme Rechnungen
+           Typen: Abschlag, Schluss, Nachtrag, Stundenlohn
+           ═══════════════════════════════════════════ */
+        function RechnungsModul({ kunde, importResult, onBack }) {
+            // ── State ──
+            const [rechnungsTyp, setRechnungsTyp] = useState(null); // 'abschlag' | 'schluss' | 'nachtrag' | 'stundenlohn'
+            const [positionen, setPositionen] = useState([]);
+            const [rechnungsNr, setRechnungsNr] = useState('');
+            const [rechnungsDatum, setRechnungsDatum] = useState(new Date().toISOString().split('T')[0]);
+            const [leistungszeitraum, setLeistungszeitraum] = useState('');
+            const [skontoProzent, setSkontoProzent] = useState(2);
+            const [skontoTage, setSkontoTage] = useState(10);
+            const [zahlungszielTage, setZahlungszielTage] = useState(30);
+            const [sicherheitseinbehalt, setSicherheitseinbehalt] = useState(5);
+            const [abschlagNr, setAbschlagNr] = useState(1);
+            const [bisherAbgerechnet, setBisherAbgerechnet] = useState(0);
+            const [showPdf, setShowPdf] = useState(false);
+            const [stundenlohnEintraege, setStundenlohnEintraege] = useState([
+                { datum: new Date().toISOString().split('T')[0], stunden: '', beschreibung: '', stundensatz: '55.00' }
+            ]);
+
+            // Auto-generierte Rechnungsnummer
+            useEffect(function() {
+                var year = new Date().getFullYear();
+                var rand = String(Math.floor(Math.random() * 900) + 100);
+                setRechnungsNr('RE-' + year + '-' + rand);
+            }, []);
+
+            // LV-Positionen aus importResult übernehmen
+            useEffect(function() {
+                if (importResult && importResult.positionen && importResult.positionen.length > 0) {
+                    setPositionen(importResult.positionen.map(function(p, i) {
+                        return {
+                            id: i,
+                            pos: p.pos || p.posNr || String(i + 1),
+                            bez: p.bez || p.titel || '',
+                            einheit: p.einheit || 'm²',
+                            menge: p.menge || 0,
+                            einzelpreis: p.einzelpreis || 0,
+                            gesamtpreis: (p.menge || 0) * (p.einzelpreis || 0),
+                            aktiv: true
+                        };
+                    }));
+                }
+            }, [importResult]);
+
+            // Berechnungen
+            var aktivePosn = positionen.filter(function(p) { return p.aktiv; });
+            var nettoSumme = aktivePosn.reduce(function(s, p) { return s + (parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0); }, 0);
+
+            // Stundenlohn-Summe
+            if (rechnungsTyp === 'stundenlohn') {
+                nettoSumme = stundenlohnEintraege.reduce(function(s, e) {
+                    return s + (parseFloat(e.stunden) || 0) * (parseFloat(e.stundensatz) || 0);
+                }, 0);
+            }
+
+            var mwstSatz = 19;
+            var mwstBetrag = nettoSumme * mwstSatz / 100;
+            var bruttoSumme = nettoSumme + mwstBetrag;
+            var sicherheitBetrag = bruttoSumme * sicherheitseinbehalt / 100;
+            var skontoBetrag = (bruttoSumme - sicherheitBetrag) * skontoProzent / 100;
+            var zahlbetragMitSkonto = bruttoSumme - sicherheitBetrag - skontoBetrag;
+            var zahlbetragOhneSkonto = bruttoSumme - sicherheitBetrag;
+
+            // Abschlag: bisher abgerechnete Summe abziehen
+            var abschlagNetto = nettoSumme;
+            if (rechnungsTyp === 'schluss') {
+                abschlagNetto = nettoSumme - parseFloat(bisherAbgerechnet || 0);
+            }
+
+            var updatePos = function(id, field, value) {
+                setPositionen(function(prev) {
+                    return prev.map(function(p) {
+                        if (p.id !== id) return p;
+                        var updated = Object.assign({}, p);
+                        updated[field] = value;
+                        if (field === 'menge' || field === 'einzelpreis') {
+                            updated.gesamtpreis = (parseFloat(updated.menge) || 0) * (parseFloat(updated.einzelpreis) || 0);
+                        }
+                        return updated;
+                    });
+                });
+            };
+
+            var addPosition = function() {
+                var maxId = positionen.reduce(function(m, p) { return Math.max(m, p.id); }, 0);
+                setPositionen(function(prev) {
+                    return prev.concat([{ id: maxId + 1, pos: String(prev.length + 1), bez: '', einheit: 'm²', menge: 0, einzelpreis: 0, gesamtpreis: 0, aktiv: true }]);
+                });
+            };
+
+            var addStundenlohnZeile = function() {
+                setStundenlohnEintraege(function(prev) {
+                    return prev.concat([{ datum: new Date().toISOString().split('T')[0], stunden: '', beschreibung: '', stundensatz: '55.00' }]);
+                });
+            };
+
+            var fmt = function(n) { return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+            // ── PDF-Export ──
+            var generatePDF = function() {
+                try {
+                    var jsPDF = window.jspdf.jsPDF;
+                    var pdf = new jsPDF('p', 'mm', 'a4');
+                    var y = 14;
+
+                    // ── FIRMENKOPF (Logo-Stil) ──
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Thomas Willwacher', 14, y);
+                    pdf.setTextColor(40, 40, 40);
+                    pdf.text('Fliesenlegermeister e.K.', 55, y);
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(130, 130, 130);
+                    pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101 | 0170-2024161', 196, y, { align: 'right' });
+                    y += 3;
+                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.5);
+                    pdf.line(14, y, 196, y);
+                    y += 10;
+
+                    // ── EMPFÄNGER ──
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(130, 130, 130);
+                    pdf.text('Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau', 14, y);
+                    y += 5;
+                    pdf.setFontSize(10); pdf.setTextColor(30, 30, 30); pdf.setFont('helvetica', 'bold');
+                    pdf.text(kunde.auftraggeber || kunde.name || '', 14, y); y += 5;
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
+                    if (kunde.ag_adresse) { pdf.text(kunde.ag_adresse, 14, y); y += 4; }
+                    if (kunde.adresse) { pdf.text(kunde.adresse, 14, y); y += 4; }
+                    y += 6;
+
+                    // ── RECHNUNGSKOPF ──
+                    var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
+                        : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
+                        : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
+                        : 'Stundenlohnrechnung';
+
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16); pdf.setTextColor(30, 30, 30);
+                    pdf.text(typLabel, 14, y); y += 8;
+
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(80, 80, 80);
+                    pdf.text('Rechnungs-Nr.:', 14, y); pdf.text(rechnungsNr, 55, y);
+                    pdf.text('Datum:', 120, y); pdf.text(new Date(rechnungsDatum).toLocaleDateString('de-DE'), 145, y);
+                    y += 5;
+                    if (leistungszeitraum) {
+                        pdf.text('Leistungszeitraum:', 14, y); pdf.text(leistungszeitraum, 55, y); y += 5;
+                    }
+                    pdf.text('Bauvorhaben:', 14, y); pdf.text((kunde.adresse || kunde.name || '').substring(0, 80), 55, y);
+                    y += 8;
+
+                    // ── POSITIONSTABELLE ──
+                    if (rechnungsTyp !== 'stundenlohn') {
+                        var tableHead = [['Pos.', 'Bezeichnung', 'Menge', 'Einh.', 'EP (€)', 'GP (€)']];
+                        var tableBody = aktivePosn.map(function(p) {
+                            return [p.pos, (p.bez || '').substring(0, 50), fmt(p.menge), p.einheit, fmt(p.einzelpreis), fmt((parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0))];
+                        });
+                        pdf.autoTable({
+                            startY: y,
+                            head: tableHead,
+                            body: tableBody,
+                            theme: 'grid',
+                            headStyles: { fillColor: [30, 136, 229], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+                            bodyStyles: { fontSize: 8 },
+                            columnStyles: { 0: { cellWidth: 15 }, 1: { cellWidth: 75 }, 2: { cellWidth: 20, halign: 'right' }, 3: { cellWidth: 15 }, 4: { cellWidth: 25, halign: 'right' }, 5: { cellWidth: 25, halign: 'right' } },
+                            margin: { left: 14, right: 14 }
+                        });
+                        y = pdf.lastAutoTable.finalY + 8;
+                    } else {
+                        // Stundenlohn-Tabelle
+                        var slHead = [['Datum', 'Beschreibung', 'Std.', '€/Std.', 'Gesamt (€)']];
+                        var slBody = stundenlohnEintraege.map(function(e) {
+                            var ges = (parseFloat(e.stunden) || 0) * (parseFloat(e.stundensatz) || 0);
+                            return [new Date(e.datum).toLocaleDateString('de-DE'), (e.beschreibung || '').substring(0, 60), fmt(e.stunden || 0), fmt(e.stundensatz), fmt(ges)];
+                        });
+                        pdf.autoTable({
+                            startY: y, head: slHead, body: slBody, theme: 'grid',
+                            headStyles: { fillColor: [30, 136, 229], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+                            bodyStyles: { fontSize: 8 },
+                            margin: { left: 14, right: 14 }
+                        });
+                        y = pdf.lastAutoTable.finalY + 8;
+                    }
+
+                    // ── SUMMENBLOCK ──
+                    var sumX = 120; var sumValX = 185;
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
+                    pdf.text('Nettosumme:', sumX, y); pdf.text(fmt(nettoSumme) + ' €', sumValX, y, { align: 'right' }); y += 5;
+                    pdf.text('MwSt. ' + mwstSatz + '%:', sumX, y); pdf.text(fmt(mwstBetrag) + ' €', sumValX, y, { align: 'right' }); y += 5;
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(30, 30, 30);
+                    pdf.text('Bruttosumme:', sumX, y); pdf.text(fmt(bruttoSumme) + ' €', sumValX, y, { align: 'right' }); y += 7;
+
+                    if (sicherheitseinbehalt > 0) {
+                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(80, 80, 80);
+                        pdf.text('Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:', sumX, y); pdf.text('- ' + fmt(sicherheitBetrag) + ' €', sumValX, y, { align: 'right' }); y += 5;
+                    }
+
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10);
+                    pdf.setTextColor(196, 30, 30);
+                    pdf.text('Zahlbar innerhalb ' + skontoTage + ' Tagen (' + skontoProzent + '% Skonto):', sumX, y);
+                    pdf.text(fmt(zahlbetragMitSkonto) + ' €', sumValX, y, { align: 'right' }); y += 5;
+                    pdf.setTextColor(30, 30, 30);
+                    pdf.text('Zahlbar innerhalb ' + zahlungszielTage + ' Tagen (netto):', sumX, y);
+                    pdf.text(fmt(zahlbetragOhneSkonto) + ' €', sumValX, y, { align: 'right' }); y += 12;
+
+                    // ── BANKVERBINDUNG ──
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
+                    pdf.text('Bankverbindung: Westerwald Bank eG | IBAN: DE12 5739 1800 0000 0000 00 | BIC: GENODE51WW1', 14, 275);
+
+                    // ── FUSSZEILE ──
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Thomas Willwacher', 14, 282);
+                    pdf.setTextColor(40, 40, 40);
+                    pdf.text('Fliesenlegermeister e.K.', 50, 282);
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(130, 130, 130);
+                    pdf.text('Flurweg 14a, 56472 Nisterau | Tel. 02661-63101 | 0170-2024161 | St-Nr. 30/220/1234/5', 14, 287);
+
+                    pdf.save(rechnungsNr + '.pdf');
+                } catch(err) {
+                    alert('PDF-Fehler: ' + err.message);
+                    console.error(err);
+                }
+            };
+
+            // ═══════════════════════════════════════════
+            // RENDER: Typ-Auswahl
+            // ═══════════════════════════════════════════
+            if (!rechnungsTyp) {
+                var typen = [
+                    { id: 'abschlag', icon: '📊', name: 'Abschlagsrechnung', desc: 'Teilrechnung mit kumulierter Aufstellung', color: '#1E88E5' },
+                    { id: 'schluss', icon: '📋', name: 'Schlussrechnung', desc: 'Endabrechnung mit Gesamtaufstellung', color: '#27ae60' },
+                    { id: 'nachtrag', icon: '📑', name: 'Nachtragsrechnung', desc: 'Zusätzliche Leistungen abrechnen', color: '#e67e22' },
+                    { id: 'stundenlohn', icon: '⏱️', name: 'Stundenlohnrechnung', desc: 'Stundenlohnarbeiten abrechnen', color: '#8e44ad' },
+                ];
+                return (
+                    <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
+                        <div style={{textAlign:'center', marginBottom:'20px'}}>
+                            <FirmenLogo size="small" />
+                            <div style={{marginTop:'12px', fontSize:'15px', fontWeight:'700'}}>{kunde ? kunde.name : ''}</div>
+                            <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginTop:'4px'}}>
+                                Rechnungstyp wählen
+                            </div>
+                        </div>
+                        <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                            {typen.map(function(t) {
+                                return (
+                                    <button key={t.id} onClick={function() { setRechnungsTyp(t.id); }}
+                                        style={{
+                                            padding:'16px', borderRadius:'14px', border:'2px solid ' + t.color + '33',
+                                            background:'var(--bg-secondary)', cursor:'pointer',
+                                            display:'flex', alignItems:'center', gap:'12px', textAlign:'left',
+                                            boxShadow:'0 2px 8px rgba(0,0,0,0.08)', transition:'transform 0.1s'
+                                        }}>
+                                        <span style={{fontSize:'28px'}}>{t.icon}</span>
+                                        <div>
+                                            <div style={{fontSize:'14px', fontWeight:'700', color: t.color}}>{t.name}</div>
+                                            <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>{t.desc}</div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <button onClick={onBack} style={{width:'100%', marginTop:'20px', padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'13px', cursor:'pointer'}}>
+                            ← Zurück zur Modulwahl
+                        </button>
+                    </div>
+                );
+            }
+
+            // ═══════════════════════════════════════════
+            // RENDER: Rechnungsformular
+            // ═══════════════════════════════════════════
+            var typLabel = rechnungsTyp === 'abschlag' ? abschlagNr + '. Abschlagsrechnung'
+                : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
+                : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
+                : 'Stundenlohnrechnung';
+            var typColor = rechnungsTyp === 'abschlag' ? '#1E88E5' : rechnungsTyp === 'schluss' ? '#27ae60' : rechnungsTyp === 'nachtrag' ? '#e67e22' : '#8e44ad';
+
+            return (
+                <div className="page-container" style={{padding:'16px', minHeight:'100vh', paddingBottom:'100px'}}>
+                    {/* Header mit Logo */}
+                    <div style={{textAlign:'center', marginBottom:'16px'}}>
+                        <FirmenLogo size="small" />
+                        <div style={{marginTop:'8px', fontSize:'16px', fontWeight:'700', color: typColor}}>{typLabel}</div>
+                        <div style={{fontSize:'12px', color:'var(--text-muted)'}}>{kunde ? kunde.name : ''}</div>
+                    </div>
+
+                    {/* Rechnungskopf */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                        <div style={{fontSize:'12px', fontWeight:'700', color: typColor, marginBottom:'10px'}}>📋 Rechnungsdaten</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
+                            <div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Rechnungs-Nr.</label>
+                                <input value={rechnungsNr} onChange={function(e){setRechnungsNr(e.target.value);}}
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                            <div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Datum</label>
+                                <input type="date" value={rechnungsDatum} onChange={function(e){setRechnungsDatum(e.target.value);}}
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                            <div style={{gridColumn:'span 2'}}>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Leistungszeitraum</label>
+                                <input value={leistungszeitraum} onChange={function(e){setLeistungszeitraum(e.target.value);}} placeholder="z.B. 01.01. - 31.03.2026"
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                            {rechnungsTyp === 'abschlag' && (
+                                <div>
+                                    <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Abschlags-Nr.</label>
+                                    <input type="number" min="1" value={abschlagNr} onChange={function(e){setAbschlagNr(parseInt(e.target.value)||1);}}
+                                        style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                                </div>
+                            )}
+                            {rechnungsTyp === 'schluss' && (
+                                <div>
+                                    <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Bisher abgerechnet (netto €)</label>
+                                    <input type="number" step="0.01" value={bisherAbgerechnet} onChange={function(e){setBisherAbgerechnet(e.target.value);}}
+                                        style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Positionen oder Stundenlohn */}
+                    {rechnungsTyp !== 'stundenlohn' ? (
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                                <div style={{fontSize:'12px', fontWeight:'700', color: typColor}}>📋 Positionen ({aktivePosn.length})</div>
+                                <button onClick={addPosition} style={{padding:'4px 10px', fontSize:'11px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Position</button>
+                            </div>
+                            {positionen.length === 0 ? (
+                                <div style={{textAlign:'center', padding:'20px', color:'var(--text-muted)', fontSize:'13px'}}>
+                                    Keine Positionen vorhanden.<br/>Importiere Daten über "Kunde NEU" oder füge manuell hinzu.
+                                </div>
+                            ) : (
+                                <div style={{maxHeight:'350px', overflow:'auto'}}>
+                                    {positionen.map(function(p) {
+                                        return (
+                                            <div key={p.id} style={{padding:'10px', borderBottom:'1px solid var(--border-color)', opacity: p.aktiv ? 1 : 0.4}}>
+                                                <div style={{display:'flex', alignItems:'center', gap:'6px', marginBottom:'6px'}}>
+                                                    <input type="checkbox" checked={p.aktiv} onChange={function(){updatePos(p.id, 'aktiv', !p.aktiv);}} />
+                                                    <span style={{fontWeight:'700', fontSize:'11px', color: typColor, minWidth:'40px'}}>{p.pos}</span>
+                                                    <input value={p.bez} onChange={function(e){updatePos(p.id, 'bez', e.target.value);}} placeholder="Bezeichnung"
+                                                        style={{flex:1, padding:'5px 8px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)'}} />
+                                                </div>
+                                                <div style={{display:'grid', gridTemplateColumns:'1fr 60px 70px 80px', gap:'4px', paddingLeft:'24px'}}>
+                                                    <input value={p.einheit} onChange={function(e){updatePos(p.id, 'einheit', e.target.value);}} placeholder="Einh."
+                                                        style={{padding:'5px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)'}} />
+                                                    <input type="number" step="0.01" value={p.menge} onChange={function(e){updatePos(p.id, 'menge', e.target.value);}} placeholder="Menge"
+                                                        style={{padding:'5px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
+                                                    <input type="number" step="0.01" value={p.einzelpreis} onChange={function(e){updatePos(p.id, 'einzelpreis', e.target.value);}} placeholder="EP €"
+                                                        style={{padding:'5px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
+                                                    <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'5px 0', color: typColor}}>
+                                                        {fmt((parseFloat(p.menge) || 0) * (parseFloat(p.einzelpreis) || 0))} €
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        /* Stundenlohn-Einträge */
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                                <div style={{fontSize:'12px', fontWeight:'700', color: typColor}}>⏱️ Stundenlohn-Einträge</div>
+                                <button onClick={addStundenlohnZeile} style={{padding:'4px 10px', fontSize:'11px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Zeile</button>
+                            </div>
+                            {stundenlohnEintraege.map(function(e, i) {
+                                return (
+                                    <div key={i} style={{padding:'8px', borderBottom:'1px solid var(--border-color)'}}>
+                                        <div style={{display:'grid', gridTemplateColumns:'100px 1fr', gap:'6px', marginBottom:'4px'}}>
+                                            <input type="date" value={e.datum} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{datum:ev.target.value});setStundenlohnEintraege(arr);}}
+                                                style={{padding:'5px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)'}} />
+                                            <input value={e.beschreibung} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{beschreibung:ev.target.value});setStundenlohnEintraege(arr);}} placeholder="Beschreibung"
+                                                style={{padding:'5px 8px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)'}} />
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'60px 70px 1fr', gap:'6px'}}>
+                                            <input type="number" step="0.5" value={e.stunden} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{stunden:ev.target.value});setStundenlohnEintraege(arr);}} placeholder="Std."
+                                                style={{padding:'5px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
+                                            <input type="number" step="0.01" value={e.stundensatz} onChange={function(ev){var arr=stundenlohnEintraege.slice();arr[i]=Object.assign({},e,{stundensatz:ev.target.value});setStundenlohnEintraege(arr);}} placeholder="€/Std."
+                                                style={{padding:'5px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right'}} />
+                                            <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'5px 0', color: typColor}}>
+                                                {fmt((parseFloat(e.stunden) || 0) * (parseFloat(e.stundensatz) || 0))} €
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Konditionen */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                        <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'10px'}}>⚙️ Konditionen</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
+                            <div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Skonto %</label>
+                                <input type="number" step="0.5" value={skontoProzent} onChange={function(e){setSkontoProzent(parseFloat(e.target.value)||0);}}
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                            <div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Skonto-Frist (Tage)</label>
+                                <input type="number" value={skontoTage} onChange={function(e){setSkontoTage(parseInt(e.target.value)||0);}}
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                            <div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Zahlungsziel (Tage)</label>
+                                <input type="number" value={zahlungszielTage} onChange={function(e){setZahlungszielTage(parseInt(e.target.value)||0);}}
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                            <div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Sicherheitseinbehalt %</label>
+                                <input type="number" step="0.5" value={sicherheitseinbehalt} onChange={function(e){setSicherheitseinbehalt(parseFloat(e.target.value)||0);}}
+                                    style={{width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'13px', color:'var(--text-primary)', boxSizing:'border-box'}} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Summenblock */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px', marginBottom:'16px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                        <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'10px'}}>💰 Berechnung</div>
+                        <div style={{fontSize:'13px', lineHeight:'2'}}>
+                            <div style={{display:'flex', justifyContent:'space-between'}}><span>Nettosumme:</span><span style={{fontWeight:'600'}}>{fmt(nettoSumme)} €</span></div>
+                            <div style={{display:'flex', justifyContent:'space-between', color:'var(--text-muted)'}}><span>MwSt. {mwstSatz}%:</span><span>{fmt(mwstBetrag)} €</span></div>
+                            <div style={{display:'flex', justifyContent:'space-between', fontWeight:'700', fontSize:'15px', borderTop:'2px solid var(--border-color)', paddingTop:'4px'}}><span>Bruttosumme:</span><span>{fmt(bruttoSumme)} €</span></div>
+                            {sicherheitseinbehalt > 0 && (
+                                <div style={{display:'flex', justifyContent:'space-between', color:'var(--text-muted)', fontSize:'12px'}}><span>Sicherheitseinbehalt {sicherheitseinbehalt}%:</span><span>- {fmt(sicherheitBetrag)} €</span></div>
+                            )}
+                            <div style={{display:'flex', justifyContent:'space-between', color: typColor, fontWeight:'700', marginTop:'4px'}}>
+                                <span>Zahlung mit Skonto ({skontoProzent}%, {skontoTage} Tage):</span><span>{fmt(zahlbetragMitSkonto)} €</span>
+                            </div>
+                            <div style={{display:'flex', justifyContent:'space-between', fontWeight:'600'}}>
+                                <span>Zahlung netto ({zahlungszielTage} Tage):</span><span>{fmt(zahlbetragOhneSkonto)} €</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Action-Buttons */}
+                    <div style={{display:'flex', gap:'8px', position:'fixed', bottom:0, left:0, right:0, padding:'12px 16px', background:'var(--bg-primary)', borderTop:'1px solid var(--border-color)', zIndex:100}}>
+                        <button onClick={function(){setRechnungsTyp(null);}} style={{flex:1, padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'13px', cursor:'pointer'}}>
+                            ← Typ ändern
+                        </button>
+                        <button onClick={generatePDF} style={{flex:2, padding:'12px', background:'linear-gradient(135deg, ' + typColor + ' 0%, ' + typColor + 'cc 100%)', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)'}}>
+                            📄 PDF erstellen
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           STUB-MODULE — Platzhalter für Kalkulation, Schriftverkehr, Baustellen-App
            ═══════════════════════════════════════════ */
         function StubModul({ name, icon, color, onBack }) {
             return (
@@ -12722,7 +13173,7 @@
                     case 'raumblatt':
                         return <Raumblatt kunde={selectedKunde} raum={selectedRaum} onFinishRaum={handleFinishRaum} onBack={handleBackToRaumerkennung} selectedPositions={selectedPositions} lastRaumData={lastRaumData} gesamtliste={gesamtliste} onShowGesamtliste={() => setShowGesamtliste(true)} onAufmassBeenden={handleAufmassBeenden} />;
                     case 'rechnung':
-                        return <StubModul name="Rechnungen" icon="💶" color="#27ae60" onBack={() => navigateTo('modulwahl')} />;
+                        return <RechnungsModul kunde={selectedKunde} importResult={importResult} onBack={() => navigateTo('modulwahl')} />;
                     case 'kalkulation':
                         return <StubModul name="Kalkulation" icon="🧮" color="#e67e22" onBack={() => navigateTo('modulwahl')} />;
                     case 'schriftverkehr':
