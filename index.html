@@ -12331,12 +12331,19 @@
                     var wacherW = boldText('wacher', curX, logoY, 50); curX += wacherW;
                     var logoEndX = curX;
 
-                    // "Thomas" rot kursiv — T beginnt bei Vorderkante "w", endet vor i-Punkt
-                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Thomas', ml, dotY + dotSize + 0.5);
+                    // "Thomas" rot kursiv — T beginnt bei Vorderkante "w", etwas größer und kräftiger
+                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(11); pdf.setTextColor(180, 20, 20);
+                    pdf.text('Thomas', ml, dotY + dotSize + 1);
 
-                    // "Fliesenlegermeister e.K." rot — RECHTSBÜNDIG mit "r" von wacher
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
+                    // Schwarzen i-Strich über dem Punkt verdecken (weißes Rect)
+                    pdf.setFillColor(255, 255, 255);
+                    pdf.rect(dotX - 0.5, dotY - 2, dotSize + 1, 2.2, 'F');
+                    // Roten Punkt nochmal drüber zeichnen (falls weißes Rect ihn angeknabbert hat)
+                    pdf.setFillColor(196, 30, 30);
+                    pdf.rect(dotX, dotY, dotSize, dotSize, 'F');
+
+                    // "Fliesenlegermeister e.K." rot — RECHTSBÜNDIG mit "r" von wacher, größer/kräftiger
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(180, 20, 20);
                     var fmText = 'Fliesenlegermeister e.K.';
                     var fmWidth = pdf.getTextWidth(fmText);
                     pdf.text(fmText, logoEndX - fmWidth, logoY + 6);
@@ -12449,8 +12456,12 @@
                         y = pdf.lastAutoTable.finalY + 8;
                     }
 
-                    // ═══ SUMMENBLOCK — Zahlen bündig mit GP-Spalte der Tabelle ═══
-                    var sL = 65; var sR = rx - 2;
+                    // ═══ SUMMENBLOCK — Zahlen EXAKT bündig mit GP-Spalte ═══
+                    // GP-Spalte endet bei pw-mr = 195, minus 2mm cellPadding = 193
+                    // Labels links, Beträge rechtsbündig bei gleicher Position wie GP-Werte
+                    var tableRight = pw - mr; // rechte Kante der Tabelle = 195
+                    var sR = tableRight; // Beträge align:right bei Tabellenkante
+                    var sL = sR - 100; // Labels 100mm links davon
                     pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
                     pdf.line(sL, y - 2, sR, y - 2);
 
