@@ -5918,303 +5918,169 @@
                 return original || '';
             }, [edits]);
 
-            const addNote = (section) => {
-                setExtraNotes(prev => ({
-                    ...prev,
-                    [section]: [...prev[section], '']
-                }));
-                setTimeout(() => {
-                    const textareas = document.querySelectorAll(`.notes-${section} .contact-extra-textarea`);
-                    if (textareas.length) textareas[textareas.length - 1].focus();
-                }, 50);
-            };
-
-            const updateNote = (section, idx, value) => {
-                setExtraNotes(prev => ({
-                    ...prev,
-                    [section]: prev[section].map((n, i) => i === idx ? value : n)
-                }));
-            };
-
-            const removeNote = (section, idx) => {
-                setExtraNotes(prev => ({
-                    ...prev,
-                    [section]: prev[section].filter((_, i) => i !== idx)
-                }));
-            };
-
-            const fileTypeIcon = (type) => {
-                switch(type) {
-                    case 'pdf': return '📄';
-                    case 'xlsx': return '📊';
-                    case 'img': return '🖼️';
-                    default: return '📎';
-                }
-            };
-
-            const toggleFolder = (idx) => {
-                setSelectedFolders(prev => ({ ...prev, [idx]: !prev[idx] }));
-            };
-
-            const selectAll = () => {
-                const allSelected = Object.values(selectedFolders).every(v => v);
-                const newState = {};
-                (kunde.folders || []).forEach((_, i) => { newState[i] = !allSelected; });
-                setSelectedFolders(newState);
-            };
-
-            const calcSize = () => {
-                let total = 0;
-                (kunde.folders || []).forEach((folder, i) => {
-                    if (selectedFolders[i]) {
-                        folder.files.forEach(f => {
-                            total += parseFloat(f.size);
-                        });
-                    }
-                });
-                return total.toFixed(1);
-            };
-
-            const selectedCount = Object.values(selectedFolders).filter(v => v).length;
-            const totalFolders = (kunde.folders || []).length;
-            const allSelected = selectedCount === totalFolders;
-
-            // Inline helper to render contact fields (NOT a sub-component to avoid remount)
+            // Inline helper to render contact fields
             const renderContactField = (icon, label, field, original) => {
                 const val = getVal(field, original);
                 const isMissing = !original;
                 return (
-                    <div className="contact-row" key={field}>
-                        <span className="contact-icon">{icon}</span>
+                    <div style={{display:'flex', alignItems:'center', gap:'8px', padding:'4px 0', fontSize:'13px'}} key={field}>
+                        <span style={{fontSize:'14px'}}>{icon}</span>
                         {isMissing ? (
                             <input
-                                className="contact-input"
+                                style={{flex:1, background:'var(--bg-tertiary)', border:'1px solid var(--border-color)', borderRadius:'6px', padding:'6px 10px', fontSize:'13px', color:'var(--text-primary)'}}
                                 type="text"
-                                placeholder={`${label} nachtragen...`}
+                                placeholder={label + ' nachtragen...'}
                                 value={val}
                                 onChange={e => handleEdit(field, e.target.value)}
                             />
                         ) : (
-                            <span className="contact-value">{val}</span>
+                            <span style={{color:'var(--text-secondary)'}}>{val}</span>
                         )}
                     </div>
                 );
-            };
-
-            const countMissing = () => {
-                let m = 0;
-                ['ag_adresse','ag_telefon','ag_email','bl_adresse','bl_telefon','bl_email','arch_adresse','arch_telefon','arch_email'].forEach(f => {
-                    if (!kunde[f] && !edits[f]) m++;
-                });
-                return m;
             };
 
             if (loading) {
                 return (
-                    <div className="page-container">
-                        <div className="loading-container">
-                            <div className="spinner"></div>
-                            <div className="loading-text">
-                                {loadProgress || (selectedCount + ' von ' + totalFolders + ' Ordner werden geladen...')}
-                            </div>
-                            <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'8px'}}>
-                                ca. {calcSize()} MB Datenübertragung
-                            </div>
-                            {loadProgress && loadProgress.includes('KI') && (
-                                <div style={{fontSize:'11px', color:'var(--accent-orange)', marginTop:'6px'}}>
-                                    🤖 KI-Analyse aktiv – optimale Erkennung
-                                </div>
-                            )}
-                            {loadProgress && loadProgress.includes('Offline') && (
-                                <div style={{fontSize:'11px', color:'var(--accent-red)', marginTop:'6px'}}>
-                                    📡 Offline-Modus – Regex-Erkennung wird verwendet
-                                </div>
-                            )}
+                    <div className="page-container" style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'80vh', padding:'20px'}}>
+                        <div style={{fontSize:'48px', marginBottom:'16px', animation:'pulse 1.5s ease-in-out infinite'}}>🤖</div>
+                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'12px'}}>
+                            Kundenakte wird analysiert
                         </div>
+                        {/* Fortschrittsbalken */}
+                        <div style={{width:'80%', maxWidth:'300px', height:'6px', background:'var(--bg-tertiary)', borderRadius:'3px', overflow:'hidden', marginBottom:'12px'}}>
+                            <div style={{width:'60%', height:'100%', background:'linear-gradient(90deg, var(--accent-blue), #8e44ad)', borderRadius:'3px', animation:'loading-bar 2s ease-in-out infinite'}}></div>
+                        </div>
+                        <div style={{fontSize:'13px', color:'var(--text-muted)', textAlign:'center', maxWidth:'280px', lineHeight:'1.6'}}>
+                            {loadProgress || 'Dokumente werden gelesen und analysiert...'}
+                        </div>
+                        {loadProgress && loadProgress.includes('KI') && (
+                            <div style={{fontSize:'11px', color:'var(--accent-blue)', marginTop:'8px', padding:'4px 12px', background:'rgba(30,136,229,0.1)', borderRadius:'8px'}}>
+                                🤖 KI-Analyse aktiv — optimale Erkennung
+                            </div>
+                        )}
+                        <style>{`
+                            @keyframes loading-bar { 0%{transform:translateX(-100%)} 50%{transform:translateX(0)} 100%{transform:translateX(100%)} }
+                            @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+                        `}</style>
                     </div>
                 );
             }
 
-            const missing = countMissing();
+            // Dateien-Zusammenfassung berechnen
+            var totalFiles = 0;
+            var totalSize = 0;
+            var fileTypes = { pdf: 0, xlsx: 0, img: 0, other: 0 };
+            (kunde.folders || []).forEach(function(f) {
+                f.files.forEach(function(file) {
+                    totalFiles++;
+                    totalSize += parseFloat(file.size || 0);
+                    if (file.type === 'pdf') fileTypes.pdf++;
+                    else if (file.type === 'xlsx') fileTypes.xlsx++;
+                    else if (file.type === 'img') fileTypes.img++;
+                    else fileTypes.other++;
+                });
+            });
 
             return (
-                <div className="page-container">
-                    <div className="breadcrumb">
-                        <span>Google Drive</span>
-                        <span>›</span>
-                        <span>Baustellen</span>
-                        <span>›</span>
-                        <span className="breadcrumb-active">{kunde.name.split(' – ')[0]}</span>
+                <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
+                    {/* Header */}
+                    <div style={{textAlign:'center', marginBottom:'16px'}}>
+                        <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'4px'}}>
+                            TW Business Suite
+                        </div>
+                        <div style={{fontSize:'18px', fontWeight:'700', color:'var(--text-primary)'}}>{kunde.name}</div>
+                        {kunde.adresse && <div style={{fontSize:'13px', color:'var(--text-muted)', marginTop:'4px'}}>📍 {kunde.adresse}</div>}
                     </div>
 
-                    <div className="page-title">{kunde.name}</div>
-                    <div className="page-subtitle">📍 {kunde.adresse}</div>
+                    {/* Projektdaten-Karte */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'16px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                        <div style={{fontSize:'13px', fontWeight:'700', marginBottom:'12px', color:'var(--accent-blue)'}}>📋 Projektdaten</div>
 
-                    {/* Projektdaten mit Kontaktdaten */}
-                    <div className="kunde-preview">
-                        <div className="kunde-preview-header">
-                            📋 Projektdaten
-                        </div>
-
-                        <div className="contact-section">
-                            <div className="contact-section-header">
-                                <div className="contact-role">Auftraggeber</div>
-                                <button className="contact-add-btn" onClick={() => addNote('ag')} title="Zusatzinfo nachtragen">+</button>
-                            </div>
-                            <div className="contact-name">{kunde.auftraggeber}</div>
+                        {/* Auftraggeber */}
+                        <div style={{marginBottom:'10px'}}>
+                            <div style={{fontSize:'10px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'2px'}}>Auftraggeber</div>
+                            <div style={{fontWeight:'600', fontSize:'14px'}}>{kunde.auftraggeber || kunde.name || '–'}</div>
                             {renderContactField("📍", "Adresse", "ag_adresse", kunde.ag_adresse)}
                             {renderContactField("📞", "Telefon", "ag_telefon", kunde.ag_telefon)}
                             {renderContactField("✉️", "E-Mail", "ag_email", kunde.ag_email)}
-                            {extraNotes.ag.length > 0 && (
-                                <div className={`contact-extra-notes notes-ag`}>
-                                    {extraNotes.ag.map((note, i) => (
-                                        <div key={i} className="contact-extra-note">
-                                            <span className="contact-icon">📝</span>
-                                            <textarea
-                                                className="contact-extra-textarea"
-                                                placeholder="Zusatzinfo eingeben..."
-                                                value={note}
-                                                onChange={e => updateNote('ag', i, e.target.value)}
-                                                rows={1}
-                                                onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-                                            />
-                                            <button className="contact-remove-btn" onClick={() => removeNote('ag', i)}>✕</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
-                        <div className="contact-section">
-                            <div className="contact-section-header">
-                                <div className="contact-role">Bauleitung</div>
-                                <button className="contact-add-btn" onClick={() => addNote('bl')} title="Zusatzinfo nachtragen">+</button>
+                        {/* Bauleitung */}
+                        {(kunde.bauleitung || true) && (
+                            <div style={{marginBottom:'10px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
+                                <div style={{fontSize:'10px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'2px'}}>Bauleitung</div>
+                                <div style={{fontWeight:'600', fontSize:'14px'}}>{kunde.bauleitung || '–'}</div>
+                                {renderContactField("📞", "Telefon", "bl_telefon", kunde.bl_telefon)}
+                                {renderContactField("✉️", "E-Mail", "bl_email", kunde.bl_email)}
                             </div>
-                            <div className="contact-name">{kunde.bauleitung}</div>
-                            {renderContactField("📍", "Adresse", "bl_adresse", kunde.bl_adresse)}
-                            {renderContactField("📞", "Telefon", "bl_telefon", kunde.bl_telefon)}
-                            {renderContactField("✉️", "E-Mail", "bl_email", kunde.bl_email)}
-                            {extraNotes.bl.length > 0 && (
-                                <div className={`contact-extra-notes notes-bl`}>
-                                    {extraNotes.bl.map((note, i) => (
-                                        <div key={i} className="contact-extra-note">
-                                            <span className="contact-icon">📝</span>
-                                            <textarea
-                                                className="contact-extra-textarea"
-                                                placeholder="Zusatzinfo eingeben..."
-                                                value={note}
-                                                onChange={e => updateNote('bl', i, e.target.value)}
-                                                rows={1}
-                                                onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-                                            />
-                                            <button className="contact-remove-btn" onClick={() => removeNote('bl', i)}>✕</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        )}
 
-                        <div className="contact-section">
-                            <div className="contact-section-header">
-                                <div className="contact-role">Architekt / Planer</div>
-                                <button className="contact-add-btn" onClick={() => addNote('arch')} title="Zusatzinfo nachtragen">+</button>
-                            </div>
-                            <div className="contact-name">{kunde.architekt}</div>
-                            {renderContactField("📍", "Adresse", "arch_adresse", kunde.arch_adresse)}
-                            {renderContactField("📞", "Telefon", "arch_telefon", kunde.arch_telefon)}
-                            {renderContactField("✉️", "E-Mail", "arch_email", kunde.arch_email)}
-                            {extraNotes.arch.length > 0 && (
-                                <div className={`contact-extra-notes notes-arch`}>
-                                    {extraNotes.arch.map((note, i) => (
-                                        <div key={i} className="contact-extra-note">
-                                            <span className="contact-icon">📝</span>
-                                            <textarea
-                                                className="contact-extra-textarea"
-                                                placeholder="Zusatzinfo eingeben..."
-                                                value={note}
-                                                onChange={e => updateNote('arch', i, e.target.value)}
-                                                rows={1}
-                                                onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-                                            />
-                                            <button className="contact-remove-btn" onClick={() => removeNote('arch', i)}>✕</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {missing > 0 && (
-                            <div className="contact-missing-hint">
-                                ⚠️ {missing} Angabe{missing > 1 ? 'n' : ''} nicht gefunden – bitte nachtragen
+                        {/* Architekt */}
+                        {(kunde.architekt || true) && (
+                            <div style={{paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
+                                <div style={{fontSize:'10px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'2px'}}>Architekt / Planer</div>
+                                <div style={{fontWeight:'600', fontSize:'14px'}}>{kunde.architekt || '–'}</div>
+                                {renderContactField("📞", "Telefon", "arch_telefon", kunde.arch_telefon)}
+                                {renderContactField("✉️", "E-Mail", "arch_email", kunde.arch_email)}
                             </div>
                         )}
                     </div>
 
-                    {/* Ordnerauswahl */}
+                    {/* Dokumente-Übersicht */}
                     {kunde.folders && kunde.folders.length > 0 && (
-                        <div className="kunde-preview" style={{marginTop:'12px'}}>
-                            <div className="folder-select-header">
-                                <div className="kunde-preview-header" style={{marginBottom:0}}>
-                                    📂 Ordner auswählen
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'16px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <div style={{fontSize:'13px', fontWeight:'700', marginBottom:'12px', color:'var(--accent-blue)'}}>📂 Dokumente im Kundenordner</div>
+
+                            {/* Zusammenfassung */}
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginBottom:'14px'}}>
+                                <div style={{textAlign:'center', padding:'8px', background:'var(--bg-tertiary)', borderRadius:'8px'}}>
+                                    <div style={{fontSize:'18px', fontWeight:'700', color:'var(--accent-blue)'}}>{totalFiles}</div>
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Dateien</div>
                                 </div>
-                                <button className="select-all-btn" onClick={selectAll}>
-                                    {allSelected ? 'Keine auswählen' : 'Alle auswählen'}
-                                </button>
+                                <div style={{textAlign:'center', padding:'8px', background:'var(--bg-tertiary)', borderRadius:'8px'}}>
+                                    <div style={{fontSize:'18px', fontWeight:'700', color:'var(--accent-blue)'}}>{(kunde.folders || []).length}</div>
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Ordner</div>
+                                </div>
+                                <div style={{textAlign:'center', padding:'8px', background:'var(--bg-tertiary)', borderRadius:'8px'}}>
+                                    <div style={{fontSize:'18px', fontWeight:'700', color:'var(--accent-blue)'}}>{totalSize.toFixed(1)}</div>
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>MB</div>
+                                </div>
                             </div>
 
-                            {kunde.folders.map((folder, idx) => {
-                                const isSelected = !!selectedFolders[idx];
-                                const folderSize = folder.files.reduce((s, f) => s + parseFloat(f.size), 0).toFixed(1);
+                            {/* Dateiliste nach Typ */}
+                            {(kunde.folders || []).map(function(folder, fi) {
                                 return (
-                                    <div key={idx} className={`folder-select-item ${isSelected ? 'selected' : ''}`}>
-                                        <div className="folder-select-head" onClick={() => toggleFolder(idx)}>
-                                            <div className={`folder-checkbox ${isSelected ? 'checked' : ''}`}>
-                                                {isSelected ? '✓' : ''}
-                                            </div>
-                                            <span style={{fontSize:'22px'}}>📁</span>
-                                            <div className="folder-select-info">
-                                                <div className="folder-select-name">{folder.name}</div>
-                                                <div className="folder-select-meta">
-                                                    {folder.files.length} Datei{folder.files.length > 1 ? 'en' : ''}
-                                                </div>
-                                            </div>
-                                            <span className="folder-select-size">{folderSize} MB</span>
+                                    <div key={fi} style={{marginBottom:'8px'}}>
+                                        <div style={{fontSize:'12px', fontWeight:'600', color:'var(--text-secondary)', padding:'4px 0', display:'flex', alignItems:'center', gap:'6px'}}>
+                                            <span>📁</span> {folder.name}
+                                            <span style={{fontSize:'10px', color:'var(--text-muted)', marginLeft:'auto'}}>{folder.files.length} Dateien</span>
                                         </div>
-                                        <div className="folder-files-preview">
-                                            {folder.files.map((file, fi) => (
-                                                <div key={fi} className="folder-file-row">
-                                                    <span>{fileTypeIcon(file.type)}</span>
-                                                    <span>{file.name}</span>
-                                                    <span style={{marginLeft:'auto', opacity:0.6}}>{file.size}</span>
+                                        {folder.files.map(function(file, ffi) {
+                                            var icon = file.type === 'pdf' ? '📄' : file.type === 'xlsx' ? '📊' : file.type === 'img' ? '🖼️' : '📎';
+                                            return (
+                                                <div key={ffi} style={{fontSize:'12px', color:'var(--text-muted)', padding:'3px 0 3px 20px', display:'flex', gap:'6px', alignItems:'center'}}>
+                                                    <span>{icon}</span>
+                                                    <span style={{flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{file.name}</span>
+                                                    <span style={{fontSize:'10px', opacity:0.6}}>{file.size} MB</span>
                                                 </div>
-                                            ))}
-                                        </div>
+                                            );
+                                        })}
                                     </div>
                                 );
                             })}
-
-                            <div className="transfer-summary">
-                                <span className="transfer-summary-label">
-                                    {selectedCount} von {totalFolders} Ordner ausgewählt
-                                </span>
-                                <span className="transfer-summary-value">
-                                    {calcSize()} MB
-                                </span>
-                            </div>
                         </div>
                     )}
 
-                    <button className="action-btn-full" onClick={onLoad} disabled={selectedCount === 0}
-                        style={selectedCount === 0 ? {opacity:0.4, cursor:'not-allowed'} : {}}>
-                        📥 Ausgewählte Ordner laden & Aufmaß beginnen
-                    </button>
-                    <button className="action-btn-full" onClick={onLoad} style={{
-                        marginTop:'10px',
-                        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-hover) 100%)',
-                        border: '2px solid var(--accent-orange)',
-                        color: 'var(--accent-orange)'
+                    {/* Weiter-Button */}
+                    <button onClick={onLoad} style={{
+                        width:'100%', padding:'14px', borderRadius:'12px', border:'none', cursor:'pointer',
+                        background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
+                        color:'white', fontSize:'15px', fontWeight:'700',
+                        boxShadow:'0 4px 12px rgba(30,136,229,0.3)',
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
                     }}>
-                        Weiter ▶
+                        📥 Daten laden & zur Modulwahl
                     </button>
                 </div>
             );
@@ -6225,199 +6091,144 @@
            ═══════════════════════════════════════════ */
         function AkteGeladen({ kunde, onStartAufmass, importResult }) {
             var ir = importResult || {};
-            var posCount = (ir.positionen || []).length;
+            var pos = ir.positionen || [];
+            var posCount = pos.length;
             var zeichnCount = (ir.zeichnungen || []).length;
             var quellenInfo = ir.quellenInfo || [];
             var fehler = ir.fehler || [];
             var hasImport = !!importResult;
             var quelle = '';
             quellenInfo.forEach(function(q) {
-                if (q.typ === 'lv' && q.quelle) {
-                    quelle = q.quelle;
-                }
+                if (q.typ === 'lv' && q.quelle) quelle = q.quelle;
             });
 
+            const [showPositionen, setShowPositionen] = useState(false);
+
             return (
-                <div className="page-container">
-                    <div className="breadcrumb">
-                        <span>Google Drive</span>
-                        <span>›</span>
-                        <span>Baustellen</span>
-                        <span>›</span>
-                        <span className="breadcrumb-active">{kunde.name.split(' – ')[0]}</span>
+                <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
+                    {/* Header */}
+                    <div style={{textAlign:'center', marginBottom:'20px'}}>
+                        <div style={{fontSize:'42px', marginBottom:'8px'}}>{fehler.length > 0 && posCount === 0 ? '⚠️' : '✅'}</div>
+                        <div style={{fontSize:'18px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'4px'}}>
+                            {hasImport ? 'Kundenakte analysiert!' : 'Kundenakte geladen!'}
+                        </div>
+                        <div style={{fontSize:'13px', color:'var(--text-muted)', lineHeight:'1.5'}}>
+                            {kunde.name}
+                        </div>
                     </div>
 
-                    <div style={{
-                        textAlign:'center',
-                        padding:'40px 20px',
-                        animation:'fadeInUp 0.5s ease-out'
+                    {/* Ergebnis-Dashboard */}
+                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'16px'}}>
+                        <div style={{padding:'12px', borderRadius:'12px', background:'rgba(30,136,229,0.1)', border:'1px solid rgba(30,136,229,0.2)', textAlign:'center'}}>
+                            <div style={{fontSize:'22px', fontWeight:'700', color:'#1E88E5'}}>{posCount}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>LV-POSITIONEN</div>
+                        </div>
+                        <div style={{padding:'12px', borderRadius:'12px', background:'rgba(39,174,96,0.1)', border:'1px solid rgba(39,174,96,0.2)', textAlign:'center'}}>
+                            <div style={{fontSize:'22px', fontWeight:'700', color:'#27ae60'}}>{kunde.raeume ? kunde.raeume.length : 0}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>RÄUME ERKANNT</div>
+                        </div>
+                        <div style={{padding:'12px', borderRadius:'12px', background:'rgba(142,68,173,0.1)', border:'1px solid rgba(142,68,173,0.2)', textAlign:'center'}}>
+                            <div style={{fontSize:'22px', fontWeight:'700', color:'#8e44ad'}}>{zeichnCount}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>ZEICHNUNGEN</div>
+                        </div>
+                        <div style={{padding:'12px', borderRadius:'12px', background:'rgba(230,126,34,0.1)', border:'1px solid rgba(230,126,34,0.2)', textAlign:'center'}}>
+                            <div style={{fontSize:'22px', fontWeight:'700', color:'#e67e22'}}>{quellenInfo.length}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>DATEIEN ANALYSIERT</div>
+                        </div>
+                    </div>
+
+                    {/* Erkennungsmethode */}
+                    {quelle && (
+                        <div style={{padding:'10px 14px', borderRadius:'10px', background:'var(--bg-secondary)', marginBottom:'12px', display:'flex', alignItems:'center', gap:'8px', fontSize:'13px'}}>
+                            <span>{quelle === 'ki' || quelle === 'ki-text' ? '🤖' : '📡'}</span>
+                            <span style={{fontWeight:'600'}}>Erkennungsmethode:</span>
+                            <span style={{color:'var(--text-muted)'}}>
+                                {quelle === 'ki' ? 'KI-Analyse (optimal)' : quelle === 'ki-text' ? 'KI Text-Analyse' : quelle === 'regex' ? 'Regex (Offline)' : quelle}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* LV-Positionen aufklappbar */}
+                    {posCount > 0 && (
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', marginBottom:'12px', overflow:'hidden', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <button onClick={function(){setShowPositionen(!showPositionen);}} style={{
+                                width:'100%', padding:'14px 16px', border:'none', cursor:'pointer',
+                                background:'none', display:'flex', alignItems:'center', gap:'8px',
+                                fontSize:'13px', fontWeight:'700', color:'var(--accent-blue)', textAlign:'left'
+                            }}>
+                                <span>📋</span>
+                                <span style={{flex:1}}>Erkannte LV-Positionen ({posCount})</span>
+                                <span style={{fontSize:'16px', transition:'transform 0.2s', transform: showPositionen ? 'rotate(180deg)' : 'rotate(0)'}}>{showPositionen ? '▲' : '▼'}</span>
+                            </button>
+                            {showPositionen && (
+                                <div style={{borderTop:'1px solid var(--border-color)', maxHeight:'300px', overflow:'auto'}}>
+                                    {pos.map(function(p, i) {
+                                        return (
+                                            <div key={i} style={{padding:'8px 16px', borderBottom:'1px solid var(--border-color)', fontSize:'12px', display:'flex', gap:'8px', alignItems:'center'}}>
+                                                <span style={{fontWeight:'700', color:'var(--accent-blue)', minWidth:'55px', fontSize:'11px'}}>{p.pos || p.posNr || ('Pos.' + (i+1))}</span>
+                                                <span style={{flex:1, color:'var(--text-primary)'}}>{p.bez || p.titel || '–'}</span>
+                                                <span style={{fontWeight:'600', minWidth:'50px', textAlign:'right'}}>{p.menge ? Number(p.menge).toLocaleString('de-DE') : ''}</span>
+                                                <span style={{color:'var(--text-muted)', minWidth:'25px', fontSize:'10px'}}>{p.einheit || ''}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Verarbeitete Dateien */}
+                    {quellenInfo.length > 0 && (
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <div style={{fontSize:'12px', fontWeight:'700', marginBottom:'8px', color:'var(--text-secondary)'}}>Verarbeitete Dateien</div>
+                            {quellenInfo.map(function(q, qi) {
+                                return (
+                                    <div key={qi} style={{fontSize:'12px', color:'var(--text-muted)', padding:'3px 0', display:'flex', gap:'6px', alignItems:'center'}}>
+                                        <span>{q.typ === 'lv' ? '📄' : q.typ === 'excel' ? '📊' : '🖼️'}</span>
+                                        <span style={{flex:1}}>{q.datei}</span>
+                                        {q.positionen && <span style={{fontSize:'10px', color:'var(--accent-blue)', fontWeight:'600'}}>{q.positionen} Pos.</span>}
+                                        {q.quelle && <span style={{fontSize:'9px', padding:'1px 5px', background:'rgba(30,136,229,0.1)', borderRadius:'4px', color:'var(--accent-blue)'}}>{q.quelle}</span>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Fehler */}
+                    {fehler.length > 0 && (
+                        <div style={{background:'rgba(231,76,60,0.08)', borderRadius:'14px', padding:'14px 16px', marginBottom:'12px', border:'1px solid rgba(231,76,60,0.2)'}}>
+                            <div style={{fontSize:'12px', fontWeight:'700', color:'#e74c3c', marginBottom:'6px'}}>⚠ Fehler bei {fehler.length} Datei(en)</div>
+                            {fehler.map(function(f, fi) {
+                                return (
+                                    <div key={fi} style={{fontSize:'11px', color:'#e74c3c', padding:'2px 0'}}>
+                                        {f.datei}: {f.fehler}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Projektdaten-Zusammenfassung */}
+                    {(kunde.auftraggeber || kunde.bauleitung || kunde.architekt) && (
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px 16px', marginBottom:'16px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <div style={{fontSize:'12px', fontWeight:'700', marginBottom:'8px', color:'var(--text-secondary)'}}>📋 Erkannte Projektdaten</div>
+                            {kunde.auftraggeber && <div style={{fontSize:'13px', padding:'3px 0'}}>👤 <strong>Auftraggeber:</strong> {kunde.auftraggeber}</div>}
+                            {kunde.adresse && <div style={{fontSize:'13px', padding:'3px 0', color:'var(--text-muted)'}}>📍 {kunde.adresse}</div>}
+                            {kunde.bauleitung && <div style={{fontSize:'13px', padding:'3px 0'}}>🏗️ <strong>Bauleitung:</strong> {kunde.bauleitung}</div>}
+                            {kunde.architekt && <div style={{fontSize:'13px', padding:'3px 0'}}>📐 <strong>Architekt:</strong> {kunde.architekt}</div>}
+                        </div>
+                    )}
+
+                    {/* Aufmaß starten Button */}
+                    <button onClick={onStartAufmass} style={{
+                        width:'100%', padding:'14px', borderRadius:'12px', border:'none', cursor:'pointer',
+                        background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
+                        color:'white', fontSize:'15px', fontWeight:'700',
+                        boxShadow:'0 4px 12px rgba(30,136,229,0.3)',
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
                     }}>
-                        <div style={{fontSize:'48px', marginBottom:'16px'}}>
-                            {fehler.length > 0 && posCount === 0 ? '⚠️' : '✅'}
-                        </div>
-                        <div className="page-title" style={{textAlign:'center', marginBottom:'8px'}}>
-                            {hasImport ? 'Kundenakte importiert!' : 'Kundenakte geladen!'}
-                        </div>
-                        <div style={{fontSize:'14px', color:'var(--text-light)', marginBottom:'32px', lineHeight:'1.6'}}>
-                            {hasImport ? (
-                                posCount > 0
-                                    ? 'Daten erfolgreich aus Google Drive importiert.'
-                                    : 'Import abgeschlossen, aber keine LV-Positionen erkannt.'
-                            ) : (
-                                'Alle Dokumente wurden erfolgreich importiert.'
-                            )}
-                            <br/>Das Aufmaß kann beginnen.
-                        </div>
-
-                        <div className="kunde-preview">
-                            <div className="kunde-preview-header">
-                                {hasImport ? '📊 Import-Ergebnis' : '✅ Import-Zusammenfassung'}
-                            </div>
-
-                            {/* LV Positionen */}
-                            <div className="kunde-detail">
-                                <span className="kunde-detail-label">LV-Positionen</span>
-                                <span className="kunde-detail-value" style={{color: posCount > 0 ? 'var(--success)' : 'var(--accent-orange)'}}>
-                                    {posCount > 0 ? ('✓ ' + posCount + ' erkannt') : (hasImport ? '⚠ Keine erkannt' : '✓ Eingelesen')}
-                                </span>
-                            </div>
-
-                            {/* Erkennungs-Quelle */}
-                            {quelle && (
-                                <div className="kunde-detail">
-                                    <span className="kunde-detail-label">Erkennungs-Methode</span>
-                                    <span className="kunde-detail-value" style={{fontSize:'12px'}}>
-                                        {quelle === 'ki' ? '🤖 KI-Analyse (optimal)' :
-                                         quelle === 'ki-text' ? '🤖 KI Text-Analyse' :
-                                         quelle === 'regex' ? '📡 Regex (Offline)' :
-                                         quelle}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Kundenstammdaten */}
-                            <div className="kunde-detail">
-                                <span className="kunde-detail-label">Kundenstammdaten</span>
-                                <span className="kunde-detail-value" style={{color:'var(--success)'}}>
-                                    {kunde.auftraggeber ? '✓ ' + kunde.auftraggeber : '✓ Übernommen'}
-                                </span>
-                            </div>
-
-                            {/* Zeichnungen */}
-                            <div className="kunde-detail">
-                                <span className="kunde-detail-label">Zeichnungen/Grundrisse</span>
-                                <span className="kunde-detail-value" style={{color: zeichnCount > 0 ? 'var(--success)' : 'var(--text-muted)'}}>
-                                    {zeichnCount > 0 ? ('✓ ' + zeichnCount + ' importiert') : (hasImport ? '– Keine gefunden' : '✓ Importiert')}
-                                </span>
-                            </div>
-
-                            {/* Erkannte Räume */}
-                            {kunde.raeume && kunde.raeume.length > 0 && (
-                                <div className="kunde-detail">
-                                    <span className="kunde-detail-label">Erkannte Räume</span>
-                                    <span className="kunde-detail-value" style={{color:'var(--success)'}}>
-                                        ✓ {kunde.raeume.length} Räume
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Verarbeitete Dateien */}
-                            {quellenInfo.length > 0 && (
-                                <div style={{marginTop:'12px', padding:'10px 14px', background:'var(--bg-hover)', borderRadius:'8px'}}>
-                                    <div style={{fontSize:'11px', fontWeight:600, marginBottom:'6px', color:'var(--text-muted)'}}>
-                                        Verarbeitete Dateien:
-                                    </div>
-                                    {quellenInfo.map(function(q, qi) {
-                                        return (
-                                            <div key={qi} style={{fontSize:'11px', color:'var(--text-light)', padding:'2px 0'}}>
-                                                {q.typ === 'lv' ? '📄' : q.typ === 'excel' ? '📊' : '🖼️'}
-                                                {' '}{q.datei}
-                                                {q.positionen ? (' → ' + q.positionen + ' Pos.') : ''}
-                                                {q.quelle ? (' [' + q.quelle + ']') : ''}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {/* Fehler */}
-                            {fehler.length > 0 && (
-                                <div style={{marginTop:'12px', padding:'10px 14px', background:'rgba(255,59,48,0.1)', borderRadius:'8px'}}>
-                                    <div style={{fontSize:'11px', fontWeight:600, marginBottom:'4px', color:'var(--accent-red)'}}>
-                                        ⚠ Fehler bei {fehler.length} Datei(en):
-                                    </div>
-                                    {fehler.map(function(f, fi) {
-                                        return (
-                                            <div key={fi} style={{fontSize:'10px', color:'var(--accent-red)', padding:'2px 0'}}>
-                                                {f.datei}: {f.fehler}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {/* Projekt-Info */}
-                            <div className="kunde-detail" style={{marginTop:'8px'}}>
-                                <span className="kunde-detail-label">Projekt</span>
-                                <span className="kunde-detail-value">{kunde.name}</span>
-                            </div>
-                            {kunde.adresse && (
-                                <div className="kunde-detail">
-                                    <span className="kunde-detail-label">Baumaßnahme</span>
-                                    <span className="kunde-detail-value">{kunde.adresse}</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* ═══ PROJEKTDATEN / KONTAKTE (aus Import) ═══ */}
-                        {(kunde.auftraggeber || kunde.bauleitung || kunde.architekt) && (
-                            <div className="kunde-preview" style={{marginTop:'12px', textAlign:'left'}}>
-                                <div className="kunde-preview-header">📋 Projektdaten</div>
-
-                                {/* Auftraggeber */}
-                                <div className="contact-section">
-                                    <div className="contact-role" style={{fontSize:'11px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'4px'}}>Auftraggeber</div>
-                                    <div style={{fontWeight:600, fontSize:'15px', marginBottom:'4px'}}>{kunde.auftraggeber || '–'}</div>
-                                    {kunde.ag_adresse && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📍 {kunde.ag_adresse}</div>}
-                                    {kunde.ag_telefon && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📞 {kunde.ag_telefon}</div>}
-                                    {kunde.ag_email && <div style={{fontSize:'13px', color:'var(--text-light)'}}>✉️ {kunde.ag_email}</div>}
-                                </div>
-
-                                {/* Bauleitung */}
-                                {kunde.bauleitung && (
-                                    <div className="contact-section" style={{marginTop:'10px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
-                                        <div className="contact-role" style={{fontSize:'11px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'4px'}}>Bauleitung</div>
-                                        <div style={{fontWeight:600, fontSize:'15px', marginBottom:'4px'}}>{kunde.bauleitung}</div>
-                                        {kunde.bl_adresse && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📍 {kunde.bl_adresse}</div>}
-                                        {kunde.bl_telefon && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📞 {kunde.bl_telefon}</div>}
-                                        {kunde.bl_email && <div style={{fontSize:'13px', color:'var(--text-light)'}}>✉️ {kunde.bl_email}</div>}
-                                    </div>
-                                )}
-
-                                {/* Architekt */}
-                                {kunde.architekt && (
-                                    <div className="contact-section" style={{marginTop:'10px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
-                                        <div className="contact-role" style={{fontSize:'11px', textTransform:'uppercase', letterSpacing:'1px', color:'var(--text-muted)', marginBottom:'4px'}}>Architekt / Planer</div>
-                                        <div style={{fontWeight:600, fontSize:'15px', marginBottom:'4px'}}>{kunde.architekt}</div>
-                                        {kunde.arch_adresse && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📍 {kunde.arch_adresse}</div>}
-                                        {kunde.arch_telefon && <div style={{fontSize:'13px', color:'var(--text-light)'}}>📞 {kunde.arch_telefon}</div>}
-                                        {kunde.arch_email && <div style={{fontSize:'13px', color:'var(--text-light)'}}>✉️ {kunde.arch_email}</div>}
-                                    </div>
-                                )}
-
-                                {/* Fehlende Daten Hinweis */}
-                                {(!kunde.bauleitung || !kunde.architekt) && (
-                                    <div style={{marginTop:'10px', padding:'8px 12px', background:'rgba(230,126,34,0.08)', borderRadius:'6px', fontSize:'12px', color:'var(--accent-orange)'}}>
-                                        ⚠️ Nicht alle Kontaktdaten konnten aus den Dokumenten extrahiert werden. Fehlende Daten können auf dem Raumblatt ergänzt werden.
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <button className="action-btn-full" style={{marginTop:'24px'}} onClick={onStartAufmass}>
-                            🏗️ Raumblatt erstellen
-                        </button>
-                    </div>
+                        🏗️ Aufmaß starten
+                    </button>
                 </div>
             );
         }
