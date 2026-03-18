@@ -12266,12 +12266,7 @@
 
             // Berechnungen
             var aktivePosn = positionen.filter(function(p) { return p.aktiv; });
-            var nettoSumme = 0;
-            if (rechnungsTyp === 'stundenlohn') {
-                nettoSumme = stundenlohnEintraege.reduce(function(s, e) { return s + (parseFloat(e.stunden)||0) * (parseFloat(e.stundensatz)||0); }, 0);
-            } else {
-                nettoSumme = aktivePosn.reduce(function(s, p) { return s + (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0); }, 0);
-            }
+            var nettoSumme = aktivePosn.reduce(function(s, p) { return s + (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0); }, 0);
             var mwstSatz = 19;
             var mwstBetrag = nettoSumme * mwstSatz / 100;
             var bruttoSumme = nettoSumme + mwstBetrag;
@@ -12301,17 +12296,10 @@
                 if (af) { var m = af.match(/^(.*?)[\s,]+(\d{5}\s+.*)$/); if(m){aLines.push(m[1].trim());aLines.push(m[2].trim());}else{af.split(',').forEach(function(s){if(s.trim())aLines.push(s.trim());});} }
 
                 var posR = '';
-                if (rechnungsTyp !== 'stundenlohn') {
-                    aktivePosn.forEach(function(p) {
-                        var gp = (parseFloat(p.menge)||0)*(parseFloat(p.einzelpreis)||0);
-                        posR += '<tr><td style="text-align:center;font-weight:700;width:30px">'+(p.pos||'')+'</td><td style="text-align:right;width:55px">'+fmt(p.menge)+'</td><td style="text-align:center;width:35px">'+(p.einheit||'')+'</td><td style="padding:6px 8px">'+(p.bez||'').replace(/</g,'&lt;')+'</td><td style="text-align:right;width:65px">'+fmt(p.einzelpreis)+'</td><td style="text-align:right;width:75px;font-weight:700">'+fmt(gp)+'</td></tr>';
-                    });
-                } else {
-                    stundenlohnEintraege.forEach(function(e) {
-                        var ges = (parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0);
-                        posR += '<tr><td style="width:70px">'+new Date(e.datum).toLocaleDateString('de-DE')+'</td><td style="padding:6px 8px">'+(e.beschreibung||'').replace(/</g,'&lt;')+'</td><td style="text-align:right;width:45px">'+fmt(e.stunden||0)+'</td><td style="text-align:right;width:55px">'+fmt(e.stundensatz)+'</td><td style="text-align:right;width:75px;font-weight:700">'+fmt(ges)+'</td></tr>';
-                    });
-                }
+                aktivePosn.forEach(function(p) {
+                    var gp = (parseFloat(p.menge)||0)*(parseFloat(p.einzelpreis)||0);
+                    posR += '<tr><td style="text-align:center;font-weight:700;width:30px">'+(p.pos||'')+'</td><td style="text-align:right;width:55px">'+fmt(p.menge)+'</td><td style="text-align:center;width:35px">'+(p.einheit||'')+'</td><td style="padding:6px 8px">'+(p.bez||'').replace(/</g,'&lt;')+'</td><td style="text-align:right;width:65px">'+fmt(p.einzelpreis)+'</td><td style="text-align:right;width:75px;font-weight:700">'+fmt(gp)+'</td></tr>';
+                });
 
                 var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+rechnungsNr+'</title>';
                 h += '<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,700&display=swap" rel="stylesheet">';
@@ -12399,14 +12387,9 @@
                 h += '<div><span class="l">Steuernummer:</span> <span class="v">30/220/1234/5</span></div>';
                 h += '</div>';
 
-                // Tabelle
-                if(rechnungsTyp !== 'stundenlohn') {
-                    h += '<table class="p"><thead><tr><th style="text-align:center;width:30px">Pos.</th><th style="text-align:right;width:55px">Menge</th><th style="text-align:center;width:35px">Einh.</th><th style="text-align:left">Bezeichnung</th><th style="text-align:right;width:65px">EP (\u20ac)</th><th style="text-align:right;width:75px">GP (\u20ac)</th></tr></thead>';
-                    h += '<tbody>'+posR+'</tbody></table>';
-                } else {
-                    h += '<table class="p"><thead><tr><th style="width:70px">Datum</th><th style="text-align:left">Beschreibung</th><th style="text-align:right;width:45px">Std.</th><th style="text-align:right;width:55px">\u20ac/Std.</th><th style="text-align:right;width:75px">Gesamt (\u20ac)</th></tr></thead>';
-                    h += '<tbody>'+posR+'</tbody></table>';
-                }
+                // Tabelle — immer gleiches Format
+                h += '<table class="p"><thead><tr><th style="text-align:center;width:30px">Pos.</th><th style="text-align:right;width:55px">Menge</th><th style="text-align:center;width:35px">Einh.</th><th style="text-align:left">Bezeichnung</th><th style="text-align:right;width:65px">EP (\u20ac)</th><th style="text-align:right;width:75px">GP (\u20ac)</th></tr></thead>';
+                h += '<tbody>'+posR+'</tbody></table>';
 
                 // Summen
                 h += '<div class="su">';
@@ -12443,7 +12426,7 @@
                     { id: 'schluss', icon: '📋', name: 'Schlussrechnung', desc: 'Endabrechnung mit Gesamtaufstellung', color: '#27ae60' },
                     { id: 'nachtrag', icon: '📑', name: 'Nachtragsrechnung', desc: 'Zusätzliche / geänderte Leistungen', color: '#e67e22' },
                     { id: 'stundenlohn', icon: '⏱️', name: 'Stundenlohnrechnung', desc: 'Regiearbeiten auf Stundenbasis', color: '#8e44ad' },
-                    { id: 'einzel', icon: '🧾', name: 'Einzelrechnung', desc: 'Einfache Rechnung ohne Abschläge', color: '#2d3436' },
+                    { id: 'einzel', icon: '🧾', name: 'Einzelrechnung', desc: 'Einfache Rechnung ohne Abschläge', color: '#00897b' },
                 ];
                 return (
                     <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
@@ -12456,7 +12439,7 @@
                         <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
                             {typen.map(function(t) {
                                 return (
-                                    <button key={t.id} onClick={function(){ setRechnungsTyp(t.id); if(t.id === 'stundenlohn'){setPhase('formular');}else{setPhase('posauswahl');} }}
+                                    <button key={t.id} onClick={function(){ setRechnungsTyp(t.id); setPhase('posauswahl'); }}
                                         style={{padding:'14px 16px', borderRadius:'12px', border:'2px solid ' + t.color + '22', background:'var(--bg-secondary)', cursor:'pointer', display:'flex', alignItems:'center', gap:'12px', textAlign:'left', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
                                         <span style={{fontSize:'24px'}}>{t.icon}</span>
                                         <div style={{flex:1}}>
@@ -12573,7 +12556,7 @@
             // ═══════════════════════════════════════════
             // PHASE 3: Rechnungsformular
             // ═══════════════════════════════════════════
-            var typColor = rechnungsTyp === 'abschlag' ? '#1E88E5' : rechnungsTyp === 'schluss' ? '#27ae60' : rechnungsTyp === 'nachtrag' ? '#e67e22' : rechnungsTyp === 'stundenlohn' ? '#8e44ad' : '#2d3436';
+            var typColor = rechnungsTyp === 'abschlag' ? '#1E88E5' : rechnungsTyp === 'schluss' ? '#27ae60' : rechnungsTyp === 'nachtrag' ? '#e67e22' : rechnungsTyp === 'stundenlohn' ? '#8e44ad' : '#00897b';
             var typLabel = rechnungsTyp === 'abschlag' ? abschlagNr + '. Abschlagsrechnung'
                 : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
                 : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
@@ -12608,9 +12591,8 @@
                         </div>
                     </div>
 
-                    {/* Positionen oder Stundenlohn */}
-                    {rechnungsTyp !== 'stundenlohn' ? (
-                        <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+                    {/* Positionen — gleiches Format für alle Rechnungstypen */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
                                 <div style={{fontSize:'11px', fontWeight:'700', color: typColor}}>📋 Positionen ({aktivePosn.length})</div>
                                 <button onClick={addPosition} style={{padding:'3px 8px', fontSize:'10px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Neu</button>
@@ -12649,7 +12631,7 @@
                                                 {/* Einheit */}
                                                 <input value={p.einheit} onChange={function(e){updatePos(p.id,'einheit',e.target.value);}}
                                                     style={{padding:'4px 2px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'10px', color:'var(--text-primary)', textAlign:'center', width:'100%', boxSizing:'border-box'}} />
-                                                {/* Bezeichnung — KEIN Scroll, volle Höhe automatisch! */}
+                                                {/* Bezeichnung */}
                                                 <div style={{padding:'0'}}>
                                                     <div contentEditable={true} suppressContentEditableWarning={true}
                                                         onBlur={function(e){updatePos(p.id,'bez',e.target.innerText);}}
@@ -12669,30 +12651,7 @@
                                     })}
                                 </div>
                             )}
-                        </div>
-                    ) : (
-                        <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
-                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
-                                <div style={{fontSize:'11px', fontWeight:'700', color: typColor}}>⏱️ Stundenlohn-Einträge</div>
-                                <button onClick={addStundenlohnZeile} style={{padding:'3px 8px', fontSize:'10px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Zeile</button>
-                            </div>
-                            {stundenlohnEintraege.map(function(e, i) {
-                                return (
-                                    <div key={i} style={{padding:'6px 0', borderBottom:'1px solid var(--border-color)'}}>
-                                        <div style={{display:'grid', gridTemplateColumns:'95px 1fr', gap:'4px', marginBottom:'3px'}}>
-                                            <input type="date" value={e.datum} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{datum:ev.target.value});setStundenlohnEintraege(a);}} style={Object.assign({},smallInputStyle,{textAlign:'left'})} />
-                                            <input value={e.beschreibung} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{beschreibung:ev.target.value});setStundenlohnEintraege(a);}} placeholder="Beschreibung" style={Object.assign({},smallInputStyle,{textAlign:'left'})} />
-                                        </div>
-                                        <div style={{display:'grid', gridTemplateColumns:'55px 65px 1fr', gap:'4px'}}>
-                                            <input type="number" step="0.5" value={e.stunden} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{stunden:ev.target.value});setStundenlohnEintraege(a);}} placeholder="Std." style={smallInputStyle} />
-                                            <input type="number" step="0.01" value={e.stundensatz} onChange={function(ev){var a=stundenlohnEintraege.slice();a[i]=Object.assign({},e,{stundensatz:ev.target.value});setStundenlohnEintraege(a);}} placeholder="€/Std." style={smallInputStyle} />
-                                            <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'6px 0', color: typColor}}>{fmt((parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0))} €</div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                    </div>
 
                     {/* Konditionen */}
                     <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', marginBottom:'10px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
@@ -12735,7 +12694,7 @@
 
                     {/* Fixed Bottom Bar */}
                     <div style={{position:'fixed', bottom:0, left:0, right:0, padding:'10px 16px', background:'var(--bg-primary)', borderTop:'1px solid var(--border-color)', zIndex:100, display:'flex', gap:'8px'}}>
-                        <button onClick={function(){ setPhase(rechnungsTyp === 'stundenlohn' ? 'typwahl' : 'posauswahl'); }}
+                        <button onClick={function(){ setPhase('posauswahl'); }}
                             style={{flex:1, padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'12px', cursor:'pointer'}}>← Zurück</button>
                         <button onClick={generatePDF}
                             style={{flex:2, padding:'12px', background:'linear-gradient(135deg, ' + typColor + ', ' + typColor + 'cc)', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'}}>
