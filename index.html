@@ -12293,142 +12293,182 @@
                     var jsPDF = window.jspdf.jsPDF;
                     var pdf = new jsPDF('p', 'mm', 'a4');
                     var pw = 210; var ph = 297;
-                    var ml = 25; var mr = 20; var cw = pw - ml - mr;
+                    var ml = 20; var mr = 15; var cw = pw - ml - mr;
 
-                    // ═══ FIRMENKOPF MIT LOGO ═══
-                    var y = 15;
-                    // "Thomas" in rot kursiv
-                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(8); pdf.setTextColor(196, 30, 30);
+                    // ═══ LOGO — 1:1 wie Startseite ═══
+                    var y = 12;
+                    // "Thomas" klein, rot, kursiv oben links
+                    pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
                     pdf.text('Thomas', ml, y);
-                    // "Willwacher" groß
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(18); pdf.setTextColor(40, 40, 40);
-                    pdf.text('Willwacher', ml, y + 7);
-                    // "Fliesenlegermeister e.K." in rot
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Fliesenlegermeister e.K.', ml, y + 12);
 
-                    // Rechte Seite: Kontaktdaten
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(100, 100, 100);
+                    // "wiLLwacher" — groß, bold (LL extra groß simuliert)
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(26); pdf.setTextColor(40, 40, 40);
+                    pdf.text('wiLLwacher', ml, y + 10);
+
+                    // Roter Punkt auf dem i (kleines Quadrat)
+                    pdf.setFillColor(196, 30, 30);
+                    pdf.rect(ml + 7.5, y + 1.5, 2.5, 2.5, 'F');
+
+                    // "Fliesenlegermeister e.K." rot, rechts unter dem Namen
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Fliesenlegermeister e.K.', ml + 47, y + 14.5);
+
+                    // Kontaktdaten rechts
                     var rx = pw - mr;
-                    pdf.text('Flurweg 14a', rx, y, {align:'right'});
-                    pdf.text('56472 Nisterau', rx, y + 4, {align:'right'});
-                    pdf.text('Tel. 02661-63101', rx, y + 8, {align:'right'});
-                    pdf.text('Mobil 0170-2024161', rx, y + 12, {align:'right'});
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
+                    pdf.text('Flurweg 14a', rx, y + 2, {align:'right'});
+                    pdf.text('56472 Nisterau', rx, y + 6, {align:'right'});
+                    pdf.text('Tel. 02661-63101', rx, y + 10, {align:'right'});
+                    pdf.text('Mobil 0170-2024161', rx, y + 14, {align:'right'});
 
-                    // Trennlinie
-                    y += 16;
-                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.6);
+                    // Trennlinie rot
+                    y += 19;
+                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.5);
                     pdf.line(ml, y, pw - mr, y);
-                    y += 4;
+                    y += 5;
 
-                    // ═══ ABSENDERZEILE ═══
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5); pdf.setTextColor(140, 140, 140);
+                    // ═══ ABSENDERZEILE (klein, grau, unterstrichen) ═══
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); pdf.setTextColor(150, 150, 150);
                     pdf.text('Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau', ml, y);
+                    pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.2);
+                    pdf.line(ml, y + 1, ml + 95, y + 1);
                     y += 7;
 
                     // ═══ EMPFÄNGER ═══
                     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
                     pdf.text(kunde.auftraggeber || kunde.name || '', ml, y); y += 5;
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
-                    if (kunde.ag_adresse) { pdf.text(kunde.ag_adresse, ml, y); y += 4; }
-                    if (kunde.adresse && kunde.adresse !== kunde.ag_adresse) { pdf.text(kunde.adresse, ml, y); y += 4; }
-                    y += 8;
+                    if (kunde.ag_adresse) { pdf.text(kunde.ag_adresse, ml, y); y += 4.5; }
+                    if (kunde.adresse && kunde.adresse !== kunde.ag_adresse) { pdf.text(kunde.adresse, ml, y); y += 4.5; }
+                    y += 6;
+
+                    // ═══ DATUM rechtsbündig auf Empfänger-Höhe ═══
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(80, 80, 80);
+                    pdf.text('Datum: ' + new Date(rechnungsDatum).toLocaleDateString('de-DE'), rx, y - 14, {align:'right'});
 
                     // ═══ RECHNUNGSTITEL ═══
                     var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
                         : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
                         : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
-                        : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung'
-                        : 'Rechnung';
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(30, 30, 30);
-                    pdf.text(typLabel, ml, y); y += 8;
+                        : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung' : 'Rechnung';
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.setTextColor(30, 30, 30);
+                    pdf.text(typLabel, ml, y); y += 7;
 
-                    // ═══ RECHNUNGSDATEN (§14 UStG Pflichtangaben) ═══
+                    // ═══ RECHNUNGSDATEN ═══
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(80, 80, 80);
-                    var col1 = ml; var col2 = ml + 35; var col3 = 120; var col4 = 155;
-                    pdf.text('Rechnungs-Nr.:', col1, y); pdf.setFont('helvetica','bold'); pdf.text(rechnungsNr, col2, y);
-                    pdf.setFont('helvetica','normal'); pdf.text('Datum:', col3, y); pdf.setFont('helvetica','bold'); pdf.text(new Date(rechnungsDatum).toLocaleDateString('de-DE'), col4, y);
-                    y += 5;
+                    var labelX = ml; var valX = ml + 38;
+                    pdf.text('Rechnungs-Nr.:', labelX, y); pdf.setFont('helvetica','bold'); pdf.text(rechnungsNr, valX, y); y += 4.5;
                     pdf.setFont('helvetica','normal');
-                    if (leistungszeitraum) { pdf.text('Leistungszeitraum:', col1, y); pdf.text(leistungszeitraum, col2, y); y += 5; }
-                    pdf.text('Bauvorhaben:', col1, y); pdf.text((kunde.adresse || kunde.name || '').substring(0, 60), col2, y); y += 5;
-                    // §14 UStG: Steuernummer
-                    pdf.text('Steuernummer:', col1, y); pdf.text('30/220/1234/5', col2, y); y += 8;
+                    pdf.text('Bauvorhaben:', labelX, y); pdf.text((kunde.adresse || kunde.name || '').substring(0, 80), valX, y); y += 4.5;
+                    if (leistungszeitraum) { pdf.text('Leistungszeitraum:', labelX, y); pdf.text(leistungszeitraum, valX, y); y += 4.5; }
+                    pdf.text('Steuernummer:', labelX, y); pdf.text('30/220/1234/5', valX, y); y += 7;
 
-                    // ═══ POSITIONSTABELLE ═══
+                    // ═══ POSITIONSTABELLE (Text umbricht automatisch!) ═══
                     if (rechnungsTyp !== 'stundenlohn') {
                         var tHead = [['Pos.', 'Bezeichnung', 'Menge', 'Einh.', 'EP (€)', 'GP (€)']];
                         var tBody = aktivePosn.map(function(p) {
                             var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
-                            return [p.pos, (p.bez||'').substring(0,55), fmt(p.menge), p.einheit, fmt(p.einzelpreis), fmt(gp)];
+                            return [p.pos, p.bez || '', fmt(p.menge), p.einheit, fmt(p.einzelpreis), fmt(gp)];
                         });
                         pdf.autoTable({
-                            startY: y, head: tHead, body: tBody, theme: 'striped',
-                            headStyles: { fillColor: [45, 52, 54], textColor: 255, fontSize: 7.5, fontStyle: 'bold', cellPadding: 2.5 },
-                            bodyStyles: { fontSize: 7.5, cellPadding: 2 },
-                            alternateRowStyles: { fillColor: [248, 249, 250] },
-                            columnStyles: { 0:{cellWidth:14}, 1:{cellWidth:70}, 2:{cellWidth:18,halign:'right'}, 3:{cellWidth:14}, 4:{cellWidth:22,halign:'right'}, 5:{cellWidth:22,halign:'right'} },
+                            startY: y, head: tHead, body: tBody, theme: 'grid',
+                            headStyles: { fillColor: [45, 52, 54], textColor: 255, fontSize: 7.5, fontStyle: 'bold', cellPadding: {top:2.5,right:2,bottom:2.5,left:2} },
+                            bodyStyles: { fontSize: 7.5, cellPadding: {top:2,right:2,bottom:2,left:2}, overflow: 'linebreak', valign: 'top' },
+                            columnStyles: {
+                                0: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
+                                1: { cellWidth: 75 },
+                                2: { cellWidth: 18, halign: 'right' },
+                                3: { cellWidth: 12, halign: 'center' },
+                                4: { cellWidth: 22, halign: 'right' },
+                                5: { cellWidth: 24, halign: 'right', fontStyle: 'bold' }
+                            },
                             margin: { left: ml, right: mr },
-                            styles: { lineColor: [220,220,220], lineWidth: 0.2 }
+                            styles: { lineColor: [200,200,200], lineWidth: 0.15, fontSize: 7.5 }
                         });
-                        y = pdf.lastAutoTable.finalY + 6;
+                        y = pdf.lastAutoTable.finalY + 8;
                     } else {
                         var slHead = [['Datum', 'Beschreibung', 'Std.', '€/Std.', 'Gesamt (€)']];
                         var slBody = stundenlohnEintraege.map(function(e) {
-                            return [new Date(e.datum).toLocaleDateString('de-DE'), (e.beschreibung||'').substring(0,60), fmt(e.stunden||0), fmt(e.stundensatz), fmt((parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0))];
+                            return [new Date(e.datum).toLocaleDateString('de-DE'), e.beschreibung || '', fmt(e.stunden||0), fmt(e.stundensatz), fmt((parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0))];
                         });
-                        pdf.autoTable({ startY: y, head: slHead, body: slBody, theme: 'striped', headStyles: { fillColor: [45,52,54], textColor: 255, fontSize: 7.5, fontStyle:'bold' }, bodyStyles: { fontSize: 7.5 }, margin: { left: ml, right: mr } });
-                        y = pdf.lastAutoTable.finalY + 6;
+                        pdf.autoTable({ startY: y, head: slHead, body: slBody, theme: 'grid',
+                            headStyles: { fillColor: [45,52,54], textColor: 255, fontSize: 7.5, fontStyle:'bold' },
+                            bodyStyles: { fontSize: 7.5, overflow: 'linebreak', valign: 'top' },
+                            margin: { left: ml, right: mr } });
+                        y = pdf.lastAutoTable.finalY + 8;
                     }
 
-                    // ═══ SUMMENBLOCK ═══
-                    var sumLeft = 120; var sumRight = pw - mr;
-                    pdf.setDrawColor(220, 220, 220); pdf.setLineWidth(0.3);
-                    pdf.line(sumLeft, y, sumRight, y); y += 5;
+                    // ═══ SUMMENBLOCK (klar, lesbar, genug Abstand) ═══
+                    var sumL = 115; var sumR = pw - mr;
+                    pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
+                    pdf.line(sumL, y - 2, sumR, y - 2);
 
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(60, 60, 60);
-                    pdf.text('Nettobetrag:', sumLeft, y); pdf.text(fmt(nettoSumme) + ' €', sumRight, y, {align:'right'}); y += 5;
-                    pdf.text('zzgl. ' + mwstSatz + '% MwSt.:', sumLeft, y); pdf.text(fmt(mwstBetrag) + ' €', sumRight, y, {align:'right'}); y += 5;
-                    pdf.setDrawColor(40, 40, 40); pdf.setLineWidth(0.5); pdf.line(sumLeft, y, sumRight, y); y += 5;
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(30, 30, 30);
-                    pdf.text('Bruttobetrag:', sumLeft, y); pdf.text(fmt(bruttoSumme) + ' €', sumRight, y, {align:'right'}); y += 7;
+                    pdf.text('Nettobetrag:', sumL, y + 3);
+                    pdf.text(fmt(nettoSumme) + ' €', sumR, y + 3, {align:'right'});
 
+                    pdf.text('zzgl. ' + mwstSatz + '% MwSt.:', sumL, y + 9);
+                    pdf.text(fmt(mwstBetrag) + ' €', sumR, y + 9, {align:'right'});
+
+                    // Doppellinie vor Brutto
+                    pdf.setDrawColor(40, 40, 40); pdf.setLineWidth(0.4);
+                    pdf.line(sumL, y + 13, sumR, y + 13);
+                    pdf.line(sumL, y + 13.8, sumR, y + 13.8);
+
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(30, 30, 30);
+                    pdf.text('Bruttobetrag:', sumL, y + 19);
+                    pdf.text(fmt(bruttoSumme) + ' €', sumR, y + 19, {align:'right'});
+
+                    var sy = y + 26;
                     if (sicherheitseinbehalt > 0) {
-                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(100, 100, 100);
-                        pdf.text('abzgl. Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:', sumLeft, y);
-                        pdf.text('- ' + fmt(sicherheitBetrag) + ' €', sumRight, y, {align:'right'}); y += 5;
+                        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 100, 100);
+                        pdf.text('abzgl. Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:', sumL, sy);
+                        pdf.text('– ' + fmt(sicherheitBetrag) + ' €', sumR, sy, {align:'right'});
+                        sy += 6;
                     }
-                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Bei Zahlung innerhalb ' + skontoTage + ' Tagen (' + skontoProzent + '% Skonto):', sumLeft, y);
-                    pdf.text(fmt(zahlbetragMitSkonto) + ' €', sumRight, y, {align:'right'}); y += 5;
-                    pdf.setTextColor(30, 30, 30);
-                    pdf.text('Bei Zahlung innerhalb ' + zahlungszielTage + ' Tagen netto:', sumLeft, y);
-                    pdf.text(fmt(zahlbetragOhneSkonto) + ' €', sumRight, y, {align:'right'}); y += 10;
+
+                    // Skonto-Zeile (rot, gut lesbar)
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(196, 30, 30);
+                    pdf.text('Zahlbar ' + skontoTage + ' Tage, ' + skontoProzent + '% Skonto:', sumL, sy);
+                    pdf.text(fmt(zahlbetragMitSkonto) + ' €', sumR, sy, {align:'right'});
+                    sy += 6;
+
+                    // Netto-Zeile
+                    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(30, 30, 30);
+                    pdf.text('Zahlbar ' + zahlungszielTage + ' Tage netto:', sumL, sy);
+                    pdf.text(fmt(zahlbetragOhneSkonto) + ' €', sumR, sy, {align:'right'});
+                    sy += 8;
+                    y = sy;
 
                     // ═══ BEMERKUNG ═══
                     if (bemerkung) {
                         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(80, 80, 80);
-                        var lines = pdf.splitTextToSize(bemerkung, cw);
-                        pdf.text(lines, ml, y); y += lines.length * 4 + 4;
+                        var bLines = pdf.splitTextToSize(bemerkung, cw);
+                        pdf.text(bLines, ml, y); y += bLines.length * 4 + 4;
                     }
 
-                    // ═══ BANKVERBINDUNG (§14 UStG) ═══
-                    var footerY = 265;
-                    pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.3);
-                    pdf.line(ml, footerY, pw - mr, footerY); footerY += 4;
-                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(120, 120, 120);
-                    pdf.text('Bankverbindung: Westerwald Bank eG  |  IBAN: DE12 5739 1800 0000 0000 00  |  BIC: GENODE51WW1', ml, footerY);
-                    footerY += 4;
+                    // ═══ FUSSZEILE (fest unten) ═══
+                    var fy = 268;
+                    pdf.setDrawColor(196, 30, 30); pdf.setLineWidth(0.3);
+                    pdf.line(ml, fy, pw - mr, fy);
+                    fy += 4;
 
-                    // ═══ FUSSZEILE MIT LOGO ═══
+                    // Logo-Wiederholung
                     pdf.setFont('helvetica', 'bolditalic'); pdf.setFontSize(7); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Thomas', ml, footerY);
+                    pdf.text('Thomas', ml, fy);
                     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(40, 40, 40);
-                    pdf.text('Willwacher', ml + 13, footerY);
+                    pdf.text('wiLLwacher', ml + 13, fy);
                     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(196, 30, 30);
-                    pdf.text('Fliesenlegermeister e.K.', ml + 36, footerY);
-                    pdf.setTextColor(120, 120, 120); pdf.setFontSize(6.5);
-                    pdf.text('Flurweg 14a · 56472 Nisterau · Tel. 02661-63101 · Mobil 0170-2024161 · St-Nr. 30/220/1234/5', ml, footerY + 4);
+                    pdf.text('Fliesenlegermeister e.K.', ml + 38, fy);
+                    // Roter Punkt Mini
+                    pdf.setFillColor(196, 30, 30);
+                    pdf.rect(ml + 15.2, fy - 4.2, 1.2, 1.2, 'F');
+
+                    fy += 5;
+                    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5); pdf.setTextColor(120, 120, 120);
+                    pdf.text('Flurweg 14a · 56472 Nisterau · Tel. 02661-63101 · Mobil 0170-2024161', ml, fy);
+                    fy += 3.5;
+                    pdf.text('Steuernummer: 30/220/1234/5 · Bankverbindung: Westerwald Bank eG · IBAN: DE12 5739 1800 0000 0000 00 · BIC: GENODE51WW1', ml, fy);
 
                     pdf.save(rechnungsNr + '.pdf');
                 } catch(err) { alert('PDF-Fehler: ' + err.message); console.error(err); }
@@ -12615,25 +12655,49 @@
                                 <div style={{fontSize:'11px', fontWeight:'700', color: typColor}}>📋 Positionen ({aktivePosn.length})</div>
                                 <button onClick={addPosition} style={{padding:'3px 8px', fontSize:'10px', background: typColor, color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>+ Neu</button>
                             </div>
+
+                            {/* Tabellenkopf */}
+                            <div style={{display:'grid', gridTemplateColumns:'28px 38px 1fr 58px 38px 62px 68px', gap:'2px', padding:'4px 2px', fontSize:'9px', fontWeight:'700', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.5px', borderBottom:'2px solid var(--border-color)'}}>
+                                <span></span>
+                                <span>Pos.</span>
+                                <span>Bezeichnung</span>
+                                <span style={{textAlign:'right'}}>Menge</span>
+                                <span style={{textAlign:'center'}}>Einh.</span>
+                                <span style={{textAlign:'right'}}>EP (€)</span>
+                                <span style={{textAlign:'right'}}>GP (€)</span>
+                            </div>
+
                             {positionen.length === 0 ? (
                                 <div style={{textAlign:'center', padding:'16px', color:'var(--text-muted)', fontSize:'12px'}}>Keine Positionen. Klicke "+ Neu" zum Anlegen.</div>
                             ) : (
-                                <div style={{maxHeight:'320px', overflow:'auto'}}>
+                                <div style={{maxHeight:'380px', overflow:'auto'}}>
                                     {positionen.map(function(p) {
                                         var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
                                         return (
-                                            <div key={p.id} style={{padding:'8px 0', borderBottom:'1px solid var(--border-color)', opacity: p.aktiv ? 1 : 0.35}}>
-                                                <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'4px'}}>
+                                            <div key={p.id} style={{display:'grid', gridTemplateColumns:'28px 38px 1fr 58px 38px 62px 68px', gap:'2px', padding:'6px 2px', borderBottom:'1px solid var(--border-color)', alignItems:'start', opacity: p.aktiv ? 1 : 0.3}}>
+                                                {/* Checkbox + Löschen */}
+                                                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:'2px', paddingTop:'2px'}}>
                                                     <input type="checkbox" checked={p.aktiv} onChange={function(){updatePos(p.id,'aktiv',!p.aktiv);}} />
-                                                    <input value={p.pos} onChange={function(e){updatePos(p.id,'pos',e.target.value);}} style={{width:'40px', padding:'4px 6px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', fontWeight:'700', color: typColor, textAlign:'center'}} />
-                                                    <input value={p.bez} onChange={function(e){updatePos(p.id,'bez',e.target.value);}} placeholder="Bezeichnung" style={{flex:1, padding:'4px 8px', borderRadius:'6px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)'}} />
-                                                    <button onClick={function(){removePosition(p.id);}} style={{background:'none', border:'none', color:'#e74c3c', fontSize:'14px', cursor:'pointer', padding:'2px'}}>✕</button>
+                                                    <button onClick={function(){removePosition(p.id);}} style={{background:'none', border:'none', color:'#e74c3c', fontSize:'10px', cursor:'pointer', padding:0, lineHeight:1}}>✕</button>
                                                 </div>
-                                                <div style={{display:'grid', gridTemplateColumns:'50px 65px 70px auto', gap:'4px', paddingLeft:'22px'}}>
-                                                    <input value={p.einheit} onChange={function(e){updatePos(p.id,'einheit',e.target.value);}} style={Object.assign({},smallInputStyle,{textAlign:'center'})} />
-                                                    <input type="number" step="0.001" value={p.menge} onChange={function(e){updatePos(p.id,'menge',e.target.value);}} placeholder="Menge" style={smallInputStyle} />
-                                                    <input type="number" step="0.01" value={p.einzelpreis} onChange={function(e){updatePos(p.id,'einzelpreis',e.target.value);}} placeholder="EP €" style={smallInputStyle} />
-                                                    <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'6px 4px 0 0', color: typColor}}>{fmt(gp)} €</div>
+                                                {/* Pos-Nr */}
+                                                <input value={p.pos} onChange={function(e){updatePos(p.id,'pos',e.target.value);}}
+                                                    style={{padding:'4px 3px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', fontWeight:'700', color: typColor, textAlign:'center', width:'100%', boxSizing:'border-box'}} />
+                                                {/* Bezeichnung (textarea für mehrzeilig!) */}
+                                                <textarea value={p.bez} onChange={function(e){updatePos(p.id,'bez',e.target.value);}} placeholder="Bezeichnung" rows={2}
+                                                    style={{padding:'4px 6px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', resize:'vertical', width:'100%', boxSizing:'border-box', lineHeight:'1.4', minHeight:'36px'}} />
+                                                {/* Menge */}
+                                                <input type="number" step="0.001" value={p.menge} onChange={function(e){updatePos(p.id,'menge',e.target.value);}} placeholder="Menge"
+                                                    style={{padding:'4px 4px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right', width:'100%', boxSizing:'border-box'}} />
+                                                {/* Einheit */}
+                                                <input value={p.einheit} onChange={function(e){updatePos(p.id,'einheit',e.target.value);}}
+                                                    style={{padding:'4px 2px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'10px', color:'var(--text-primary)', textAlign:'center', width:'100%', boxSizing:'border-box'}} />
+                                                {/* EP */}
+                                                <input type="number" step="0.01" value={p.einzelpreis} onChange={function(e){updatePos(p.id,'einzelpreis',e.target.value);}} placeholder="EP"
+                                                    style={{padding:'4px 4px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right', width:'100%', boxSizing:'border-box'}} />
+                                                {/* GP (berechnet) */}
+                                                <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'4px 2px', color: typColor}}>
+                                                    {fmt(gp)} €
                                                 </div>
                                             </div>
                                         );
