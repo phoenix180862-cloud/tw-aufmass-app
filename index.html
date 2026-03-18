@@ -12289,145 +12289,150 @@
 
             // ── PDF-Export (§14 UStG konform, schönes Layout) ──
             var generatePDF = function() {
-                // ═══ HTML → PDF via Browser-Print (pixelgenau!) ═══
                 var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
                     : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
                     : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
                     : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung' : 'Rechnung';
+                var kName = kunde.auftraggeber || kunde.name || '';
+                if (kName.indexOf('Datum') === 0 || kName.indexOf('Unterschrift') !== -1) kName = kunde.name || '';
+                var af = kunde.ag_adresse || kunde.adresse || '';
+                if (af.indexOf('Datum') !== -1 || af.indexOf('Unterschrift') !== -1) af = kunde.adresse || '';
+                var aLines = [];
+                if (af) { var m = af.match(/^(.*?)[\s,]+(\d{5}\s+.*)$/); if(m){aLines.push(m[1].trim());aLines.push(m[2].trim());}else{af.split(',').forEach(function(s){if(s.trim())aLines.push(s.trim());});} }
 
-                var kundenName = kunde.auftraggeber || kunde.name || '';
-                if (kundenName.indexOf('Datum') === 0 || kundenName.indexOf('Unterschrift') !== -1) kundenName = kunde.name || '';
-
-                var adressFull = kunde.ag_adresse || kunde.adresse || '';
-                if (adressFull.indexOf('Datum') !== -1 || adressFull.indexOf('Unterschrift') !== -1) adressFull = kunde.adresse || '';
-                var adressLines = [];
-                if (adressFull) {
-                    var plzM = adressFull.match(/^(.*?)[\s,]+(\d{5}\s+.*)$/);
-                    if (plzM) { adressLines.push(plzM[1].trim()); adressLines.push(plzM[2].trim()); }
-                    else { adressFull.split(',').forEach(function(s){ if(s.trim()) adressLines.push(s.trim()); }); }
-                }
-
-                var posHTML = '';
+                var posR = '';
                 if (rechnungsTyp !== 'stundenlohn') {
                     aktivePosn.forEach(function(p) {
-                        var gp = (parseFloat(p.menge)||0) * (parseFloat(p.einzelpreis)||0);
-                        posHTML += '<tr><td class="c">' + (p.pos||'') + '</td><td class="r">' + fmt(p.menge) + '</td><td class="c">' + (p.einheit||'') + '</td><td class="bez">' + (p.bez||'').replace(/</g,'&lt;') + '</td><td class="r">' + fmt(p.einzelpreis) + '</td><td class="r b">' + fmt(gp) + '</td></tr>';
+                        var gp = (parseFloat(p.menge)||0)*(parseFloat(p.einzelpreis)||0);
+                        posR += '<tr><td style="text-align:center;font-weight:700;width:30px">'+(p.pos||'')+'</td><td style="text-align:right;width:55px">'+fmt(p.menge)+'</td><td style="text-align:center;width:35px">'+(p.einheit||'')+'</td><td style="padding:6px 8px">'+(p.bez||'').replace(/</g,'&lt;')+'</td><td style="text-align:right;width:65px">'+fmt(p.einzelpreis)+'</td><td style="text-align:right;width:75px;font-weight:700">'+fmt(gp)+'</td></tr>';
                     });
                 } else {
                     stundenlohnEintraege.forEach(function(e) {
-                        var ges = (parseFloat(e.stunden)||0) * (parseFloat(e.stundensatz)||0);
-                        posHTML += '<tr><td>' + new Date(e.datum).toLocaleDateString('de-DE') + '</td><td class="bez">' + (e.beschreibung||'').replace(/</g,'&lt;') + '</td><td class="r">' + fmt(e.stunden||0) + '</td><td class="r">' + fmt(e.stundensatz) + '</td><td class="r b">' + fmt(ges) + '</td></tr>';
+                        var ges = (parseFloat(e.stunden)||0)*(parseFloat(e.stundensatz)||0);
+                        posR += '<tr><td style="width:70px">'+new Date(e.datum).toLocaleDateString('de-DE')+'</td><td style="padding:6px 8px">'+(e.beschreibung||'').replace(/</g,'&lt;')+'</td><td style="text-align:right;width:45px">'+fmt(e.stunden||0)+'</td><td style="text-align:right;width:55px">'+fmt(e.stundensatz)+'</td><td style="text-align:right;width:75px;font-weight:700">'+fmt(ges)+'</td></tr>';
                     });
                 }
 
-                var css = [
-                    '@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,700&display=swap");',
-                    '@page { size: A4; margin: 18mm 15mm 22mm 20mm; }',
-                    '* { box-sizing: border-box; margin: 0; padding: 0; }',
-                    'body { font-family: "Source Sans 3", "Segoe UI", sans-serif; font-size: 9pt; color: #222; line-height: 1.4; }',
-                    '@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }',
-                    '.logo-block { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2mm; }',
-                    '.logo-left { position: relative; }',
-                    '.logo-thomas { font-family: "Source Sans 3", serif; font-style: italic; font-weight: 700; color: #c41e1e; font-size: 11pt; }',
-                    '.logo-name { font-family: "Oswald", sans-serif; font-weight: 700; color: #111; font-size: 38pt; line-height: 1; margin-top: -2mm; letter-spacing: -0.5px; }',
-                    '.logo-name .ll { font-size: 46pt; }',
-                    '.logo-i-wrap { position: relative; display: inline-block; }',
-                    '.logo-i-dot { position: absolute; top: -5px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; background: #c41e1e; }',
-                    '.logo-i-wrap .ichar { color: transparent; }',
-                    '.logo-subtitle { font-family: "Source Sans 3", sans-serif; font-weight: 700; color: #c41e1e; font-size: 10pt; text-align: right; margin-top: 0; letter-spacing: 0.5px; }',
-                    '.logo-right { text-align: right; font-size: 8.5pt; color: #666; line-height: 1.6; padding-top: 4mm; }',
-                    'hr.sep { border: none; border-top: 2px solid #c41e1e; margin: 3mm 0 2mm; }',
-                    '.absender { font-size: 6.5pt; color: #999; border-bottom: 0.5px solid #ccc; display: inline-block; padding-bottom: 1px; margin-bottom: 5mm; }',
-                    '.empf-block { display: flex; justify-content: space-between; margin-bottom: 6mm; }',
-                    '.empf-name { font-weight: 700; font-size: 10.5pt; }',
-                    '.empf-addr { font-size: 9.5pt; color: #333; line-height: 1.5; }',
-                    '.datum-block { text-align: right; }',
-                    '.datum-label { font-size: 7pt; color: #999; }',
-                    '.datum-val { font-size: 10pt; }',
-                    '.re-titel { font-size: 16pt; font-weight: 700; margin-bottom: 4mm; }',
-                    '.re-meta { font-size: 9pt; color: #555; margin-bottom: 5mm; }',
-                    '.re-meta .label { display: inline-block; width: 35mm; color: #888; }',
-                    '.re-meta .val { font-weight: 600; color: #222; }',
-                    'table.pos { width: 100%; border-collapse: collapse; margin-bottom: 6mm; font-size: 8.5pt; }',
-                    'table.pos thead th { background: #2d3436; color: #fff; font-weight: 700; padding: 2.5mm 2mm; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.3px; }',
-                    'table.pos tbody td { padding: 2mm; border-bottom: 0.5px solid #ddd; vertical-align: top; }',
-                    'table.pos .c { text-align: center; }',
-                    'table.pos .r { text-align: right; font-variant-numeric: tabular-nums; }',
-                    'table.pos .b { font-weight: 700; }',
-                    'table.pos .bez { word-wrap: break-word; }',
-                    'table.pos col.cp { width: 12mm; }',
-                    'table.pos col.cm { width: 18mm; }',
-                    'table.pos col.ce { width: 12mm; }',
-                    'table.pos col.cep { width: 22mm; }',
-                    'table.pos col.cgp { width: 26mm; }',
-                    '.summen { margin-left: auto; width: 85mm; font-size: 9.5pt; margin-bottom: 6mm; }',
-                    '.summen .row { display: flex; justify-content: space-between; padding: 1mm 0; }',
-                    '.summen .row .val { font-variant-numeric: tabular-nums; text-align: right; min-width: 32mm; }',
-                    '.summen .row.brutto { font-weight: 700; font-size: 11.5pt; padding: 2mm 0; border-top: 2px double #222; margin-top: 1mm; }',
-                    '.summen .row.skonto { color: #c41e1e; font-weight: 700; }',
-                    '.summen .row.nzahl { font-weight: 700; }',
-                    '.summen .row.klein { font-size: 8.5pt; color: #777; }',
-                    '.bemerkung { font-size: 8.5pt; color: #555; margin-bottom: 8mm; line-height: 1.5; }',
-                    '.footer { position: fixed; bottom: 0; left: 0; right: 0; border-top: 1.5px solid #c41e1e; padding-top: 2mm; font-size: 6.5pt; color: #999; line-height: 1.6; }',
-                    '.footer .ft { font-style: italic; color: #c41e1e; font-weight: 700; }',
-                    '.footer .fn { color: #333; font-weight: 700; }',
-                    '.footer .fm { color: #c41e1e; }',
-                ].join('\n');
+                var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+rechnungsNr+'</title>';
+                h += '<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,700&display=swap" rel="stylesheet">';
+                h += '<style>';
+                h += '@page{size:A4;margin:0}';
+                h += '*{box-sizing:border-box;margin:0;padding:0}';
+                h += 'body{font-family:"Source Sans 3","Segoe UI",sans-serif;font-size:9.5pt;color:#222;line-height:1.4;background:#fff}';
+                h += '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}';
+                // A4 container mit festen Rändern
+                h += '.page{width:210mm;min-height:297mm;padding:20mm 18mm 25mm 22mm;margin:0 auto;position:relative;background:#fff}';
+                // Logo — 1:1 Kopie der App-Startseite
+                h += '.lh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:3mm}';
+                h += '.lc{display:inline-flex;flex-direction:column;align-items:flex-start}';
+                h += '.lt{font-family:"Source Sans 3",serif;font-style:italic;font-weight:700;color:#c41e1e;font-size:13px;margin-bottom:-14px;padding-left:1px;position:relative;z-index:2}';
+                h += '.lw{display:flex;align-items:baseline;font-family:"Oswald",sans-serif;font-weight:700;color:#111;line-height:1}';
+                h += '.lw .w{font-size:52px}';
+                h += '.lw .iw{position:relative;font-size:52px;display:inline-block}';
+                h += '.lw .iw .ic{font-size:52px;color:transparent}';
+                h += '.lw .iw .id{position:absolute;top:5px;left:50%;transform:translateX(-50%);width:8px;height:8px;background:#c41e1e}';
+                h += '.lw .ll{font-size:68px;letter-spacing:1px;line-height:0.75}';
+                h += '.lw .wa{font-size:52px}';
+                h += '.ls{display:flex;justify-content:flex-end;width:100%;margin-top:1px}';
+                h += '.ls span{font-family:"Source Sans 3",sans-serif;font-weight:600;color:#c41e1e;font-size:13px;letter-spacing:2px}';
+                h += '.lr{text-align:right;font-size:9pt;color:#555;line-height:1.6;padding-top:3mm}';
+                // Trennlinie
+                h += '.sep{border:none;border-top:2px solid #c41e1e;margin:3mm 0 2mm}';
+                // Absender
+                h += '.abs{font-size:7pt;color:#aaa;border-bottom:0.5px solid #ccc;display:inline-block;padding-bottom:1px;margin-bottom:5mm}';
+                // Empfänger
+                h += '.eb{display:flex;justify-content:space-between;margin-bottom:6mm}';
+                h += '.en{font-weight:700;font-size:11pt}';
+                h += '.ea{font-size:10pt;color:#333;line-height:1.5}';
+                h += '.db{text-align:right}';
+                h += '.dl{font-size:7.5pt;color:#999}';
+                h += '.dv{font-size:10.5pt}';
+                // Titel
+                h += '.rt{font-size:16pt;font-weight:700;margin-bottom:4mm}';
+                h += '.rm{font-size:9pt;color:#555;margin-bottom:5mm}';
+                h += '.rm .l{display:inline-block;width:38mm;color:#888}';
+                h += '.rm .v{font-weight:600;color:#222}';
+                // Tabelle
+                h += 'table.p{width:100%;border-collapse:collapse;margin-bottom:6mm;font-size:8.5pt}';
+                h += 'table.p thead th{background:#2d3436;color:#fff;font-weight:700;padding:7px 6px;font-size:8pt;text-transform:uppercase;letter-spacing:0.3px}';
+                h += 'table.p tbody td{padding:6px;border-bottom:1px solid #e0e0e0;vertical-align:top;font-variant-numeric:tabular-nums}';
+                // Summen
+                h += '.su{margin-left:auto;width:88mm;font-size:9.5pt;margin-bottom:6mm}';
+                h += '.su .r{display:flex;justify-content:space-between;padding:2px 0}';
+                h += '.su .r .v{font-variant-numeric:tabular-nums;text-align:right;min-width:34mm}';
+                h += '.su .r.br{font-weight:700;font-size:12pt;padding:4px 0;border-top:2.5px double #222;margin-top:2px}';
+                h += '.su .r.sk{color:#c41e1e;font-weight:700}';
+                h += '.su .r.nz{font-weight:700}';
+                h += '.su .r.kl{font-size:8.5pt;color:#777}';
+                // Bemerkung
+                h += '.bm{font-size:8.5pt;color:#555;margin-bottom:8mm;line-height:1.5}';
+                // Fusszeile
+                h += '.ft{position:absolute;bottom:18mm;left:22mm;right:18mm;border-top:1.5px solid #c41e1e;padding-top:2mm;font-size:7pt;color:#999;line-height:1.6}';
+                h += '.ft .ti{font-style:italic;color:#c41e1e;font-weight:700}';
+                h += '.ft .tn{color:#333;font-weight:700}';
+                h += '.ft .tf{color:#c41e1e}';
+                h += '</style></head><body>';
 
-                var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + rechnungsNr + '</title><style>' + css + '</style></head><body>';
+                // ═══ A4 SEITE ═══
+                h += '<div class="page">';
 
-                h += '<div class="logo-block"><div class="logo-left">';
-                h += '<div class="logo-thomas">Thomas</div>';
-                h += '<div class="logo-name">w<span class="logo-i-wrap"><span class="ichar">i</span><span class="logo-i-dot"></span></span><span class="ll">LL</span>wacher</div>';
-                h += '<div class="logo-subtitle">Fliesenlegermeister e.K.</div>';
-                h += '</div><div class="logo-right">Flurweg 14a<br>56472 Nisterau<br>Tel. 02661-63101<br>Mobil 0170-2024161</div></div>';
+                // Logo — EXAKT wie Startseite
+                h += '<div class="lh"><div class="lc">';
+                h += '<div class="lt">Thomas</div>';
+                h += '<div class="lw"><span class="w">w</span><span class="iw"><span class="ic">i</span><span class="id"></span></span><span class="ll">LL</span><span class="wa">wacher</span></div>';
+                h += '<div class="ls"><span>Fliesenlegermeister e.K.</span></div>';
+                h += '</div><div class="lr">Flurweg 14a<br>56472 Nisterau<br>Tel. 02661-63101<br>Mobil 0170-2024161</div></div>';
 
                 h += '<hr class="sep">';
-                h += '<div class="absender">Thomas Willwacher Fliesenlegermeister e.K. · Flurweg 14a · 56472 Nisterau</div>';
+                h += '<div class="abs">Thomas Willwacher Fliesenlegermeister e.K. \u00b7 Flurweg 14a \u00b7 56472 Nisterau</div>';
 
-                h += '<div class="empf-block"><div><div class="empf-name">' + kundenName + '</div>';
-                h += '<div class="empf-addr">' + adressLines.join('<br>') + '</div></div>';
-                h += '<div class="datum-block"><div class="datum-label">Datum</div><div class="datum-val">' + new Date(rechnungsDatum).toLocaleDateString('de-DE') + '</div></div></div>';
+                // Empfänger
+                h += '<div class="eb"><div><div class="en">'+kName+'</div>';
+                h += '<div class="ea">'+aLines.join('<br>')+'</div></div>';
+                h += '<div class="db"><div class="dl">Datum</div><div class="dv">'+new Date(rechnungsDatum).toLocaleDateString('de-DE')+'</div></div></div>';
 
-                h += '<div class="re-titel">' + typLabel + '</div>';
-                h += '<div class="re-meta">';
-                h += '<div><span class="label">Rechnungs-Nr.:</span> <span class="val">' + rechnungsNr + '</span></div>';
-                h += '<div><span class="label">Bauvorhaben:</span> <span class="val">' + (kunde.adresse || kunde.name || '') + '</span></div>';
-                if (leistungszeitraum) h += '<div><span class="label">Leistungszeitraum:</span> <span class="val">' + leistungszeitraum + '</span></div>';
-                h += '<div><span class="label">Steuernummer:</span> <span class="val">30/220/1234/5</span></div>';
+                h += '<div class="rt">'+typLabel+'</div>';
+                h += '<div class="rm">';
+                h += '<div><span class="l">Rechnungs-Nr.:</span> <span class="v">'+rechnungsNr+'</span></div>';
+                h += '<div><span class="l">Bauvorhaben:</span> <span class="v">'+(kunde.adresse||kunde.name||'')+'</span></div>';
+                if(leistungszeitraum) h += '<div><span class="l">Leistungszeitraum:</span> <span class="v">'+leistungszeitraum+'</span></div>';
+                h += '<div><span class="l">Steuernummer:</span> <span class="v">30/220/1234/5</span></div>';
                 h += '</div>';
 
-                if (rechnungsTyp !== 'stundenlohn') {
-                    h += '<table class="pos"><colgroup><col class="cp"><col class="cm"><col class="ce"><col><col class="cep"><col class="cgp"></colgroup>';
-                    h += '<thead><tr><th class="c">Pos.</th><th class="r">Menge</th><th class="c">Einh.</th><th>Bezeichnung</th><th class="r">EP (\u20ac)</th><th class="r">GP (\u20ac)</th></tr></thead>';
-                    h += '<tbody>' + posHTML + '</tbody></table>';
+                // Tabelle
+                if(rechnungsTyp !== 'stundenlohn') {
+                    h += '<table class="p"><thead><tr><th style="text-align:center;width:30px">Pos.</th><th style="text-align:right;width:55px">Menge</th><th style="text-align:center;width:35px">Einh.</th><th style="text-align:left">Bezeichnung</th><th style="text-align:right;width:65px">EP (\u20ac)</th><th style="text-align:right;width:75px">GP (\u20ac)</th></tr></thead>';
+                    h += '<tbody>'+posR+'</tbody></table>';
                 } else {
-                    h += '<table class="pos"><thead><tr><th>Datum</th><th>Beschreibung</th><th class="r">Std.</th><th class="r">\u20ac/Std.</th><th class="r">Gesamt (\u20ac)</th></tr></thead>';
-                    h += '<tbody>' + posHTML + '</tbody></table>';
+                    h += '<table class="p"><thead><tr><th style="width:70px">Datum</th><th style="text-align:left">Beschreibung</th><th style="text-align:right;width:45px">Std.</th><th style="text-align:right;width:55px">\u20ac/Std.</th><th style="text-align:right;width:75px">Gesamt (\u20ac)</th></tr></thead>';
+                    h += '<tbody>'+posR+'</tbody></table>';
                 }
 
-                h += '<div class="summen">';
-                h += '<div class="row"><span>Nettobetrag:</span><span class="val">' + fmt(nettoSumme) + ' \u20ac</span></div>';
-                h += '<div class="row klein"><span>zzgl. ' + mwstSatz + '% MwSt.:</span><span class="val">' + fmt(mwstBetrag) + ' \u20ac</span></div>';
-                h += '<div class="row brutto"><span>Bruttobetrag:</span><span class="val">' + fmt(bruttoSumme) + ' \u20ac</span></div>';
-                if (sicherheitseinbehalt > 0) h += '<div class="row klein"><span>abzgl. Sicherheitseinbehalt ' + sicherheitseinbehalt + '%:</span><span class="val">\u2013 ' + fmt(sicherheitBetrag) + ' \u20ac</span></div>';
-                h += '<div class="row skonto"><span>Zahlbar ' + skontoTage + ' Tage (' + skontoProzent + '% Skonto):</span><span class="val">' + fmt(zahlbetragMitSkonto) + ' \u20ac</span></div>';
-                h += '<div class="row nzahl"><span>Zahlbar ' + zahlungszielTage + ' Tage netto:</span><span class="val">' + fmt(zahlbetragOhneSkonto) + ' \u20ac</span></div>';
+                // Summen
+                h += '<div class="su">';
+                h += '<div class="r"><span>Nettobetrag:</span><span class="v">'+fmt(nettoSumme)+' \u20ac</span></div>';
+                h += '<div class="r kl"><span>zzgl. '+mwstSatz+'% MwSt.:</span><span class="v">'+fmt(mwstBetrag)+' \u20ac</span></div>';
+                h += '<div class="r br"><span>Bruttobetrag:</span><span class="v">'+fmt(bruttoSumme)+' \u20ac</span></div>';
+                if(sicherheitseinbehalt>0) h += '<div class="r kl"><span>abzgl. Sicherheitseinbehalt '+sicherheitseinbehalt+'%:</span><span class="v">\u2013 '+fmt(sicherheitBetrag)+' \u20ac</span></div>';
+                h += '<div class="r sk"><span>Zahlbar '+skontoTage+' Tage ('+skontoProzent+'% Skonto):</span><span class="v">'+fmt(zahlbetragMitSkonto)+' \u20ac</span></div>';
+                h += '<div class="r nz"><span>Zahlbar '+zahlungszielTage+' Tage netto:</span><span class="v">'+fmt(zahlbetragOhneSkonto)+' \u20ac</span></div>';
                 h += '</div>';
 
-                if (bemerkung) h += '<div class="bemerkung">' + bemerkung.replace(/\n/g, '<br>') + '</div>';
+                if(bemerkung) h += '<div class="bm">'+bemerkung.replace(/\n/g,'<br>')+'</div>';
 
-                h += '<div class="footer"><div><span class="ft">Thomas </span><span class="fn">wiLLwacher</span> <span class="fm">Fliesenlegermeister e.K.</span></div>';
+                // Fusszeile
+                h += '<div class="ft"><div><span class="ti">Thomas </span><span class="tn">wiLLwacher</span> <span class="tf">Fliesenlegermeister e.K.</span></div>';
                 h += '<div>Flurweg 14a \u00b7 56472 Nisterau \u00b7 Tel. 02661-63101 \u00b7 Mobil 0170-2024161</div>';
                 h += '<div>Steuernummer: 30/220/1234/5 \u00b7 Westerwald Bank eG \u00b7 IBAN: DE12 5739 1800 0000 0000 00 \u00b7 BIC: GENODE51WW1</div></div>';
 
-                h += '</body></html>';
+                h += '</div></body></html>';
 
-                var printWin = window.open('', '_blank', 'width=800,height=1100');
-                printWin.document.write(h);
-                printWin.document.close();
-                setTimeout(function() { printWin.print(); }, 600);
+                var pw = window.open('', '_blank', 'width=820,height=1160');
+                pw.document.write(h);
+                pw.document.close();
+                setTimeout(function(){ pw.focus(); pw.print(); }, 800);
             };
+
 
             // ═══════════════════════════════════════════
             // PHASE 1: Typ-Auswahl
