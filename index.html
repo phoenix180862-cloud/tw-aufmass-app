@@ -113,7 +113,10 @@
             return null;
         }
 
-        var modelId = options.model || GEMINI_CONFIG.MODEL;
+        // Modell: Option > Präferenz > Config
+        var modelPref = localStorage.getItem('gemini_model_pref') || 'pro';
+        var defaultModel = modelPref === 'pro' ? 'gemini-2.5-pro' : (localStorage.getItem('gemini_model') || GEMINI_CONFIG.MODEL);
+        var modelId = options.model || defaultModel;
 
         try {
             // Nachrichten in Gemini-Format konvertieren
@@ -138,12 +141,13 @@
                     if (typeof msg.content === 'string') {
                         parts.push({ text: msg.content });
                     } else if (Array.isArray(msg.content)) {
-                        // Anthropic multimodal format: [{type:'text',...}, {type:'image',...}]
+                        // Anthropic multimodal format: [{type:'text',...}, {type:'image',...}, {type:'document',...}]
                         for (var ci = 0; ci < msg.content.length; ci++) {
                             var block = msg.content[ci];
                             if (block.type === 'text') {
                                 parts.push({ text: block.text });
-                            } else if (block.type === 'image') {
+                            } else if (block.type === 'image' || block.type === 'document') {
+                                // Sowohl Bilder als auch PDFs/Dokumente → inline_data für Gemini
                                 parts.push({
                                     inline_data: {
                                         mime_type: block.source.media_type,
@@ -890,7 +894,7 @@
                 }
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
-                            content: 'Du bist ein Experte fuer Leistungsverzeichnisse (LV) im Bauwesen, speziell Fliesenarbeiten nach VOB. Analysiere den folgenden Text und extrahiere ALLE Positionen. Es ist KRITISCH, dass du JEDE EINZELNE Position findest - ueberspringe KEINE!\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument\n- bez: VOLLSTAENDIGE Positionsbezeichnung\n- einheit: m², m, Stk, psch, lfm, kg, l, t\n- menge: Ausgeschriebene Menge als Zahl (0 wenn unklar)\n- bereich: Abschnitt/Bereich (EG, OG, Allgemein, etc.)\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe als Array\n- EXAKTE Reihenfolge beibehalten!\n- KEINE Position auslassen!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
+                            content: 'Du bist ein erfahrener Bausachverstaendiger fuer Fliesenarbeiten (VOB/C DIN 18352). Analysiere den folgenden Text und extrahiere ALLE Positionen. Es ist KRITISCH, dass du JEDE EINZELNE Position findest — ueberspringe KEINE!\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"01.001","bez":"Bodenfliesen 30x60 liefern und verlegen","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument (z.B. 01.001, 1.01, 1.1.010)\n- bez: VOLLSTAENDIGE Positionsbezeichnung — NICHT abkuerzen!\n- einheit: m2, m, Stk, psch, lfm, kg, l, t (EXAKT wie im Dokument)\n- menge: Ausgeschriebene Menge als Zahl (0 wenn unklar)\n- einzelpreis: Einheitspreis (EP) als Zahl in Euro — IMMER wenn im Text vorhanden! Suche nach Euro-Betraegen neben Positionen\n- bereich: Abschnitt/Bereich (EG, OG, Allgemein, etc.)\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe als Array\n- EXAKTE Reihenfolge beibehalten!\n- KEINE Position auslassen!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
                         }], 8000);
                 if (!apiText) return null;
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
@@ -898,7 +902,8 @@
                 if (Array.isArray(parsed) && parsed.length > 0) {
                     return parsed.map(function(p) {
                         return { pos: String(p.pos||''), bez: String(p.bez||''), einheit: String(p.einheit||'?'),
-                            menge: Number(p.menge)||0, bereich: String(p.bereich||'Allgemein'),
+                            menge: Number(p.menge)||0, einzelpreis: Number(p.einzelpreis)||0,
+                            bereich: String(p.bereich||'Allgemein'),
                             kategorie: String(p.kategorie||'allgemein'), tags: Array.isArray(p.tags)?p.tags:[], quelle: 'ki' };
                     });
                 }
@@ -920,12 +925,12 @@
                             role: 'user',
                             content: [
                                 {
-                                    type: 'document',
+                                    type: 'image',
                                     source: { type: 'base64', media_type: 'application/pdf', data: base64 }
                                 },
                                 {
                                     type: 'text',
-                                    text: 'WICHTIG: Analysiere dieses Dokument VOLLSTAENDIG und gruendlich. Es handelt sich um ein Dokument aus dem Bereich Fliesenarbeiten/Bauwesen.\n\nExtrahiere ALLES was du finden kannst:\n\n1. ALLE LV-Positionen (Leistungsverzeichnis) - ueberspringe KEINE EINZIGE Position! Jede Zeile mit einer Positionsnummer MUSS erfasst werden.\n2. ALLE Kundenstammdaten - Auftraggeber, Bauherr, Baustellenadresse, Baumassnahme, Bauleitung, Architekt/Planer mit ALLEN Kontaktdaten (Name, Firma, Adresse, Telefon, Fax, E-Mail, Mobilnummer)\n3. ALLE erkennbaren Raeume mit Bezeichnung und Geschoss\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks, KEIN erklaerrender Text):\n{"positionen":[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m²","menge":45.00,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"Firmenname oder Person","ag_adresse":"Strasse Nr, PLZ Ort","ag_telefon":"Nummer","ag_email":"email@domain","adresse":"Baustellenadresse","baumassnahme":"Bezeichnung der Baumassnahme","bauleitung":"Name/Firma","bl_adresse":"Adresse","bl_telefon":"Nummer","bl_email":"email","architekt":"Name/Firma","arch_adresse":"Adresse","arch_telefon":"Nummer","arch_email":"email"},"raeume":["Bad EG","Kueche EG","Flur OG"]}\n\nKRITISCHE Regeln:\n- JEDE Position mit Positionsnummer MUSS in die Liste!\n- Positionsnummern EXAKT wie im Dokument (z.B. 01.001 oder 1.01 oder 1.1)\n- Vollstaendige Leistungsbeschreibung, nicht abkuerzen!\n- einheit: m², m, Stk, psch, lfm, kg, l, t (EXAKT wie im Dokument)\n- menge: Ausgeschriebene Menge als Zahl (0 wenn nicht erkennbar)\n- bereich: EG, OG, KG, DG, Allgemein, oder Abschnittsname aus dem LV\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- Kundendaten: ALLE Felder die du findest, auch aus Briefkoepfen, Fussnoten, Stempeln\n- EXAKTE Reihenfolge der Positionen beibehalten!'
+                                    text: 'Du bist ein erfahrener Bausachverstaendiger fuer Fliesenarbeiten (VOB/C DIN 18352). Analysiere dieses Dokument VOLLSTAENDIG und GRUENDLICH. Lies JEDE Seite, JEDEN Briefkopf, JEDE Fusszeile, JEDE Tabelle.\n\nExtrahiere ALLES — es darf NICHTS verloren gehen:\n\n1. ALLE LV-POSITIONEN: Jede einzelne Position mit Positionsnummer. Lies auch Einheitspreise (EP), Gesamtpreise (GP) und Mengen aus Tabellen/Spalten ab.\n\n2. ALLE KONTAKTDATEN — das ist KRITISCH:\n   - AUFTRAGGEBER/BAUHERR: Vollstaendiger Name, Firma, komplette Adresse (Strasse+Nr, PLZ+Ort), Telefon, Fax, Mobilnummer, E-Mail\n   - BAULEITUNG: Vollstaendiger Name, Firma, komplette Adresse, Telefon, Fax, Mobil, E-Mail\n   - ARCHITEKT/PLANER: Vollstaendiger Name, Firma, komplette Adresse, Telefon, Fax, Mobil, E-Mail\n   - Suche in: Briefkoepfen, Anschreiben, Fussnoten, Stempeln, Unterschriftsfeldern, Verteilerlisten, Deckblaettern, Kopfzeilen\n\n3. ALLE RAEUME mit Bezeichnung, Geschoss und Nummer\n\n4. VERTRAGSDETAILS: Auftragsnummer, Vergabeaktenzeichen, Vertragsdatum, Auftragssumme, Ausfuehrungsfristen, Skontoregeln, Zahlungsziel, Sicherheitseinbehalt\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks):\n{"positionen":[{"pos":"01.001","bez":"Bodenfliesen 30x60 liefern und verlegen nach DIN 18352","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"EXAKTER Name/Firma","ag_adresse":"KOMPLETTE Adresse mit Strasse Nr, PLZ Ort","ag_telefon":"ALLE Telefonnummern","ag_fax":"Faxnummer","ag_email":"ALLE E-Mail-Adressen","adresse":"Baustellenadresse","baumassnahme":"Bezeichnung der Baumassnahme","bauleitung":"EXAKTER Name/Firma","bl_adresse":"KOMPLETTE Adresse","bl_telefon":"Telefon","bl_fax":"Fax","bl_email":"E-Mail","architekt":"EXAKTER Name/Firma","arch_adresse":"KOMPLETTE Adresse","arch_telefon":"Telefon","arch_fax":"Fax","arch_email":"E-Mail"},"raeume":["Bad EG","Kueche EG","Flur OG"],"vertrag":{"auftragsnummer":"","vergabeaktenzeichen":"","vertragsdatum":"","auftragssumme":0,"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0}}\n\nKRITISCHE REGELN:\n- JEDE Position mit Positionsnummer MUSS in die Liste — ueberspringe KEINE!\n- Positionsnummern EXAKT wie im Dokument (z.B. 01.001 oder 1.01)\n- VOLLSTAENDIGE Positionsbezeichnung — NICHT abkuerzen!\n- einzelpreis: EP als Zahl in Euro — IMMER extrahieren wenn in Tabelle vorhanden!\n- Kontaktdaten: Durchsuche das GESAMTE Dokument nach Adressen, Telefonnummern, E-Mails\n- E-Mail-Adressen erkennen: alles was das Format name@domain.de hat\n- Telefonnummern erkennen: alle Formate (0xxxx-xxxxx, +49xxx, 01xx-xxxxxxx)\n- Adressen erkennen: Strasse + Hausnummer, PLZ + Ort\n- EXAKTE Reihenfolge der Positionen beibehalten!'
                                 }
                             ]
                         }], 8000);
@@ -5675,6 +5680,38 @@
                                 <div style={{marginTop:'8px', fontSize:'10px', color:'var(--text-muted)', lineHeight:'1.5'}}>
                                     <strong>Key holen:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" style={{color:'var(--accent-blue)'}}>aistudio.google.com/apikey</a><br/>
                                     → "Create API Key" → Key kopieren → hier einfügen
+                                </div>
+
+                                {/* Modell-Auswahl */}
+                                <div style={{marginTop:'12px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
+                                    <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'6px'}}>🧠 KI-Modell für Dokumentenanalyse</div>
+                                    <div style={{display:'flex', gap:'6px'}}>
+                                        <button onClick={function(){
+                                            localStorage.setItem('gemini_model_pref', 'flash');
+                                            GEMINI_CONFIG.MODEL = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+                                        }} style={{
+                                            flex:1, padding:'10px 8px', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
+                                            background: (localStorage.getItem('gemini_model_pref') || 'pro') === 'flash' ? 'rgba(30,136,229,0.15)' : 'var(--bg-tertiary)',
+                                            border: (localStorage.getItem('gemini_model_pref') || 'pro') === 'flash' ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                                            color: (localStorage.getItem('gemini_model_pref') || 'pro') === 'flash' ? 'var(--accent-blue)' : 'var(--text-muted)'
+                                        }}>
+                                            ⚡ Flash<br/><span style={{fontSize:'9px', fontWeight:'400'}}>Schnell & günstig</span>
+                                        </button>
+                                        <button onClick={function(){
+                                            localStorage.setItem('gemini_model_pref', 'pro');
+                                            GEMINI_CONFIG.MODEL = 'gemini-2.5-pro';
+                                        }} style={{
+                                            flex:1, padding:'10px 8px', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
+                                            background: (localStorage.getItem('gemini_model_pref') || 'pro') === 'pro' ? 'rgba(142,68,173,0.15)' : 'var(--bg-tertiary)',
+                                            border: (localStorage.getItem('gemini_model_pref') || 'pro') === 'pro' ? '2px solid #8e44ad' : '1px solid var(--border-color)',
+                                            color: (localStorage.getItem('gemini_model_pref') || 'pro') === 'pro' ? '#8e44ad' : 'var(--text-muted)'
+                                        }}>
+                                            🧠 Pro<br/><span style={{fontSize:'9px', fontWeight:'400'}}>Präziser, EP-Preise</span>
+                                        </button>
+                                    </div>
+                                    <div style={{fontSize:'9px', color:'var(--text-muted)', marginTop:'4px'}}>
+                                        Pro empfohlen für genaue EP-Preise & Kontaktdaten. Flash für schnelle Übersicht.
+                                    </div>
                                 </div>
 
                                 {/* Gmail-Absender Einstellung */}
@@ -13625,6 +13662,7 @@
 
                     // 4. Kundendaten mergen
                     var kd = result.kundendaten || {};
+                    var vt = result.vertrag || kd.vertrag || {};
                     var fullyLoaded = Object.assign({}, enriched, {
                         auftraggeber: kd.auftraggeber || enriched.auftraggeber || kunde.name,
                         adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
@@ -13632,14 +13670,18 @@
                         bauleitung: kd.bauleitung || enriched.bauleitung || '',
                         bl_adresse: kd.bl_adresse || enriched.bl_adresse || '',
                         bl_telefon: kd.bl_telefon || enriched.bl_telefon || '',
+                        bl_fax: kd.bl_fax || enriched.bl_fax || '',
                         bl_email: kd.bl_email || enriched.bl_email || '',
                         architekt: kd.architekt || enriched.architekt || '',
                         arch_adresse: kd.arch_adresse || enriched.arch_adresse || '',
                         arch_telefon: kd.arch_telefon || enriched.arch_telefon || '',
+                        arch_fax: kd.arch_fax || enriched.arch_fax || '',
                         arch_email: kd.arch_email || enriched.arch_email || '',
                         ag_adresse: kd.ag_adresse || kd.adresse || enriched.ag_adresse || '',
                         ag_telefon: kd.ag_telefon || enriched.ag_telefon || '',
+                        ag_fax: kd.ag_fax || enriched.ag_fax || '',
                         ag_email: kd.ag_email || enriched.ag_email || '',
+                        vertrag: vt,
                         raeume: (result.raeume || []).map(function(r, idx) {
                             if (typeof r === 'string') {
                                 return { id: 'update_' + idx, nr: String(idx + 1), bez: r,
@@ -13816,6 +13858,7 @@
 
                         // Kundendaten + Räume + Zeichnungen in Kunde mergen
                         var kd = result.kundendaten || {};
+                        var vt = result.vertrag || kd.vertrag || {};
                         var fullyLoaded = Object.assign({}, enriched, {
                             auftraggeber: kd.auftraggeber || enriched.auftraggeber || kunde.name,
                             adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
@@ -13823,14 +13866,18 @@
                             bauleitung: kd.bauleitung || '',
                             bl_adresse: kd.bl_adresse || '',
                             bl_telefon: kd.bl_telefon || '',
+                            bl_fax: kd.bl_fax || '',
                             bl_email: kd.bl_email || '',
                             architekt: kd.architekt || '',
                             arch_adresse: kd.arch_adresse || '',
                             arch_telefon: kd.arch_telefon || '',
+                            arch_fax: kd.arch_fax || '',
                             arch_email: kd.arch_email || '',
                             ag_adresse: kd.ag_adresse || kd.adresse || '',
                             ag_telefon: kd.ag_telefon || '',
+                            ag_fax: kd.ag_fax || '',
                             ag_email: kd.ag_email || '',
+                            vertrag: vt,
                             raeume: (result.raeume || []).map(function(r, idx) {
                                 if (typeof r === 'string') {
                                     return {
