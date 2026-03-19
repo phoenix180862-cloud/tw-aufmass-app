@@ -12170,12 +12170,29 @@
             // Positionsauswahl-State
             const [posAuswahl, setPosAuswahl] = useState({});
 
-            // LV-Positionen holen
+            // LV-Positionen holen — aus ALLEN verfügbaren Quellen
             var lvPositionen = [];
-            if (importResult && importResult.positionen) {
+            if (importResult && importResult.positionen && importResult.positionen.length > 0) {
                 lvPositionen = importResult.positionen;
-            } else if (kunde && kunde._lvPositionenKey && typeof LV_POSITIONEN !== 'undefined') {
-                lvPositionen = LV_POSITIONEN[kunde._lvPositionenKey] || LV_POSITIONEN[kunde._driveFolderId] || LV_POSITIONEN[kunde.id] || [];
+            } else if (kunde && kunde._lvPositionen && kunde._lvPositionen.length > 0) {
+                // Direkt aus dem Kunden-Objekt (bei "Kunde ANALYSIERT" aus localStorage)
+                lvPositionen = kunde._lvPositionen;
+            } else if (typeof LV_POSITIONEN !== 'undefined') {
+                // Aus dem globalen LV_POSITIONEN Objekt (verschiedene Keys probieren)
+                var keys = [kunde._lvPositionenKey, kunde._driveFolderId, kunde.id, kunde.name].filter(Boolean);
+                for (var ki = 0; ki < keys.length; ki++) {
+                    if (LV_POSITIONEN[keys[ki]] && LV_POSITIONEN[keys[ki]].length > 0) {
+                        lvPositionen = LV_POSITIONEN[keys[ki]];
+                        break;
+                    }
+                }
+            }
+            // Sicherheits-Injection: LV-Positionen auch global verfügbar machen
+            if (lvPositionen.length > 0 && kunde) {
+                var injKey = kunde._driveFolderId || kunde.id || kunde.name;
+                if (injKey && typeof LV_POSITIONEN !== 'undefined') {
+                    LV_POSITIONEN[injKey] = lvPositionen;
+                }
             }
 
             // Aufmaß-Daten: Massen pro Position aus gesamtliste extrahieren
