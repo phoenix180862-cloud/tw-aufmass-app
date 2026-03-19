@@ -5701,8 +5701,9 @@
         /* ═══════════════════════════════════════════
            KUNDENAUSWAHL PAGE
            ═══════════════════════════════════════════ */
-        function Kundenauswahl({ onSelect, loading, kunden }) {
+        function Kundenauswahl({ onSelect, loading, kunden, onUpdateKunde }) {
             const [searchTerm, setSearchTerm] = useState('');
+            const [updatingId, setUpdatingId] = useState(null);
             const inputRef = React.useRef(null);
 
             // Datenquelle: 1. Drive-Kunden  2. Lokal gespeicherte Kunden  3. Leer
@@ -5790,21 +5791,44 @@
                         <div className="folder-list">
                             {filtered.map((kunde, idx) => (
                                 <div
-                                    key={kunde.id}
+                                    key={kunde.id || kunde.name}
                                     className="folder-item"
-                                    style={{ animationDelay: `${idx * 0.06}s` }}
-                                    onClick={() => onSelect(kunde)}
+                                    style={{ animationDelay: `${idx * 0.06}s`, position:'relative' }}
                                 >
-                                    <span className="folder-icon">📁</span>
-                                    <div className="folder-info">
-                                        <div className="folder-name">
-                                            {highlightText(kunde.name, searchTerm)}
-                                        </div>
-                                        <div className="folder-meta">
-                                            {kunde.dateien ? (kunde.dateien + ' Dateien · ') : ''}Letzte Änderung: {kunde.letzteAenderung || '—'}
+                                    <div style={{display:'flex', alignItems:'center', flex:1, gap:'10px', cursor:'pointer'}} onClick={() => onSelect(kunde)}>
+                                        <span className="folder-icon">📁</span>
+                                        <div className="folder-info">
+                                            <div className="folder-name">
+                                                {highlightText(kunde.name, searchTerm)}
+                                            </div>
+                                            <div className="folder-meta">
+                                                {kunde._gespeichertAm ? ('💾 ' + kunde._gespeichertAm + ' · ') : ''}
+                                                {kunde.dateien ? (kunde.dateien + ' Dateien') : ''}
+                                            </div>
                                         </div>
                                     </div>
-                                    <span className="folder-arrow">›</span>
+                                    {/* Update-Button — Drive-Akten neu laden + KI-Analyse */}
+                                    {onUpdateKunde && kunde._driveFolderId && (
+                                        <button
+                                            onClick={function(e) {
+                                                e.stopPropagation();
+                                                setUpdatingId(kunde.id || kunde.name);
+                                                onUpdateKunde(kunde);
+                                            }}
+                                            disabled={updatingId === (kunde.id || kunde.name)}
+                                            style={{
+                                                padding:'6px 10px', borderRadius:'8px', border:'none', cursor:'pointer',
+                                                background: updatingId === (kunde.id || kunde.name) ? 'rgba(142,68,173,0.15)' : 'rgba(30,136,229,0.1)',
+                                                color: updatingId === (kunde.id || kunde.name) ? '#8e44ad' : 'var(--accent-blue)',
+                                                fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap',
+                                                display:'flex', alignItems:'center', gap:'4px', minWidth:'fit-content'
+                                            }}
+                                            title="Akten von Google Drive neu laden und KI-Analyse aktualisieren"
+                                        >
+                                            {updatingId === (kunde.id || kunde.name) ? '⏳' : '🔄'} Update
+                                        </button>
+                                    )}
+                                    <span className="folder-arrow" style={{cursor:'pointer'}} onClick={() => onSelect(kunde)}>›</span>
                                 </div>
                             ))}
                         </div>
@@ -13530,6 +13554,119 @@
                 navigateTo('auswahl');
             };
 
+            // ── UPDATE-ANALYSE: Kunde aus Drive neu laden + KI-Analyse ──
+            const handleUpdateKunde = async (kunde) => {
+                if (!kunde._driveFolderId) {
+                    alert('Kein Google Drive Ordner verknüpft. Bitte zuerst über "Kunde NEU" verbinden.');
+                    return;
+                }
+
+                // Google Drive verbinden falls nötig
+                var service = window.GoogleDriveService;
+                if (!service.accessToken) {
+                    try {
+                        await service.init();
+                        await service.requestAuth();
+                        setDriveStatus('online');
+                    } catch(authErr) {
+                        alert('Google Drive Verbindung fehlgeschlagen.\nBitte zuerst über "Kunde NEU" mit Google Drive verbinden.');
+                        return;
+                    }
+                }
+
+                setLoading(true);
+                setSelectedKunde(kunde);
+                setLoadProgress('🔄 Update-Analyse: Ordnerinhalt wird geladen...');
+                navigateTo('akte');
+
+                try {
+                    // 1. Aktuelle Dateien aus Google Drive laden
+                    const contents = await service.listFolderContents(kunde._driveFolderId);
+                    var enriched = {
+                        ...kunde,
+                        folders: contents.folders,
+                        files: contents.files,
+                        dateien: contents.files.length + contents.folders.reduce((s, f) => s + f.files.length, 0),
+                        _driveFolderId: kunde._driveFolderId,
+                    };
+                    setSelectedKunde(enriched);
+
+                    // 2. KI-Analyse mit Gemini starten
+                    setLoadProgress('🤖 KI-Analyse läuft — Dokumente werden analysiert...');
+                    window._kiDisabled = false; // KI aktivieren!
+
+                    var result = await window.FileProcessor.processKundenAkte(
+                        enriched,
+                        function(msg) { setLoadProgress('🔄 ' + msg); }
+                    );
+
+                    // 3. Positionen in LV_POSITIONEN injizieren
+                    if (result.positionen && result.positionen.length > 0) {
+                        var kundeKey = kunde._driveFolderId || kunde.id || 'drive_update';
+                        LV_POSITIONEN[kundeKey] = result.positionen;
+                    }
+
+                    // 4. Kundendaten mergen
+                    var kd = result.kundendaten || {};
+                    var fullyLoaded = Object.assign({}, enriched, {
+                        auftraggeber: kd.auftraggeber || enriched.auftraggeber || kunde.name,
+                        adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
+                        baumassnahme: kd.baumassnahme || enriched.baumassnahme || '',
+                        bauleitung: kd.bauleitung || enriched.bauleitung || '',
+                        bl_adresse: kd.bl_adresse || enriched.bl_adresse || '',
+                        bl_telefon: kd.bl_telefon || enriched.bl_telefon || '',
+                        bl_email: kd.bl_email || enriched.bl_email || '',
+                        architekt: kd.architekt || enriched.architekt || '',
+                        arch_adresse: kd.arch_adresse || enriched.arch_adresse || '',
+                        arch_telefon: kd.arch_telefon || enriched.arch_telefon || '',
+                        arch_email: kd.arch_email || enriched.arch_email || '',
+                        ag_adresse: kd.ag_adresse || kd.adresse || enriched.ag_adresse || '',
+                        ag_telefon: kd.ag_telefon || enriched.ag_telefon || '',
+                        ag_email: kd.ag_email || enriched.ag_email || '',
+                        raeume: (result.raeume || []).map(function(r, idx) {
+                            if (typeof r === 'string') {
+                                return { id: 'update_' + idx, nr: String(idx + 1), bez: r,
+                                    geschoss: (r.match(/EG|OG|KG|DG|UG/i) || [''])[0].toUpperCase(),
+                                    fliesenhoehe: 0, raumhoehe: 0,
+                                    waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
+                                };
+                            }
+                            return Object.assign({ id: 'update_' + idx }, r, { nr: r.nr || String(idx + 1) });
+                        }),
+                        zeichnungen: result.zeichnungen || [],
+                        _importResult: result,
+                        _lvPositionenKey: kunde._driveFolderId,
+                        _fullyLoaded: true,
+                    });
+                    setSelectedKunde(fullyLoaded);
+                    setImportResult(result);
+                    setIsDriveMode(true);
+
+                    // 5. Lokal speichern (überschreibt alte Daten)
+                    try {
+                        var localKey = 'aufmass_kunde_' + (kunde._driveFolderId || kunde.id || kunde.name || 'unknown');
+                        var toSave = Object.assign({}, fullyLoaded);
+                        delete toSave.folders;
+                        delete toSave.files;
+                        toSave._lvPositionen = result.positionen || [];
+                        toSave._gespeichertAm = new Date().toLocaleString('de-DE');
+                        toSave._updateAnalyse = true;
+                        toSave._letzteUpdateAnalyse = new Date().toISOString();
+                        localStorage.setItem(localKey, JSON.stringify(toSave));
+                        console.log('Update-Analyse gespeichert:', localKey);
+                    } catch(saveErr) {
+                        console.warn('Speichern fehlgeschlagen:', saveErr.message);
+                    }
+
+                    setLoadProgress('✅ Update-Analyse abgeschlossen! ' + (result.positionen || []).length + ' Positionen erkannt.');
+
+                } catch(err) {
+                    console.error('Update-Analyse Fehler:', err);
+                    setLoadProgress('❌ Fehler: ' + err.message);
+                }
+                setLoading(false);
+            };
+
             // ── NEU: Modul-Auswahl Handler ──
             const handleSelectModul = (modulId) => {
                 switch(modulId) {
@@ -13902,7 +14039,7 @@
                     case 'start':
                         return <Startseite onKundeNeu={handleKundeNeu} onKundeAnalysiert={handleKundeAnalysiert} />;
                     case 'auswahl':
-                        return <Kundenauswahl onSelect={handleSelectKunde} loading={loading} kunden={isDriveMode ? driveKunden : null} />;
+                        return <Kundenauswahl onSelect={handleSelectKunde} loading={loading} kunden={isDriveMode ? driveKunden : null} onUpdateKunde={handleUpdateKunde} />;
                     case 'akte':
                         return <KundenAkte
                             kunde={selectedKunde}
