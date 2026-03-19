@@ -5572,7 +5572,7 @@
                             ▶
                         </button>
                     </div>
-                    <span className="header-title">Aufmaß-App</span>
+                    <span className="header-title">TW Business Suite</span>
                     <span className="header-version">v1.0</span>
                 </header>
             );
@@ -5763,20 +5763,12 @@
                             <span className="kunde-btn-icon">🤖</span>
                             Kunde NEU
                         </button>
-                        <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'center', lineHeight:'1.4', marginTop:'-8px', marginBottom:'8px'}}>
-                            Google Drive verbinden → KI analysiert alle Dokumente<br/>
-                            Ergebnisse werden lokal gespeichert (einmalige KI-Kosten)
-                        </div>
 
                         {/* BUTTON 2: Kunde ANALYSIERT — nur lokale Daten */}
                         <button className="kunde-btn" onClick={onKundeAnalysiert} style={{background:'linear-gradient(135deg, #27ae60 0%, #1e8449 100%)'}}>
                             <span className="kunde-btn-icon">💾</span>
                             Kunde ANALYSIERT
                         </button>
-                        <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'center', lineHeight:'1.4', marginTop:'-8px'}}>
-                            Bereits analysierte Kunden laden (keine Drive-Verbindung,<br/>
-                            keine KI-Kosten — nur lokal gespeicherte Daten)
-                        </div>
 
                         {gespeicherteKunden.length > 0 && (
                             <div style={{marginTop:'12px', fontSize:'12px', color:'var(--accent-blue)', textAlign:'center', padding:'8px 16px', background:'rgba(30,136,229,0.08)', borderRadius:'10px', border:'1px solid rgba(30,136,229,0.15)'}}>
@@ -12416,6 +12408,81 @@
                 setTimeout(function(){ pw.focus(); pw.print(); }, 800);
             };
 
+            // ── E-Mail Versand ──
+            var sendPerEmail = function() {
+                // Empfänger-E-Mail ermitteln (Auftraggeber bevorzugt)
+                var empfaengerEmail = kunde.ag_email || kunde.bl_email || kunde.arch_email || '';
+                var kName = kunde.auftraggeber || kunde.name || 'Auftraggeber';
+                if (kName.indexOf('Datum') === 0 || kName.indexOf('Unterschrift') !== -1) kName = kunde.name || 'Auftraggeber';
+
+                var typLabel = rechnungsTyp === 'abschlag' ? (abschlagNr + '. Abschlagsrechnung')
+                    : rechnungsTyp === 'schluss' ? 'Schlussrechnung'
+                    : rechnungsTyp === 'nachtrag' ? 'Nachtragsrechnung'
+                    : rechnungsTyp === 'stundenlohn' ? 'Stundenlohnrechnung' : 'Rechnung';
+
+                var bauvorhaben = kunde.adresse || kunde.baumassnahme || kunde.name || '';
+                var betreffText = typLabel + ' Nr. ' + rechnungsNr + ' – ' + bauvorhaben;
+
+                var mailBody = 'Sehr geehrte Damen und Herren,\n\n'
+                    + 'anbei erhalten Sie unsere ' + typLabel + ' Nr. ' + rechnungsNr + '.\n\n'
+                    + 'Bauvorhaben: ' + bauvorhaben + '\n';
+
+                if (leistungszeitraum) {
+                    mailBody += 'Leistungszeitraum: ' + leistungszeitraum + '\n';
+                }
+
+                mailBody += '\nRechnungsbetrag (brutto): ' + fmt(bruttoSumme) + ' €\n';
+
+                if (skontoProzent > 0) {
+                    mailBody += 'Zahlbar innerhalb ' + skontoTage + ' Tagen abzgl. ' + skontoProzent + '% Skonto: ' + fmt(zahlbetragMitSkonto) + ' €\n';
+                }
+                mailBody += 'Zahlbar innerhalb ' + zahlungszielTage + ' Tagen netto: ' + fmt(zahlbetragOhneSkonto) + ' €\n';
+
+                mailBody += '\nBitte überweisen Sie den Rechnungsbetrag auf folgendes Konto:\n'
+                    + 'Westerwald Bank eG\n'
+                    + 'IBAN: DE12 5739 1800 0000 0000 00\n'
+                    + 'BIC: GENODE51WW1\n'
+                    + 'Kontoinhaber: Thomas Willwacher Fliesenlegermeister e.K.\n\n'
+                    + 'Die Rechnung ist diesem Schreiben als PDF beigefügt.\n\n'
+                    + 'Bei Rückfragen stehen wir Ihnen gerne zur Verfügung.\n\n'
+                    + 'Mit freundlichen Grüßen\n\n'
+                    + 'Thomas Willwacher\n'
+                    + 'Fliesenlegermeister e.K.\n'
+                    + 'Flurweg 14a · 56472 Nisterau\n'
+                    + 'Tel. 02661-63101 · Mobil 0170-2024161';
+
+                // Zuerst PDF erzeugen und Druck-Dialog öffnen
+                generatePDF();
+
+                // Dann E-Mail-Client öffnen (kleine Verzögerung damit PDF-Fenster zuerst kommt)
+                setTimeout(function() {
+                    var mailtoLink = 'mailto:' + encodeURIComponent(empfaengerEmail)
+                        + '?subject=' + encodeURIComponent(betreffText)
+                        + '&body=' + encodeURIComponent(mailBody);
+                    window.location.href = mailtoLink;
+                }, 1200);
+            };
+
+            // ── E-Mail-Adresse bearbeiten (Inline-Dialog) ──
+            const [showMailDialog, setShowMailDialog] = useState(false);
+            const [mailAdresse, setMailAdresse] = useState('');
+
+            var openMailDialog = function() {
+                var email = kunde.ag_email || kunde.bl_email || kunde.arch_email || '';
+                setMailAdresse(email);
+                setShowMailDialog(true);
+            };
+
+            var confirmAndSend = function() {
+                // Temporär E-Mail übernehmen
+                var origEmail = kunde.ag_email;
+                if (mailAdresse) kunde.ag_email = mailAdresse;
+                setShowMailDialog(false);
+                sendPerEmail();
+                // Original wiederherstellen falls es ein Ref-Objekt ist
+                if (!mailAdresse) kunde.ag_email = origEmail;
+            };
+
 
             // ═══════════════════════════════════════════
             // PHASE 1: Typ-Auswahl
@@ -12692,13 +12759,68 @@
                         </div>
                     </div>
 
+                    {/* E-Mail Dialog */}
+                    {showMailDialog && (
+                        <div className="modal-overlay" onClick={function(){ setShowMailDialog(false); }}>
+                            <div className="modal" onClick={function(e){ e.stopPropagation(); }} style={{maxWidth:'380px'}}>
+                                <div className="modal-title">✉️ Rechnung per E-Mail senden</div>
+                                <div style={{marginBottom:'12px'}}>
+                                    <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'10px', lineHeight:'1.5'}}>
+                                        Die Rechnung wird als PDF erstellt und Ihr E-Mail-Programm geöffnet. Bitte fügen Sie die PDF-Datei manuell als Anhang hinzu.
+                                    </div>
+                                    <label style={{fontSize:'11px', color:'var(--text-muted)', display:'block', marginBottom:'4px'}}>Empfänger E-Mail-Adresse</label>
+                                    <input
+                                        type="email"
+                                        value={mailAdresse}
+                                        onChange={function(e){ setMailAdresse(e.target.value); }}
+                                        placeholder="empfaenger@firma.de"
+                                        style={{width:'100%', padding:'10px 12px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'14px', color:'var(--text-primary)', boxSizing:'border-box'}}
+                                        autoFocus
+                                    />
+                                    {kunde.ag_email && kunde.ag_email !== mailAdresse && (
+                                        <button onClick={function(){ setMailAdresse(kunde.ag_email); }}
+                                            style={{marginTop:'6px', padding:'4px 8px', fontSize:'10px', background:'rgba(30,136,229,0.1)', color:'var(--accent-blue)', border:'1px solid rgba(30,136,229,0.2)', borderRadius:'6px', cursor:'pointer'}}>
+                                            AG: {kunde.ag_email}
+                                        </button>
+                                    )}
+                                    {kunde.bl_email && kunde.bl_email !== mailAdresse && (
+                                        <button onClick={function(){ setMailAdresse(kunde.bl_email); }}
+                                            style={{marginTop:'6px', marginLeft:'4px', padding:'4px 8px', fontSize:'10px', background:'rgba(39,174,96,0.1)', color:'#27ae60', border:'1px solid rgba(39,174,96,0.2)', borderRadius:'6px', cursor:'pointer'}}>
+                                            BL: {kunde.bl_email}
+                                        </button>
+                                    )}
+                                    {kunde.arch_email && kunde.arch_email !== mailAdresse && (
+                                        <button onClick={function(){ setMailAdresse(kunde.arch_email); }}
+                                            style={{marginTop:'6px', marginLeft:'4px', padding:'4px 8px', fontSize:'10px', background:'rgba(230,126,34,0.1)', color:'#e67e22', border:'1px solid rgba(230,126,34,0.2)', borderRadius:'6px', cursor:'pointer'}}>
+                                            Arch: {kunde.arch_email}
+                                        </button>
+                                    )}
+                                </div>
+                                <div style={{display:'flex', gap:'8px', marginTop:'4px'}}>
+                                    <button className="modal-btn secondary" onClick={function(){ setShowMailDialog(false); }}
+                                        style={{flex:1, padding:'10px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'13px', cursor:'pointer'}}>
+                                        Abbrechen
+                                    </button>
+                                    <button onClick={confirmAndSend}
+                                        style={{flex:2, padding:'10px', background:'linear-gradient(135deg, #e67e22, #d35400)', color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'}}>
+                                        ✉️ PDF erstellen & Mail öffnen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Fixed Bottom Bar */}
                     <div style={{position:'fixed', bottom:0, left:0, right:0, padding:'10px 16px', background:'var(--bg-primary)', borderTop:'1px solid var(--border-color)', zIndex:100, display:'flex', gap:'8px'}}>
                         <button onClick={function(){ setPhase('posauswahl'); }}
-                            style={{flex:1, padding:'12px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'12px', cursor:'pointer'}}>← Zurück</button>
+                            style={{padding:'12px 10px', background:'var(--bg-tertiary)', color:'var(--text-muted)', border:'none', borderRadius:'10px', fontSize:'12px', cursor:'pointer'}}>←</button>
                         <button onClick={generatePDF}
-                            style={{flex:2, padding:'12px', background:'linear-gradient(135deg, ' + typColor + ', ' + typColor + 'cc)', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'}}>
+                            style={{flex:1, padding:'12px', background:'linear-gradient(135deg, ' + typColor + ', ' + typColor + 'cc)', color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'}}>
                             📄 PDF erstellen
+                        </button>
+                        <button onClick={openMailDialog}
+                            style={{flex:1, padding:'12px', background:'linear-gradient(135deg, #e67e22, #d35400)', color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'}}>
+                            ✉️ Per Mail senden
                         </button>
                     </div>
                 </div>
