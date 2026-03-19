@@ -90,8 +90,8 @@
     // → "Create API Key" klicken → Key kopieren → hier eintragen
     const GEMINI_CONFIG = {
         API_KEY: localStorage.getItem('gemini_api_key') || '',
-        MODEL: 'gemini-2.0-flash',           // Schnell & günstig für 90% der Fälle
-        MODEL_PRO: 'gemini-2.0-pro',         // Für komplexe Dokumente
+        MODEL: 'gemini-2.5-flash',              // Aktuell, schnell & günstig
+        MODEL_PRO: 'gemini-2.5-pro',            // Für komplexe Dokumente
         BASE_URL: 'https://generativelanguage.googleapis.com/v1beta',
         MAX_RETRIES: 3,
     };
@@ -5879,16 +5879,43 @@
                 if (!geminiKey) return;
                 setGeminiStatus('testing');
                 try {
+                    // Versuch 1: Models-Liste abrufen (GET)
                     var res = await fetch(GEMINI_CONFIG.BASE_URL + '/models?key=' + geminiKey);
                     if (res.ok) {
                         setGeminiStatus('ok');
                         localStorage.setItem('gemini_api_key', geminiKey);
                         GEMINI_CONFIG.API_KEY = geminiKey;
                         window._kiDisabled = false;
-                    } else {
-                        setGeminiStatus('error');
+                        return;
                     }
                 } catch(e) {
+                    console.warn('Models-Test fehlgeschlagen, versuche generateContent...', e.message);
+                }
+                // Versuch 2: Minimaler generateContent-Aufruf (POST)
+                try {
+                    var res2 = await fetch(
+                        GEMINI_CONFIG.BASE_URL + '/models/' + GEMINI_CONFIG.MODEL + ':generateContent?key=' + geminiKey,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: 'Antworte nur mit: OK' }] }],
+                                generationConfig: { maxOutputTokens: 10 }
+                            })
+                        }
+                    );
+                    if (res2.ok) {
+                        setGeminiStatus('ok');
+                        localStorage.setItem('gemini_api_key', geminiKey);
+                        GEMINI_CONFIG.API_KEY = geminiKey;
+                        window._kiDisabled = false;
+                        return;
+                    }
+                    var errBody = await res2.json().catch(function(){ return {}; });
+                    console.warn('Gemini Test-Fehler:', res2.status, errBody);
+                    setGeminiStatus('error');
+                } catch(e2) {
+                    console.warn('Gemini Netzwerkfehler:', e2.message);
                     setGeminiStatus('error');
                 }
             };
@@ -5969,9 +5996,9 @@
                                         💾 Speichern
                                     </button>
                                 </div>
-                                {geminiStatus === 'ok' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>🟢 Verbindung erfolgreich! Gemini 2.0 Flash bereit.</div>}
-                                {geminiStatus === 'error' && <div style={{marginTop:'6px', fontSize:'11px', color:'#e74c3c', fontWeight:'600'}}>🔴 Verbindung fehlgeschlagen. Bitte Key prüfen.</div>}
-                                {geminiStatus === 'saved' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>💾 Gespeichert!</div>}
+                                {geminiStatus === 'ok' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>🟢 Verbindung erfolgreich! Gemini 2.5 Flash bereit.</div>}
+                                {geminiStatus === 'error' && <div style={{marginTop:'6px', fontSize:'11px', color:'#e74c3c', fontWeight:'600'}}>🔴 Verbindung fehlgeschlagen. Prüfe: Konsole (F12) für Details.<br/>Tipp: Öffne die App über einen lokalen Webserver oder HTTPS.</div>}
+                                {geminiStatus === 'saved' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>💾 Gespeichert! Drücke "Verbindung testen" zum Prüfen.</div>}
                                 <div style={{marginTop:'8px', fontSize:'10px', color:'var(--text-muted)', lineHeight:'1.5'}}>
                                     <strong>Key holen:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" style={{color:'var(--accent-blue)'}}>aistudio.google.com/apikey</a><br/>
                                     → "Create API Key" → Key kopieren → hier einfügen
