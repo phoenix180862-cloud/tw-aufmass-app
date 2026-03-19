@@ -5136,331 +5136,30 @@
         /* ═══════════════════════════════════════════
            DEMO DATA – Baustellen-Ordner
            ═══════════════════════════════════════════ */
-        const DEMO_KUNDEN = [
-            {
-                id: 'k001',
-                name: 'Heinrich Haus gGmbH – Neubau Wohnanlage',
-                adresse: 'Neuwieder Str. 23a/b, 56566 Neuwied',
-                auftraggeber: 'Heinrich Haus gGmbH',
-                ag_adresse: 'Neuwieder Straße 21a, 56566 Neuwied',
-                ag_telefon: '02631-94520',
-                ag_email: 'info@heinrich-haus.de',
-                bauleitung: 'Dipl.-Ing. Markus Weber',
-                bl_adresse: '',
-                bl_telefon: '0171-5543890',
-                bl_email: '',
-                architekt: 'Planungsbüro Schneider & Partner',
-                arch_adresse: 'Rheinstraße 45, 56564 Neuwied',
-                arch_telefon: '',
-                arch_email: 'schneider@sp-architekten.de',
-                dateien: 12,
-                letzteAenderung: '21.02.2026',
-                files: [
-                    { name: 'Leistungsverzeichnis_Fliesen.pdf', type: 'pdf', size: '2.4 MB' },
-                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
-                    { name: 'Grundriss_EG.pdf', type: 'pdf', size: '5.1 MB' },
-                    { name: 'Grundriss_OG.pdf', type: 'pdf', size: '4.8 MB' },
-                    { name: 'Wandansichten_Bad_EG.pdf', type: 'pdf', size: '3.2 MB' },
-                    { name: 'Fliesenspiegel_Kueche.jpg', type: 'img', size: '1.7 MB' },
-                ],
-                folders: [
-                    { name: 'Leistungsverzeichnis', files: [
-                        { name: 'LV_Fliesen_komplett.pdf', type: 'pdf', size: '2.4 MB' },
-                        { name: 'LV_Nachtrag_01.pdf', type: 'pdf', size: '0.6 MB' },
-                    ]},
-                    { name: 'Zeichnungen', files: [
-                        { name: 'Grundriss_EG.pdf', type: 'pdf', size: '5.1 MB' },
-                        { name: 'Grundriss_OG.pdf', type: 'pdf', size: '4.8 MB' },
-                        { name: 'Wandansichten_Bad_EG.pdf', type: 'pdf', size: '3.2 MB' },
-                        { name: 'Fliesenspiegel_Kueche.jpg', type: 'img', size: '1.7 MB' },
-                    ]},
-                    { name: 'Stammdaten', files: [
-                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
-                        { name: 'Kontaktliste.pdf', type: 'pdf', size: '0.2 MB' },
-                    ]},
-                    { name: 'Fotos', files: [
-                        { name: 'Baustellenfoto_01.jpg', type: 'img', size: '3.5 MB' },
-                        { name: 'Baustellenfoto_02.jpg', type: 'img', size: '4.1 MB' },
-                        { name: 'Baustellenfoto_03.jpg', type: 'img', size: '3.8 MB' },
-                    ]},
-                ],
-                raeume: [
-                    { nr: '0.01', geschoss: 'EG', bez: 'Bad', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:3.45},{id:'B',l:2.10},{id:'C',l:3.45},{id:'D',l:2.10}],
-                      hoehe: 2.55, fliesenhoehe: 2.20,
-                      abzuege: [{typ:'tuer',bez:'Eingangstür',b:0.885,h:2.10},{typ:'fenster',bez:'Fenster',b:1.20,h:0.60,tiefe:0.18}],
-                      material: 'Bodenfliese 30×60 + Wandfliese 30×60' },
-                    { nr: '0.02', geschoss: 'EG', bez: 'Gäste-WC', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:1.80},{id:'B',l:1.40},{id:'C',l:1.80},{id:'D',l:1.40}],
-                      hoehe: 2.55, fliesenhoehe: 1.50,
-                      abzuege: [{typ:'tuer',bez:'Tür',b:0.76,h:2.10}],
-                      material: 'Bodenfliese 30×30 + Wandfliese 20×40' },
-                    { nr: '0.05', geschoss: 'EG', bez: 'Küche', quelle: 'LV + Fliesenspiegel',
-                      waende: [{id:'A',l:4.20},{id:'B',l:3.30},{id:'C',l:4.20},{id:'D',l:3.30}],
-                      hoehe: 2.55, fliesenhoehe: 0.80,
-                      abzuege: [{typ:'tuer',bez:'Tür',b:0.885,h:2.10},{typ:'fenster',bez:'Fenster',b:1.50,h:1.20,tiefe:0.20}],
-                      material: 'Bodenfliese 60×60 + Fliesenspiegel 10×10' },
-                    { nr: '0.08', geschoss: 'EG', bez: 'Hauswirtschaftsraum', quelle: 'Zeichnung',
-                      waende: [{id:'A',l:2.80},{id:'B',l:2.00},{id:'C',l:2.80},{id:'D',l:2.00}],
-                      hoehe: 2.55, fliesenhoehe: 2.20,
-                      abzuege: [{typ:'tuer',bez:'Tür',b:0.76,h:2.10}],
-                      material: 'Bodenfliese 30×30 + Wandfliese 20×25' },
-                    { nr: '1.01', geschoss: 'OG', bez: 'Bad groß', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:3.80},{id:'B',l:2.85},{id:'C',l:1.60},{id:'D',l:1.20},{id:'E',l:2.20},{id:'F',l:1.65}],
-                      hoehe: 2.50, fliesenhoehe: 2.20,
-                      abzuege: [{typ:'tuer',bez:'Tür',b:0.885,h:2.10},{typ:'fenster',bez:'Fenster',b:1.00,h:0.80,tiefe:0.20}],
-                      material: 'Bodenfliese 60×60 + Wandfliese 30×60' },
-                    { nr: '1.02', geschoss: 'OG', bez: 'Bad klein', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.40},{id:'B',l:1.80},{id:'C',l:2.40},{id:'D',l:1.80}],
-                      hoehe: 2.50, fliesenhoehe: 2.00,
-                      abzuege: [{typ:'tuer',bez:'Tür',b:0.76,h:2.10}],
-                      material: 'Bodenfliese 30×60 + Wandfliese 30×60' },
-                    { nr: '1.04', geschoss: 'OG', bez: 'Flur', quelle: 'LV',
-                      waende: [{id:'A',l:5.50},{id:'B',l:1.20},{id:'C',l:5.50},{id:'D',l:1.20}],
-                      hoehe: 2.50, fliesenhoehe: 0,
-                      abzuege: [],
-                      material: 'Bodenfliese 30×60' },
-                ]
-            },
-            {
-                id: 'k002',
-                name: 'Kreisverwaltung Westerwaldkreis – Sanierung Hallenbad',
-                adresse: 'Schwimmbadstraße 5, 56410 Montabaur',
-                auftraggeber: 'Kreisverwaltung Westerwaldkreis',
-                ag_adresse: 'Peter-Altmeier-Platz 1, 56410 Montabaur',
-                ag_telefon: '02602-1240',
-                ag_email: 'info@westerwaldkreis.de',
-                bauleitung: 'Ing.-Büro Kraft GmbH',
-                bl_adresse: 'Bahnhofstr. 12, 56410 Montabaur',
-                bl_telefon: '02602-99880',
-                bl_email: 'kraft@ib-kraft.de',
-                architekt: 'Architekten Schmidt + Haas',
-                arch_adresse: '',
-                arch_telefon: '0261-1334500',
-                arch_email: '',
-                dateien: 18,
-                letzteAenderung: '19.02.2026',
-                files: [
-                    { name: 'LV_Schwimmbadfliesen.pdf', type: 'pdf', size: '3.1 MB' },
-                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.9 MB' },
-                    { name: 'Beckenplan_Gesamt.pdf', type: 'pdf', size: '6.2 MB' },
-                    { name: 'Detail_Rinnenausbau.pdf', type: 'pdf', size: '2.8 MB' },
-                    { name: 'Umkleiden_Grundriss.pdf', type: 'pdf', size: '3.4 MB' },
-                ],
-                folders: [
-                    { name: 'Leistungsverzeichnis', files: [
-                        { name: 'LV_Schwimmbadfliesen.pdf', type: 'pdf', size: '3.1 MB' },
-                        { name: 'LV_Umkleiden.pdf', type: 'pdf', size: '1.8 MB' },
-                    ]},
-                    { name: 'Zeichnungen', files: [
-                        { name: 'Beckenplan_Gesamt.pdf', type: 'pdf', size: '6.2 MB' },
-                        { name: 'Detail_Rinnenausbau.pdf', type: 'pdf', size: '2.8 MB' },
-                        { name: 'Umkleiden_Grundriss.pdf', type: 'pdf', size: '3.4 MB' },
-                    ]},
-                    { name: 'Stammdaten', files: [
-                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.9 MB' },
-                    ]},
-                    { name: 'Gutachten', files: [
-                        { name: 'Feuchtigkeitsgutachten.pdf', type: 'pdf', size: '4.5 MB' },
-                        { name: 'Abdichtungskonzept.pdf', type: 'pdf', size: '2.1 MB' },
-                    ]},
-                ],
-                raeume: [
-                    { nr: '0.01', geschoss: 'EG', bez: 'Schwimmhalle - Becken', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:25.00},{id:'B',l:12.50},{id:'C',l:25.00},{id:'D',l:12.50}],
-                      hoehe: 4.00, fliesenhoehe: 2.00, abzuege: [], material: 'Schwimmbadfliese 15×15 rutschfest' },
-                    { nr: '0.02', geschoss: 'EG', bez: 'Umkleide Herren', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:6.00},{id:'B',l:4.50},{id:'C',l:6.00},{id:'D',l:4.50}],
-                      hoehe: 3.00, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:1.00,h:2.10}], material: 'Bodenfliese 20×20 R11 + Wandfliese 20×25' },
-                    { nr: '0.03', geschoss: 'EG', bez: 'Umkleide Damen', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:6.00},{id:'B',l:4.50},{id:'C',l:6.00},{id:'D',l:4.50}],
-                      hoehe: 3.00, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:1.00,h:2.10}], material: 'Bodenfliese 20×20 R11 + Wandfliese 20×25' },
-                    { nr: '0.04', geschoss: 'EG', bez: 'Duschraum Herren', quelle: 'Zeichnung',
-                      waende: [{id:'A',l:4.00},{id:'B',l:3.50},{id:'C',l:4.00},{id:'D',l:3.50}],
-                      hoehe: 3.00, fliesenhoehe: 3.00, abzuege: [], material: 'Fliese 10×10 R11 Boden+Wand' },
-                    { nr: '0.05', geschoss: 'EG', bez: 'Duschraum Damen', quelle: 'Zeichnung',
-                      waende: [{id:'A',l:4.00},{id:'B',l:3.50},{id:'C',l:4.00},{id:'D',l:3.50}],
-                      hoehe: 3.00, fliesenhoehe: 3.00, abzuege: [], material: 'Fliese 10×10 R11 Boden+Wand' },
-                ]
-            },
-            {
-                id: 'k003',
-                name: 'Familie Berger – Neubau EFH',
-                adresse: 'Am Waldrand 7, 56472 Nisterau',
-                auftraggeber: 'Stefan & Maria Berger',
-                ag_adresse: 'Am Waldrand 7, 56472 Nisterau',
-                ag_telefon: '',
-                ag_email: 'stefan.berger@web.de',
-                bauleitung: 'Baugeschäft Müller GmbH',
-                bl_adresse: '',
-                bl_telefon: '',
-                bl_email: '',
-                architekt: 'Architekturbüro Hahn',
-                arch_adresse: 'Hauptstr. 88, 56470 Bad Marienberg',
-                arch_telefon: '02661-40550',
-                arch_email: 'info@architektur-hahn.de',
-                dateien: 8,
-                letzteAenderung: '18.02.2026',
-                files: [
-                    { name: 'LV_Fliesen_EFH_Berger.pdf', type: 'pdf', size: '1.9 MB' },
-                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
-                    { name: 'Grundriss_EG_OG.pdf', type: 'pdf', size: '4.3 MB' },
-                    { name: 'Bad_OG_Fliesenspiegel.jpg', type: 'img', size: '2.1 MB' },
-                ],
-                folders: [
-                    { name: 'Leistungsverzeichnis', files: [
-                        { name: 'LV_Fliesen_EFH_Berger.pdf', type: 'pdf', size: '1.9 MB' },
-                    ]},
-                    { name: 'Zeichnungen', files: [
-                        { name: 'Grundriss_EG_OG.pdf', type: 'pdf', size: '4.3 MB' },
-                        { name: 'Bad_OG_Fliesenspiegel.jpg', type: 'img', size: '2.1 MB' },
-                    ]},
-                    { name: 'Stammdaten', files: [
-                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
-                    ]},
-                ],
-                raeume: [
-                    { nr: '0.03', geschoss: 'EG', bez: 'Bad EG', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.80},{id:'B',l:2.20},{id:'C',l:2.80},{id:'D',l:2.20}],
-                      hoehe: 2.50, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:0.76,h:2.10},{typ:'fenster',bez:'Fenster',b:0.80,h:0.60,tiefe:0.15}], material: 'Bodenfliese 30×60 + Wandfliese 25×40' },
-                    { nr: '0.06', geschoss: 'EG', bez: 'Gäste-WC', quelle: 'Zeichnung',
-                      waende: [{id:'A',l:1.60},{id:'B',l:1.20},{id:'C',l:1.60},{id:'D',l:1.20}],
-                      hoehe: 2.50, fliesenhoehe: 1.50, abzuege: [{typ:'tuer',bez:'Tür',b:0.76,h:2.10}], material: 'Bodenfliese 20×20 + Wandfliese 20×25' },
-                    { nr: '1.01', geschoss: 'OG', bez: 'Bad OG', quelle: 'Zeichnung + Fliesenspiegel',
-                      waende: [{id:'A',l:3.40},{id:'B',l:2.60},{id:'C',l:3.40},{id:'D',l:2.60}],
-                      hoehe: 2.50, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:0.885,h:2.10},{typ:'fenster',bez:'Fenster',b:1.00,h:0.80,tiefe:0.18}], material: 'Bodenfliese 60×60 + Wandfliese 30×60' },
-                ]
-            },
-            {
-                id: 'k004',
-                name: 'Seniorenzentrum St. Elisabeth – Badsanierung',
-                adresse: 'Kirchweg 12, 56457 Westerburg',
-                auftraggeber: 'Caritas Westerwald-Rhein-Lahn',
-                ag_adresse: 'Kirchweg 12, 56457 Westerburg',
-                ag_telefon: '02663-9410',
-                ag_email: '',
-                bauleitung: 'Bauplanung Reitz',
-                bl_adresse: '',
-                bl_telefon: '02663-78800',
-                bl_email: 'reitz@bauplanung-reitz.de',
-                architekt: 'Architekten Gemeinschaft Limburg',
-                arch_adresse: 'Domplatz 3, 65549 Limburg',
-                arch_telefon: '',
-                arch_email: '',
-                dateien: 22,
-                letzteAenderung: '15.02.2026',
-                files: [
-                    { name: 'LV_Sanitaer_Fliesen.pdf', type: 'pdf', size: '2.7 MB' },
-                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
-                    { name: 'Grundriss_Station_A.pdf', type: 'pdf', size: '5.5 MB' },
-                    { name: 'Grundriss_Station_B.pdf', type: 'pdf', size: '5.2 MB' },
-                    { name: 'Barrierefreiheit_Vorgaben.pdf', type: 'pdf', size: '1.4 MB' },
-                ],
-                folders: [
-                    { name: 'Leistungsverzeichnis', files: [
-                        { name: 'LV_Sanitaer_Fliesen.pdf', type: 'pdf', size: '2.7 MB' },
-                        { name: 'LV_Nachtrag_Barrierefreiheit.pdf', type: 'pdf', size: '0.9 MB' },
-                    ]},
-                    { name: 'Zeichnungen', files: [
-                        { name: 'Grundriss_Station_A.pdf', type: 'pdf', size: '5.5 MB' },
-                        { name: 'Grundriss_Station_B.pdf', type: 'pdf', size: '5.2 MB' },
-                        { name: 'Sanitaerdetails_Baeder.pdf', type: 'pdf', size: '3.8 MB' },
-                    ]},
-                    { name: 'Stammdaten', files: [
-                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.8 MB' },
-                        { name: 'Kontaktliste_Caritas.pdf', type: 'pdf', size: '0.3 MB' },
-                    ]},
-                    { name: 'Vorschriften', files: [
-                        { name: 'Barrierefreiheit_Vorgaben.pdf', type: 'pdf', size: '1.4 MB' },
-                        { name: 'Brandschutzauflagen.pdf', type: 'pdf', size: '2.0 MB' },
-                        { name: 'Hygienerichtlinien.pdf', type: 'pdf', size: '1.1 MB' },
-                    ]},
-                    { name: 'Fotos', files: [
-                        { name: 'Bestand_Bad_Station_A_01.jpg', type: 'img', size: '3.2 MB' },
-                        { name: 'Bestand_Bad_Station_A_02.jpg', type: 'img', size: '2.9 MB' },
-                        { name: 'Bestand_Bad_Station_B_01.jpg', type: 'img', size: '3.5 MB' },
-                        { name: 'Bestand_Flur_01.jpg', type: 'img', size: '2.7 MB' },
-                    ]},
-                ],
-                raeume: [
-                    { nr: 'A.01', geschoss: 'EG', bez: 'Bad Zimmer 101', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.40},{id:'B',l:2.10},{id:'C',l:2.40},{id:'D',l:2.10}],
-                      hoehe: 2.55, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:0.90,h:2.10}], material: 'Bodenfliese R10 30×30 + Wandfliese 20×25' },
-                    { nr: 'A.02', geschoss: 'EG', bez: 'Bad Zimmer 102', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.40},{id:'B',l:2.10},{id:'C',l:2.40},{id:'D',l:2.10}],
-                      hoehe: 2.55, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:0.90,h:2.10}], material: 'Bodenfliese R10 30×30 + Wandfliese 20×25' },
-                    { nr: 'A.03', geschoss: 'EG', bez: 'Bad Zimmer 103', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.40},{id:'B',l:2.10},{id:'C',l:2.40},{id:'D',l:2.10}],
-                      hoehe: 2.55, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür',b:0.90,h:2.10}], material: 'Bodenfliese R10 30×30 + Wandfliese 20×25' },
-                    { nr: 'A.10', geschoss: 'EG', bez: 'Flur Station A', quelle: 'LV',
-                      waende: [{id:'A',l:18.00},{id:'B',l:2.20},{id:'C',l:18.00},{id:'D',l:2.20}],
-                      hoehe: 2.55, fliesenhoehe: 0, abzuege: [], material: 'Bodenfliese R10 30×30' },
-                    { nr: 'B.01', geschoss: 'EG', bez: 'Bad Zimmer 201', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.80},{id:'B',l:2.20},{id:'C',l:2.80},{id:'D',l:2.20}],
-                      hoehe: 2.55, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür breit',b:1.00,h:2.10}], material: 'Bodenfliese R10 30×30 + Wandfliese 20×25' },
-                    { nr: 'B.02', geschoss: 'EG', bez: 'Bad Zimmer 202', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:2.80},{id:'B',l:2.20},{id:'C',l:2.80},{id:'D',l:2.20}],
-                      hoehe: 2.55, fliesenhoehe: 2.20, abzuege: [{typ:'tuer',bez:'Tür breit',b:1.00,h:2.10}], material: 'Bodenfliese R10 30×30 + Wandfliese 20×25' },
-                ]
-            },
-            {
-                id: 'k005',
-                name: 'Hotel Nistertal – Wellnessbereich',
-                adresse: 'Talstraße 22, 56477 Rennerod',
-                auftraggeber: 'Hotel Nistertal GmbH & Co. KG',
-                ag_adresse: 'Talstraße 22, 56477 Rennerod',
-                ag_telefon: '02664-99170',
-                ag_email: 'info@hotel-nistertal.de',
-                bauleitung: 'Dipl.-Ing. Petra Fuchs',
-                bl_adresse: 'Gartenweg 3, 56477 Rennerod',
-                bl_telefon: '0160-4478832',
-                bl_email: 'p.fuchs@fuchs-ing.de',
-                architekt: 'Wellness-Architektur Koblenz',
-                arch_adresse: 'Am Plan 8, 56068 Koblenz',
-                arch_telefon: '0261-2889900',
-                arch_email: 'kontakt@wellness-architektur.de',
-                dateien: 15,
-                letzteAenderung: '12.02.2026',
-                files: [
-                    { name: 'LV_Wellness_Fliesen.pdf', type: 'pdf', size: '2.2 MB' },
-                    { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
-                    { name: 'Poolbereich_Grundriss.pdf', type: 'pdf', size: '4.9 MB' },
-                    { name: 'Dampfbad_Detail.pdf', type: 'pdf', size: '2.3 MB' },
-                    { name: 'Mosaikplan_Pool.jpg', type: 'img', size: '3.6 MB' },
-                ],
-                folders: [
-                    { name: 'Leistungsverzeichnis', files: [
-                        { name: 'LV_Wellness_Fliesen.pdf', type: 'pdf', size: '2.2 MB' },
-                    ]},
-                    { name: 'Zeichnungen', files: [
-                        { name: 'Poolbereich_Grundriss.pdf', type: 'pdf', size: '4.9 MB' },
-                        { name: 'Dampfbad_Detail.pdf', type: 'pdf', size: '2.3 MB' },
-                        { name: 'Mosaikplan_Pool.jpg', type: 'img', size: '3.6 MB' },
-                    ]},
-                    { name: 'Stammdaten', files: [
-                        { name: 'Baustellenordner_Template.xlsx', type: 'xlsx', size: '0.7 MB' },
-                    ]},
-                    { name: 'Fotos', files: [
-                        { name: 'Wellness_Bestand_01.jpg', type: 'img', size: '4.0 MB' },
-                        { name: 'Wellness_Bestand_02.jpg', type: 'img', size: '3.7 MB' },
-                    ]},
-                ],
-                raeume: [
-                    { nr: '0.01', geschoss: 'UG', bez: 'Poolbereich', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:12.00},{id:'B',l:8.00},{id:'C',l:12.00},{id:'D',l:8.00}],
-                      hoehe: 3.50, fliesenhoehe: 1.80, abzuege: [], material: 'Mosaikfliese Pool 2,5×2,5 + Wandfliese 15×15' },
-                    { nr: '0.02', geschoss: 'UG', bez: 'Dampfbad', quelle: 'Zeichnung + LV',
-                      waende: [{id:'A',l:3.00},{id:'B',l:3.00},{id:'C',l:3.00},{id:'D',l:3.00}],
-                      hoehe: 2.50, fliesenhoehe: 2.50, abzuege: [{typ:'tuer',bez:'Glastür',b:0.90,h:2.10}], material: 'Mosaikfliese 5×5 Boden+Wand+Decke' },
-                    { nr: '0.03', geschoss: 'UG', bez: 'Duschbereich', quelle: 'Zeichnung',
-                      waende: [{id:'A',l:4.50},{id:'B',l:3.00},{id:'C',l:4.50},{id:'D',l:3.00}],
-                      hoehe: 2.80, fliesenhoehe: 2.80, abzuege: [], material: 'Fliese 10×10 R11' },
-                ]
-            },
-        ];
+        // ═══ Keine Demo-Kunden mehr — nur echte Baustellen aus Google Drive ═══
+        const DEMO_KUNDEN = [];
+
+        // ═══ Lokal gespeicherte Kunden aus localStorage laden ═══
+        function getGespeicherteKunden() {
+            var kunden = [];
+            try {
+                var keys = Object.keys(localStorage);
+                for (var i = 0; i < keys.length; i++) {
+                    if (keys[i].indexOf('aufmass_kunde_') === 0) {
+                        try {
+                            var data = JSON.parse(localStorage.getItem(keys[i]));
+                            if (data && data.name) {
+                                kunden.push(data);
+                            }
+                        } catch(e) {}
+                    }
+                }
+            } catch(e) {}
+            return kunden;
+        }
 
         /* ═══════════════════════════════════════════
-           LV-POSITIONEN (Demo-Daten pro Kunde)
+           LV-POSITIONEN (werden aus KI-Analyse befüllt)
            ═══════════════════════════════════════════ */
         const LV_POSITIONEN = {
             'k001': [
@@ -5528,30 +5227,6 @@
                 { pos: '3.03', bez: 'Silikonverfugung Sanitär', einheit: 'm', menge: 25.00, bereich: 'Allgemein', kategorie: 'silikon', tags: ['silikon','fuge'] },
                 { pos: '3.04', bez: 'Eckschutzschienen', einheit: 'm', menge: 8.00, bereich: 'Allgemein', kategorie: 'schiene', tags: ['schiene','eck'] },
                 { pos: '3.05', bez: 'Fliesensockel h=10cm', einheit: 'm', menge: 15.00, bereich: 'Allgemein', kategorie: 'sockel', tags: ['sockel'] },
-            ],
-            'k004': [
-                { pos: '1.01', bez: 'Bodenfliesen R10 30×30 liefern u. verlegen', einheit: 'm²', menge: 28.00, bereich: 'Station A', kategorie: 'boden', tags: ['boden','fliese','rutschfest'] },
-                { pos: '1.02', bez: 'Wandfliesen 20×25 liefern u. verlegen', einheit: 'm²', menge: 65.00, bereich: 'Station A', kategorie: 'wand', tags: ['wand','fliese'] },
-                { pos: '2.01', bez: 'Bodenfliesen R10 30×30 liefern u. verlegen', einheit: 'm²', menge: 32.00, bereich: 'Station B', kategorie: 'boden', tags: ['boden','fliese','rutschfest'] },
-                { pos: '2.02', bez: 'Wandfliesen 20×25 liefern u. verlegen', einheit: 'm²', menge: 70.00, bereich: 'Station B', kategorie: 'wand', tags: ['wand','fliese'] },
-                { pos: '3.01', bez: 'Bodenfliesen R10 30×30 Flur liefern u. verl.', einheit: 'm²', menge: 40.00, bereich: 'Flur', kategorie: 'boden', tags: ['boden','fliese','rutschfest','flur'] },
-                { pos: '4.01', bez: 'Verbundabdichtung Boden', einheit: 'm²', menge: 60.00, bereich: 'Allgemein', kategorie: 'abdichtung', tags: ['abdichtung','boden'] },
-                { pos: '4.02', bez: 'Verbundabdichtung Wand', einheit: 'm²', menge: 80.00, bereich: 'Allgemein', kategorie: 'abdichtung', tags: ['abdichtung','wand'] },
-                { pos: '4.03', bez: 'Silikonverfugung', einheit: 'm', menge: 100.00, bereich: 'Allgemein', kategorie: 'silikon', tags: ['silikon','fuge'] },
-                { pos: '4.04', bez: 'Haltegriff-Befestigung durch Fliese', einheit: 'Stk', menge: 24.00, bereich: 'Allgemein', kategorie: 'einbau', tags: ['haltegriff','barrierefrei'] },
-                { pos: '4.05', bez: 'Bodengleiche Duschrinne einbauen', einheit: 'Stk', menge: 6.00, bereich: 'Allgemein', kategorie: 'einbau', tags: ['dusche','rinne','einbau','barrierefrei'] },
-                { pos: '4.06', bez: 'Fliesensockel h=10cm', einheit: 'm', menge: 36.00, bereich: 'Allgemein', kategorie: 'sockel', tags: ['sockel'] },
-            ],
-            'k005': [
-                { pos: '1.01', bez: 'Mosaikfliese 2,5×2,5 Pool Becken Boden', einheit: 'm²', menge: 96.00, bereich: 'Pool', kategorie: 'boden', tags: ['boden','mosaik','pool'] },
-                { pos: '1.02', bez: 'Mosaikfliese 2,5×2,5 Pool Becken Wand', einheit: 'm²', menge: 72.00, bereich: 'Pool', kategorie: 'wand', tags: ['wand','mosaik','pool'] },
-                { pos: '1.03', bez: 'Wandfliesen 15×15 Poolbereich', einheit: 'm²', menge: 40.00, bereich: 'Pool', kategorie: 'wand', tags: ['wand','fliese','pool'] },
-                { pos: '2.01', bez: 'Mosaikfliese 5×5 Dampfbad Boden+Wand+Decke', einheit: 'm²', menge: 45.00, bereich: 'Dampfbad', kategorie: 'wand', tags: ['wand','boden','mosaik','dampfbad'] },
-                { pos: '3.01', bez: 'Bodenfliesen 10×10 R11 Duschbereich', einheit: 'm²', menge: 14.00, bereich: 'Dusche', kategorie: 'boden', tags: ['boden','fliese','rutschfest','dusche'] },
-                { pos: '3.02', bez: 'Wandfliesen 10×10 Duschbereich', einheit: 'm²', menge: 42.00, bereich: 'Dusche', kategorie: 'wand', tags: ['wand','fliese','dusche'] },
-                { pos: '4.01', bez: 'Verbundabdichtung Pool komplett', einheit: 'm²', menge: 200.00, bereich: 'Pool', kategorie: 'abdichtung', tags: ['abdichtung','pool'] },
-                { pos: '4.02', bez: 'Verbundabdichtung Nassbereich', einheit: 'm²', menge: 60.00, bereich: 'Allgemein', kategorie: 'abdichtung', tags: ['abdichtung','dusche'] },
-                { pos: '5.01', bez: 'Silikonverfugung', einheit: 'm', menge: 50.00, bereich: 'Allgemein', kategorie: 'silikon', tags: ['silikon','fuge'] },
             ],
         };
 
@@ -6030,7 +5705,9 @@
             const [searchTerm, setSearchTerm] = useState('');
             const inputRef = React.useRef(null);
 
-            const dataSource = kunden && kunden.length > 0 ? kunden : DEMO_KUNDEN;
+            // Datenquelle: 1. Drive-Kunden  2. Lokal gespeicherte Kunden  3. Leer
+            const gespeicherte = getGespeicherteKunden();
+            const dataSource = kunden && kunden.length > 0 ? kunden : (gespeicherte.length > 0 ? gespeicherte : []);
             const sortedKunden = [...dataSource].sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
             const filtered = sortedKunden.filter(k =>
@@ -6100,7 +5777,16 @@
                         </span>
                     </div>
 
-                    {filtered.length > 0 ? (
+                    {dataSource.length === 0 && !searchTerm ? (
+                        <div style={{textAlign:'center', padding:'30px 20px', color:'var(--text-muted)'}}>
+                            <div style={{fontSize:'40px', marginBottom:'12px'}}>📂</div>
+                            <div style={{fontSize:'15px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'8px'}}>Noch keine Baustellen vorhanden</div>
+                            <div style={{fontSize:'12px', lineHeight:'1.6'}}>
+                                Verwende <strong>"Kunde NEU"</strong> auf der Startseite, um eine Baustelle aus Google Drive zu laden und mit der KI zu analysieren.<br/><br/>
+                                Analysierte Kunden werden automatisch lokal gespeichert und erscheinen dann hier.
+                            </div>
+                        </div>
+                    ) : filtered.length > 0 ? (
                         <div className="folder-list">
                             {filtered.map((kunde, idx) => (
                                 <div
@@ -14049,8 +13735,8 @@
                 // ═══ DEMO-MODUS oder Daten noch nicht geladen ═══
                 setLoading(true);
                 if (!isDriveMode) {
-                    setLoadProgress('Demo-Daten werden geladen...');
-                    await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+                    setLoadProgress('Daten werden geladen...');
+                    await new Promise(function(resolve) { setTimeout(resolve, 300); });
                     setImportResult(null);
                 } else if (selectedKunde && selectedKunde._driveFolderId && !selectedKunde._fullyLoaded) {
                     // Sicherheits-Fallback: Daten nachladen falls handleSelectKunde fehlschlug
