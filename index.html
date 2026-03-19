@@ -1352,23 +1352,31 @@
                 return [];
             }
         },
-        async processKundenAkte(kunde, onProgress) {
+        async processKundenAkte(kunde, onProgress, analyseConfig) {
             var processResult = {
                 positionen: [],
                 kundendaten: {},
                 raeume: [],
                 zeichnungen: [],
                 quellenInfo: [],
-                fehler: []
+                fehler: [],
+                vertrag: {}
             };
 
-            // Alle Dateien sammeln (Ordner + Root-Files)
+            // analyseConfig: { mode: 'komplett' | 'ordner', selectedFolders: ['Leistungsverzeichnis', ...], includeRootFiles: true }
+            var config = analyseConfig || { mode: 'komplett', selectedFolders: null, includeRootFiles: true };
+
+            // Alle Dateien sammeln (gefiltert nach Ordner-Auswahl)
             var allFiles = [];
-            if (kunde.files) {
+            if (kunde.files && config.includeRootFiles !== false) {
                 kunde.files.forEach(function(f) { allFiles.push(f); });
             }
             if (kunde.folders) {
                 kunde.folders.forEach(function(folder) {
+                    // Ordner-Filter: nur ausgewählte Ordner verarbeiten
+                    if (config.mode === 'ordner' && config.selectedFolders) {
+                        if (config.selectedFolders.indexOf(folder.name) === -1) return; // Skip
+                    }
                     if (folder.files) {
                         folder.files.forEach(function(f) {
                             allFiles.push(Object.assign({}, f, { folderName: folder.name }));
@@ -5733,6 +5741,193 @@
                     </div>
                 </div>
             )
+        }
+
+        /* ═══════════════════════════════════════════
+           ANALYSE-KONFIGURATION — Ordner-Auswahl
+           ═══════════════════════════════════════════ */
+        function AnalyseKonfiguration({ kunde, onStart, onBack }) {
+            const [mode, setMode] = useState('komplett'); // 'komplett' | 'ordner'
+            const [selectedFolders, setSelectedFolders] = useState({});
+            const [includeRootFiles, setIncludeRootFiles] = useState(true);
+
+            // Ordner aus dem Kunden-Objekt
+            var folders = (kunde.folders || []);
+            var rootFiles = (kunde.files || []);
+
+            // Ordner-Icons nach Typ
+            var folderIcons = {
+                'Leistungsverzeichnis': '📋', 'LV': '📋',
+                'Zeichnungen': '📐', 'Pläne': '📐', 'Plaene': '📐',
+                'Stammdaten': '📂', 'Kontakte': '📂',
+                'Fotos': '📸', 'Bilder': '📸', 'Dokumentation': '📸',
+                'Gutachten': '📊', 'Vorschriften': '⚖️',
+                'Schriftverkehr': '✉️', 'Korrespondenz': '✉️',
+                'Nachträge': '📝', 'Nachtraege': '📝',
+                'Rechnungen': '💰', 'Abrechnung': '💰',
+            };
+
+            var getIcon = function(name) {
+                for (var key in folderIcons) {
+                    if (name.toLowerCase().indexOf(key.toLowerCase()) >= 0) return folderIcons[key];
+                }
+                return '📁';
+            };
+
+            var toggleFolder = function(name) {
+                setSelectedFolders(function(prev) {
+                    var n = Object.assign({}, prev);
+                    n[name] = !n[name];
+                    return n;
+                });
+            };
+
+            var selectAll = function() {
+                var n = {};
+                folders.forEach(function(f) { n[f.name] = true; });
+                setSelectedFolders(n);
+            };
+
+            var selectedCount = Object.values(selectedFolders).filter(Boolean).length;
+            var totalFiles = folders.reduce(function(s, f) { return s + (f.files || []).length; }, 0) + rootFiles.length;
+            var selectedFiles = 0;
+            if (mode === 'komplett') {
+                selectedFiles = totalFiles;
+            } else {
+                folders.forEach(function(f) {
+                    if (selectedFolders[f.name]) selectedFiles += (f.files || []).length;
+                });
+                if (includeRootFiles) selectedFiles += rootFiles.length;
+            }
+
+            var handleStart = function() {
+                if (mode === 'komplett') {
+                    onStart({ mode: 'komplett', selectedFolders: null, includeRootFiles: true });
+                } else {
+                    var sel = [];
+                    Object.keys(selectedFolders).forEach(function(k) {
+                        if (selectedFolders[k]) sel.push(k);
+                    });
+                    if (sel.length === 0 && !includeRootFiles) {
+                        alert('Bitte mindestens einen Ordner auswählen!');
+                        return;
+                    }
+                    onStart({ mode: 'ordner', selectedFolders: sel, includeRootFiles: includeRootFiles });
+                }
+            };
+
+            return (
+                <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
+                    {/* Header */}
+                    <div style={{textAlign:'center', marginBottom:'16px'}}>
+                        <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'4px'}}>
+                            Analyse-Konfiguration
+                        </div>
+                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)'}}>{kunde.name}</div>
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'4px'}}>{totalFiles} Dateien in {folders.length} Ordnern</div>
+                    </div>
+
+                    {/* Modus-Auswahl */}
+                    <div style={{display:'flex', gap:'8px', marginBottom:'14px'}}>
+                        <button onClick={function(){ setMode('komplett'); }}
+                            style={{flex:1, padding:'12px 10px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'700', textAlign:'center',
+                                background: mode === 'komplett' ? 'rgba(30,136,229,0.12)' : 'var(--bg-secondary)',
+                                border: mode === 'komplett' ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                                color: mode === 'komplett' ? 'var(--accent-blue)' : 'var(--text-muted)'}}>
+                            🔍 Komplette Akte<br/><span style={{fontSize:'10px', fontWeight:'400'}}>Alle Ordner analysieren</span>
+                        </button>
+                        <button onClick={function(){ setMode('ordner'); }}
+                            style={{flex:1, padding:'12px 10px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'700', textAlign:'center',
+                                background: mode === 'ordner' ? 'rgba(142,68,173,0.12)' : 'var(--bg-secondary)',
+                                border: mode === 'ordner' ? '2px solid #8e44ad' : '1px solid var(--border-color)',
+                                color: mode === 'ordner' ? '#8e44ad' : 'var(--text-muted)'}}>
+                            📂 Einzelne Ordner<br/><span style={{fontSize:'10px', fontWeight:'400'}}>Gezielt auswählen</span>
+                        </button>
+                    </div>
+
+                    {/* Ordner-Liste (nur bei mode 'ordner') */}
+                    {mode === 'ordner' && (
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', border:'1px solid var(--border-color)', marginBottom:'14px'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                                <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)'}}>Ordner auswählen:</div>
+                                <button onClick={selectAll} style={{fontSize:'10px', color:'var(--accent-blue)', background:'none', border:'none', cursor:'pointer', fontWeight:'700'}}>
+                                    Alle auswählen
+                                </button>
+                            </div>
+
+                            {folders.map(function(folder) {
+                                var fileCount = (folder.files || []).length;
+                                var isSelected = !!selectedFolders[folder.name];
+                                return (
+                                    <div key={folder.name} onClick={function(){ toggleFolder(folder.name); }}
+                                        style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', marginBottom:'4px',
+                                            borderRadius:'8px', cursor:'pointer',
+                                            background: isSelected ? 'rgba(39,174,96,0.08)' : 'transparent',
+                                            border: isSelected ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
+                                            transition:'all 0.2s'}}>
+                                        <span style={{fontSize:'20px', width:'24px', textAlign:'center'}}>
+                                            {isSelected ? '✅' : '⬜'}
+                                        </span>
+                                        <span style={{fontSize:'18px'}}>{getIcon(folder.name)}</span>
+                                        <div style={{flex:1}}>
+                                            <div style={{fontSize:'13px', fontWeight:'600', color: isSelected ? '#27ae60' : 'var(--text-primary)'}}>{folder.name}</div>
+                                            <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{fileCount} Dateien</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {/* Root-Dateien */}
+                            {rootFiles.length > 0 && (
+                                <div onClick={function(){ setIncludeRootFiles(!includeRootFiles); }}
+                                    style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', marginTop:'4px',
+                                        borderRadius:'8px', cursor:'pointer',
+                                        background: includeRootFiles ? 'rgba(39,174,96,0.08)' : 'transparent',
+                                        border: includeRootFiles ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
+                                        borderTop:'1px solid var(--border-color)'}}>
+                                    <span style={{fontSize:'20px', width:'24px', textAlign:'center'}}>
+                                        {includeRootFiles ? '✅' : '⬜'}
+                                    </span>
+                                    <span style={{fontSize:'18px'}}>📄</span>
+                                    <div style={{flex:1}}>
+                                        <div style={{fontSize:'13px', fontWeight:'600', color: includeRootFiles ? '#27ae60' : 'var(--text-primary)'}}>Dateien im Hauptordner</div>
+                                        <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{rootFiles.length} Dateien</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Info-Box */}
+                    <div style={{background:'rgba(30,136,229,0.06)', borderRadius:'10px', padding:'12px', border:'1px solid rgba(30,136,229,0.15)', marginBottom:'14px'}}>
+                        <div style={{fontSize:'11px', color:'var(--accent-blue)', fontWeight:'600'}}>
+                            📊 {selectedFiles} von {totalFiles} Dateien werden analysiert
+                        </div>
+                        <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'4px'}}>
+                            {mode === 'komplett'
+                                ? 'Alle Ordner und Dateien werden mit der KI analysiert. Dauert am längsten, liefert vollständige Ergebnisse.'
+                                : selectedCount > 0
+                                    ? selectedCount + ' Ordner ausgewählt. Nur diese werden analysiert — spart Zeit und API-Kosten.'
+                                    : 'Wähle die Ordner aus, die analysiert werden sollen.'}
+                        </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div style={{display:'flex', gap:'8px'}}>
+                        <button onClick={onBack}
+                            style={{padding:'12px 16px', borderRadius:'10px', border:'1px solid var(--border-color)', background:'var(--bg-secondary)', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'var(--text-muted)'}}>
+                            ← Zurück
+                        </button>
+                        <button onClick={handleStart}
+                            disabled={mode === 'ordner' && selectedCount === 0 && !includeRootFiles}
+                            style={{flex:1, padding:'12px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700', color:'white',
+                                background: (mode === 'ordner' && selectedCount === 0 && !includeRootFiles) ? '#ccc' : 'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
+                                boxShadow:'0 4px 12px rgba(30,136,229,0.3)'}}>
+                            🤖 Analyse starten ({selectedFiles} Dateien)
+                        </button>
+                    </div>
+                </div>
+            );
         }
 
         /* ═══════════════════════════════════════════
@@ -13467,6 +13662,7 @@
             const [isAnalyzing, setIsAnalyzing] = useState(false);
             const [analyzeProgress, setAnalyzeProgress] = useState({ progress: '', currentDoc: 0, totalDocs: 0, details: [] });
             const [kundeMode, setKundeMode] = useState('neu'); // 'neu' | 'analysiert'
+            const [analyseConfig, setAnalyseConfig] = useState(null);
 
             /* ══════════════════════════════════════════════════
                GLOBALER AUTO-FOCUS & ENTER-NAVIGATION
@@ -13779,12 +13975,12 @@
 
             const handleSelectKunde = async (kunde) => {
                 setSelectedKunde(kunde);
-                navigateTo('akte');
 
                 var localKey = 'aufmass_kunde_' + (kunde.id || kunde.name || 'unknown');
 
                 // ═══ WENN "Kunde ANALYSIERT": Versuche gespeicherte Daten zu laden ═══
                 if (kundeMode === 'analysiert') {
+                    navigateTo('akte');
                     try {
                         var cached = localStorage.getItem(localKey);
                         if (cached) {
@@ -13808,7 +14004,6 @@
                             setLoading(false);
                             return; // FERTIG – keine Drive-Verbindung nötig
                         } else {
-                            // Keine gespeicherten Daten → trotzdem aus Drive laden, aber ohne KI
                             setLoadProgress('Keine gespeicherten Daten gefunden – lade aus Drive (ohne KI)...');
                         }
                     } catch(cacheErr) {
@@ -13816,10 +14011,11 @@
                     }
                 }
 
-                // ═══ AUS DRIVE LADEN (mit oder ohne KI) ═══
+                // ═══ AUS DRIVE LADEN: Zuerst Ordnerstruktur laden, dann Config-Screen ═══
                 if (isDriveMode && kunde.id && !kunde.files) {
                     setLoading(true);
                     setLoadProgress('Ordnerinhalt wird geladen...');
+                    navigateTo('akte');
                     try {
                         const contents = await window.GoogleDriveService.listFolderContents(kunde.id);
                         var enriched = {
@@ -13832,96 +14028,116 @@
                             _driveFolderId: kunde.id,
                         };
                         setSelectedKunde(enriched);
-
-                        // ═══ Dateien analysieren ═══
-                        if (kundeMode === 'neu') {
-                            setLoadProgress('KI-Analyse läuft...');
-                        } else {
-                            setLoadProgress('Dateien werden analysiert (ohne KI)...');
-                            window._kiDisabled = true;
-                        }
-
-                        var result = await window.FileProcessor.processKundenAkte(
-                            enriched,
-                            function(msg) { setLoadProgress(msg); }
-                        );
-
-                        if (kundeMode !== 'neu') {
-                            window._kiDisabled = false;
-                        }
-
-                        // Positionen in LV_POSITIONEN injizieren
-                        if (result.positionen && result.positionen.length > 0) {
-                            var kundeKey = kunde.id || 'drive_import';
-                            LV_POSITIONEN[kundeKey] = result.positionen;
-                        }
-
-                        // Kundendaten + Räume + Zeichnungen in Kunde mergen
-                        var kd = result.kundendaten || {};
-                        var vt = result.vertrag || kd.vertrag || {};
-                        var fullyLoaded = Object.assign({}, enriched, {
-                            auftraggeber: kd.auftraggeber || enriched.auftraggeber || kunde.name,
-                            adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
-                            baumassnahme: kd.baumassnahme || '',
-                            bauleitung: kd.bauleitung || '',
-                            bl_adresse: kd.bl_adresse || '',
-                            bl_telefon: kd.bl_telefon || '',
-                            bl_fax: kd.bl_fax || '',
-                            bl_email: kd.bl_email || '',
-                            architekt: kd.architekt || '',
-                            arch_adresse: kd.arch_adresse || '',
-                            arch_telefon: kd.arch_telefon || '',
-                            arch_fax: kd.arch_fax || '',
-                            arch_email: kd.arch_email || '',
-                            ag_adresse: kd.ag_adresse || kd.adresse || '',
-                            ag_telefon: kd.ag_telefon || '',
-                            ag_fax: kd.ag_fax || '',
-                            ag_email: kd.ag_email || '',
-                            vertrag: vt,
-                            raeume: (result.raeume || []).map(function(r, idx) {
-                                if (typeof r === 'string') {
-                                    return {
-                                        id: 'import_' + idx, nr: String(idx + 1), bez: r,
-                                        geschoss: (r.match(/EG|OG|KG|DG|UG/i) || [''])[0].toUpperCase(),
-                                        fliesenhoehe: 0, raumhoehe: 0,
-                                        waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
-                                    };
-                                }
-                                return Object.assign({ id: 'import_' + idx }, r, {
-                                    nr: r.nr || String(idx + 1),
-                                });
-                            }),
-                            zeichnungen: result.zeichnungen || [],
-                            _importResult: result,
-                            _lvPositionenKey: kunde.id,
-                            _fullyLoaded: true,
-                        });
-                        setSelectedKunde(fullyLoaded);
-                        setImportResult(result);
-
-                        // ═══ LOKAL SPEICHERN ═══
-                        try {
-                            var toSave = Object.assign({}, fullyLoaded);
-                            // Große Binärdaten entfernen (Blobs, Base64 Bilder)
-                            delete toSave.folders;
-                            delete toSave.files;
-                            // LV-Positionen mitspeichern
-                            toSave._lvPositionen = result.positionen || [];
-                            toSave._gespeichertAm = new Date().toLocaleString('de-DE');
-                            localStorage.setItem(localKey, JSON.stringify(toSave));
-                            console.log('Kundendaten lokal gespeichert:', localKey);
-                        } catch(saveErr) {
-                            console.warn('Lokales Speichern fehlgeschlagen:', saveErr.message);
-                        }
-
+                        setLoading(false);
                         setLoadProgress('');
 
+                        // → Analyse-Konfiguration zeigen (Ordner-Auswahl)
+                        navigateTo('analyseConfig');
+                        return;
+
                     } catch (err) {
-                        console.error('Ordner laden/analysieren:', err);
+                        console.error('Ordner laden:', err);
                         setLoadProgress('Fehler: ' + err.message);
                     }
                     setLoading(false);
                 }
+            };
+
+            // ═══ ANALYSE MIT CONFIG: Wird vom AnalyseKonfiguration-Screen aufgerufen ═══
+            const handleLoadAkteWithConfig = async (config) => {
+                var kunde = selectedKunde;
+                if (!kunde) return;
+
+                setLoading(true);
+                navigateTo('akte');
+
+                if (kundeMode === 'neu') {
+                    setLoadProgress('🤖 KI-Analyse läuft...');
+                } else {
+                    setLoadProgress('Dateien werden analysiert (ohne KI)...');
+                    window._kiDisabled = true;
+                }
+
+                try {
+                    var result = await window.FileProcessor.processKundenAkte(
+                        kunde,
+                        function(msg) { setLoadProgress(msg); },
+                        config
+                    );
+
+                    if (kundeMode !== 'neu') {
+                        window._kiDisabled = false;
+                    }
+
+                    // Positionen in LV_POSITIONEN injizieren
+                    if (result.positionen && result.positionen.length > 0) {
+                        var kundeKey = kunde._driveFolderId || kunde.id || 'drive_import';
+                        LV_POSITIONEN[kundeKey] = result.positionen;
+                    }
+
+                    // Kundendaten + Räume + Zeichnungen in Kunde mergen
+                    var kd = result.kundendaten || {};
+                    var vt = result.vertrag || kd.vertrag || {};
+                    var fullyLoaded = Object.assign({}, kunde, {
+                        auftraggeber: kd.auftraggeber || kunde.auftraggeber || kunde.name,
+                        adresse: kd.adresse || kd.baumassnahme || kunde.adresse || '',
+                        baumassnahme: kd.baumassnahme || '',
+                        bauleitung: kd.bauleitung || '',
+                        bl_adresse: kd.bl_adresse || '',
+                        bl_telefon: kd.bl_telefon || '',
+                        bl_fax: kd.bl_fax || '',
+                        bl_email: kd.bl_email || '',
+                        architekt: kd.architekt || '',
+                        arch_adresse: kd.arch_adresse || '',
+                        arch_telefon: kd.arch_telefon || '',
+                        arch_fax: kd.arch_fax || '',
+                        arch_email: kd.arch_email || '',
+                        ag_adresse: kd.ag_adresse || kd.adresse || '',
+                        ag_telefon: kd.ag_telefon || '',
+                        ag_fax: kd.ag_fax || '',
+                        ag_email: kd.ag_email || '',
+                        vertrag: vt,
+                        raeume: (result.raeume || []).map(function(r, idx) {
+                            if (typeof r === 'string') {
+                                return {
+                                    id: 'import_' + idx, nr: String(idx + 1), bez: r,
+                                    geschoss: (r.match(/EG|OG|KG|DG|UG/i) || [''])[0].toUpperCase(),
+                                    fliesenhoehe: 0, raumhoehe: 0,
+                                    waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
+                                };
+                            }
+                            return Object.assign({ id: 'import_' + idx }, r, { nr: r.nr || String(idx + 1) });
+                        }),
+                        zeichnungen: result.zeichnungen || [],
+                        _importResult: result,
+                        _lvPositionenKey: kunde._driveFolderId || kunde.id,
+                        _fullyLoaded: true,
+                        _analyseConfig: config,
+                    });
+                    setSelectedKunde(fullyLoaded);
+                    setImportResult(result);
+
+                    // ═══ LOKAL SPEICHERN ═══
+                    try {
+                        var localKey = 'aufmass_kunde_' + (kunde._driveFolderId || kunde.id || kunde.name || 'unknown');
+                        var toSave = Object.assign({}, fullyLoaded);
+                        delete toSave.folders;
+                        delete toSave.files;
+                        toSave._lvPositionen = result.positionen || [];
+                        toSave._gespeichertAm = new Date().toLocaleString('de-DE');
+                        localStorage.setItem(localKey, JSON.stringify(toSave));
+                        console.log('Kundendaten lokal gespeichert:', localKey);
+                    } catch(saveErr) {
+                        console.warn('Lokales Speichern fehlgeschlagen:', saveErr.message);
+                    }
+
+                    setLoadProgress('✅ Analyse abgeschlossen!');
+
+                } catch (err) {
+                    console.error('Analyse Fehler:', err);
+                    setLoadProgress('❌ Fehler: ' + err.message);
+                }
+                setLoading(false);
             };
 
             const handleLoadAkte = async () => {
@@ -14110,6 +14326,17 @@
                             onLoad={handleLoadAkte}
                             loading={loading}
                             loadProgress={loadProgress}
+                        />;
+                    case 'analyseConfig':
+                        return <AnalyseKonfiguration
+                            kunde={selectedKunde}
+                            onStart={function(config) {
+                                setAnalyseConfig(config);
+                                navigateTo('akte');
+                                // Analyse direkt starten mit Config
+                                handleLoadAkteWithConfig(config);
+                            }}
+                            onBack={function(){ navigateTo('auswahl'); }}
                         />;
                     case 'modulwahl':
                         return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} kiAkte={kiAkte} onShowKiAkte={() => setShowKiAkte(true)} />;
