@@ -84,60 +84,184 @@
     };
 
     // ═══════════════════════════════════════════════════════
-    // ANTHROPIC KI-API Konfiguration
+    // GOOGLE GEMINI KI-API Konfiguration
     // ═══════════════════════════════════════════════════════
-    // WICHTIG: Eigenen Anthropic API-Key hier eintragen!
-    // Erstelle unter https://console.anthropic.com/settings/keys
-    // einen API-Key und trage ihn hier ein.
-    const ANTHROPIC_CONFIG = {
-        API_KEY: 'sk-ant-api03-aatZNN10Bu2DVc72RQKjNUy-ixH_aZO4EJDFEs_4eh81coGbQvUNz5lwkqKat_vqdjdaNdX7Q0Xxgnuo71Bhew-JCrNGQAA',  // Aufmass-App-2 Key (15. März 2026)
-        MODEL: 'claude-sonnet-4-20250514',
+    // API-Key holen: https://aistudio.google.com/apikey
+    // → "Create API Key" klicken → Key kopieren → hier eintragen
+    const GEMINI_CONFIG = {
+        API_KEY: localStorage.getItem('gemini_api_key') || '',
+        MODEL: 'gemini-2.0-flash',           // Schnell & günstig für 90% der Fälle
+        MODEL_PRO: 'gemini-2.0-pro',         // Für komplexe Dokumente
+        BASE_URL: 'https://generativelanguage.googleapis.com/v1beta',
+        MAX_RETRIES: 3,
     };
 
-    // ── KI-API Hilfsfunktion (mit API-Key) ──
-    try { window.callAnthropicAPI = async function(messages, maxTokens) {
-        // KI bereits deaktiviert? → sofort raus
-        if (window._anthropicDisabled) return null;
+    // ── Gemini API-Aufruf (universell — Text + Bild + PDF) ──
+    try { window.callGeminiAPI = async function(messages, maxTokens, options) {
+        options = options || {};
+        if (window._kiDisabled) return null;
 
-        var apiKey = ANTHROPIC_CONFIG.API_KEY || localStorage.getItem('anthropic_api_key') || '';
+        var apiKey = GEMINI_CONFIG.API_KEY || localStorage.getItem('gemini_api_key') || '';
         if (!apiKey) {
-            window._anthropicDisabled = true;
+            console.warn('Kein Gemini API-Key konfiguriert');
             return null;
         }
 
+        var modelId = options.model || GEMINI_CONFIG.MODEL;
+
         try {
-            var response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true',
-                },
-                body: JSON.stringify({
-                    model: ANTHROPIC_CONFIG.MODEL,
-                    max_tokens: maxTokens || 8000,
-                    messages: messages,
-                })
-            });
+            // Nachrichten in Gemini-Format konvertieren
+            var parts = [];
 
-            var data = await response.json();
-
-            if (data.error) {
-                console.warn('KI-Fehler:', data.error.type, data.error.message);
-                // Bei Auth-Fehler: KI STILL deaktivieren, kein Popup
-                window._anthropicDisabled = true;
-                return null;
+            // Dateien (PDF, Bilder) als inline_data
+            if (options.files && options.files.length > 0) {
+                for (var fi = 0; fi < options.files.length; fi++) {
+                    parts.push({
+                        inline_data: {
+                            mime_type: options.files[fi].mimeType,
+                            data: options.files[fi].base64Data
+                        }
+                    });
+                }
             }
 
-            var textContent = data.content ? data.content.filter(function(c) { return c.type === 'text'; }).map(function(c) { return c.text; }).join('') : '';
-            return textContent;
+            // Anthropic-Messages → Gemini-Parts konvertieren
+            if (messages && messages.length > 0) {
+                for (var mi = 0; mi < messages.length; mi++) {
+                    var msg = messages[mi];
+                    if (typeof msg.content === 'string') {
+                        parts.push({ text: msg.content });
+                    } else if (Array.isArray(msg.content)) {
+                        // Anthropic multimodal format: [{type:'text',...}, {type:'image',...}]
+                        for (var ci = 0; ci < msg.content.length; ci++) {
+                            var block = msg.content[ci];
+                            if (block.type === 'text') {
+                                parts.push({ text: block.text });
+                            } else if (block.type === 'image') {
+                                parts.push({
+                                    inline_data: {
+                                        mime_type: block.source.media_type,
+                                        data: block.source.data
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (parts.length === 0) return null;
+
+            var body = {
+                contents: [{ role: 'user', parts: parts }],
+                generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: maxTokens || 8000
+                }
+            };
+
+            // Wenn JSON-Output gewünscht (für Analyse-Calls)
+            if (options.jsonMode) {
+                body.generationConfig.responseMimeType = 'application/json';
+            }
+
+            var lastError;
+            for (var attempt = 0; attempt < GEMINI_CONFIG.MAX_RETRIES; attempt++) {
+                try {
+                    var response = await fetch(
+                        GEMINI_CONFIG.BASE_URL + '/models/' + modelId + ':generateContent?key=' + apiKey,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body)
+                        }
+                    );
+
+                    var data = await response.json();
+
+                    if (!response.ok) {
+                        var errMsg = data.error ? data.error.message : ('HTTP ' + response.status);
+                        console.warn('Gemini-Fehler:', errMsg);
+                        if (response.status === 401 || response.status === 403) {
+                            window._kiDisabled = true;
+                            return null;
+                        }
+                        throw new Error(errMsg);
+                    }
+
+                    var textContent = '';
+                    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
+                        textContent = data.candidates[0].content.parts
+                            .filter(function(p) { return p.text; })
+                            .map(function(p) { return p.text; })
+                            .join('');
+                    }
+                    return textContent;
+                } catch (retryErr) {
+                    lastError = retryErr;
+                    if (attempt < GEMINI_CONFIG.MAX_RETRIES - 1) {
+                        await new Promise(function(r) { setTimeout(r, 1000 * (attempt + 1)); });
+                    }
+                }
+            }
+            console.warn('Gemini nach ' + GEMINI_CONFIG.MAX_RETRIES + ' Versuchen fehlgeschlagen:', lastError);
+            return null;
         } catch (fetchErr) {
             console.warn('KI-Netzwerkfehler:', fetchErr.message);
             return null;
         }
     };
-    } catch(apiSetupErr) { console.warn('API setup:', apiSetupErr); window.callAnthropicAPI = async function() { return null; }; }
+
+    // ── Kompatibilitäts-Wrapper: callAnthropicAPI → callGeminiAPI ──
+    // Alle bestehenden Aufrufe funktionieren weiterhin!
+    window.callAnthropicAPI = window.callGeminiAPI;
+
+    // ── Bildanalyse (Gemini Vision) ──
+    window.callGeminiVision = async function(imageBase64, mimeType, prompt, systemPrompt) {
+        var apiKey = GEMINI_CONFIG.API_KEY || localStorage.getItem('gemini_api_key') || '';
+        if (!apiKey) return null;
+
+        var parts = [
+            { inline_data: { mime_type: mimeType, data: imageBase64 } },
+            { text: (systemPrompt ? systemPrompt + '\n\n' : '') + prompt }
+        ];
+
+        try {
+            var response = await fetch(
+                GEMINI_CONFIG.BASE_URL + '/models/' + GEMINI_CONFIG.MODEL + ':generateContent?key=' + apiKey,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: parts }],
+                        generationConfig: {
+                            responseMimeType: 'application/json',
+                            temperature: 0.1,
+                            maxOutputTokens: 8192
+                        }
+                    })
+                }
+            );
+
+            var data = await response.json();
+            if (!response.ok) return null;
+
+            var text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
+                ? data.candidates[0].content.parts.map(function(p) { return p.text || ''; }).join('')
+                : '';
+            try { return JSON.parse(text); } catch(e) { return text; }
+        } catch(e) {
+            console.warn('Gemini Vision Fehler:', e);
+            return null;
+        }
+    };
+
+    } catch(apiSetupErr) {
+        console.warn('Gemini API setup:', apiSetupErr);
+        window.callGeminiAPI = async function() { return null; };
+        window.callAnthropicAPI = async function() { return null; };
+        window.callGeminiVision = async function() { return null; };
+    }
 
     window.GoogleDriveService = {
         tokenClient: null,
@@ -5745,6 +5869,37 @@
                 }
             } catch(e) {}
 
+            // Gemini API-Key State
+            const [showKiSettings, setShowKiSettings] = useState(false);
+            const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+            const [geminiStatus, setGeminiStatus] = useState(geminiKey ? 'saved' : 'none'); // none|saved|testing|ok|error
+            const [showKey, setShowKey] = useState(false);
+
+            var testGeminiKey = async function() {
+                if (!geminiKey) return;
+                setGeminiStatus('testing');
+                try {
+                    var res = await fetch(GEMINI_CONFIG.BASE_URL + '/models?key=' + geminiKey);
+                    if (res.ok) {
+                        setGeminiStatus('ok');
+                        localStorage.setItem('gemini_api_key', geminiKey);
+                        GEMINI_CONFIG.API_KEY = geminiKey;
+                        window._kiDisabled = false;
+                    } else {
+                        setGeminiStatus('error');
+                    }
+                } catch(e) {
+                    setGeminiStatus('error');
+                }
+            };
+
+            var saveGeminiKey = function() {
+                localStorage.setItem('gemini_api_key', geminiKey);
+                GEMINI_CONFIG.API_KEY = geminiKey;
+                window._kiDisabled = false;
+                setGeminiStatus('saved');
+            };
+
             return (
                 <div className="startseite">
                     <div className="logo-section">
@@ -5773,6 +5928,54 @@
                         {gespeicherteKunden.length > 0 && (
                             <div style={{marginTop:'12px', fontSize:'12px', color:'var(--accent-blue)', textAlign:'center', padding:'8px 16px', background:'rgba(30,136,229,0.08)', borderRadius:'10px', border:'1px solid rgba(30,136,229,0.15)'}}>
                                 💾 {gespeicherteKunden.length} Kunde{gespeicherteKunden.length > 1 ? 'n' : ''} lokal gespeichert
+                            </div>
+                        )}
+
+                        {/* ── Gemini KI-Einstellungen ── */}
+                        <button onClick={function(){ setShowKiSettings(!showKiSettings); }}
+                            style={{marginTop:'12px', width:'100%', padding:'10px 16px', background: geminiKey ? 'rgba(39,174,96,0.08)' : 'rgba(230,126,34,0.08)', border: geminiKey ? '1px solid rgba(39,174,96,0.2)' : '1px solid rgba(230,126,34,0.2)', borderRadius:'10px', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color: geminiKey ? '#27ae60' : '#e67e22'}}>
+                            <span style={{fontSize:'16px'}}>{geminiKey ? '🟢' : '⚙️'}</span>
+                            <span style={{flex:1, textAlign:'left', fontWeight:'600'}}>
+                                {geminiKey ? 'Google Gemini KI — Verbunden' : 'Google Gemini KI — Einrichten'}
+                            </span>
+                            <span style={{fontSize:'14px'}}>{showKiSettings ? '▲' : '▼'}</span>
+                        </button>
+
+                        {showKiSettings && (
+                            <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'14px', border:'1px solid var(--border-color)', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                                <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'8px'}}>🤖 Google Gemini KI-Einstellungen</div>
+                                <div style={{fontSize:'11px', color:'var(--text-muted)', lineHeight:'1.5', marginBottom:'10px'}}>
+                                    Die KI analysiert Kundendokumente automatisch (LV, Verträge, Pläne).<br/>
+                                    Kostenlos für bis zu 250 Analysen/Tag mit Gemini Flash.
+                                </div>
+                                <label style={{fontSize:'10px', color:'var(--text-muted)', display:'block', marginBottom:'3px'}}>Gemini API-Key</label>
+                                <div style={{display:'flex', gap:'4px'}}>
+                                    <input
+                                        type={showKey ? 'text' : 'password'}
+                                        value={geminiKey}
+                                        onChange={function(e){ setGeminiKey(e.target.value); setGeminiStatus('none'); }}
+                                        placeholder="AIzaSy..."
+                                        style={{flex:1, padding:'8px 10px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)', boxSizing:'border-box', fontFamily:'monospace'}}
+                                    />
+                                    <button onClick={function(){ setShowKey(!showKey); }} style={{padding:'6px 8px', background:'var(--bg-tertiary)', border:'1px solid var(--border-color)', borderRadius:'8px', cursor:'pointer', fontSize:'14px'}}>{showKey ? '🙈' : '👁️'}</button>
+                                </div>
+                                <div style={{display:'flex', gap:'6px', marginTop:'8px'}}>
+                                    <button onClick={testGeminiKey}
+                                        style={{flex:1, padding:'8px', background:'linear-gradient(135deg, #1E88E5, #1565C0)', color:'white', border:'none', borderRadius:'8px', fontSize:'11px', fontWeight:'700', cursor:'pointer'}}>
+                                        {geminiStatus === 'testing' ? '⏳ Teste...' : '✅ Verbindung testen'}
+                                    </button>
+                                    <button onClick={saveGeminiKey}
+                                        style={{flex:1, padding:'8px', background:'linear-gradient(135deg, #27ae60, #1e8449)', color:'white', border:'none', borderRadius:'8px', fontSize:'11px', fontWeight:'700', cursor:'pointer'}}>
+                                        💾 Speichern
+                                    </button>
+                                </div>
+                                {geminiStatus === 'ok' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>🟢 Verbindung erfolgreich! Gemini 2.0 Flash bereit.</div>}
+                                {geminiStatus === 'error' && <div style={{marginTop:'6px', fontSize:'11px', color:'#e74c3c', fontWeight:'600'}}>🔴 Verbindung fehlgeschlagen. Bitte Key prüfen.</div>}
+                                {geminiStatus === 'saved' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>💾 Gespeichert!</div>}
+                                <div style={{marginTop:'8px', fontSize:'10px', color:'var(--text-muted)', lineHeight:'1.5'}}>
+                                    <strong>Key holen:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" style={{color:'var(--accent-blue)'}}>aistudio.google.com/apikey</a><br/>
+                                    → "Create API Key" → Key kopieren → hier einfügen
+                                </div>
                             </div>
                         )}
                     </div>
@@ -13607,7 +13810,7 @@
                             setLoadProgress('KI-Analyse läuft...');
                         } else {
                             setLoadProgress('Dateien werden analysiert (ohne KI)...');
-                            window._anthropicDisabled = true;
+                            window._kiDisabled = true;
                         }
 
                         var result = await window.FileProcessor.processKundenAkte(
@@ -13616,7 +13819,7 @@
                         );
 
                         if (kundeMode !== 'neu') {
-                            window._anthropicDisabled = false;
+                            window._kiDisabled = false;
                         }
 
                         // Positionen in LV_POSITIONEN injizieren
