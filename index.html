@@ -7823,16 +7823,21 @@
                 if (reEdit && reEdit.posCards && reEdit.posCards.length > 0) {
                     return reEdit.posCards.map(p => ({...p, expanded: false}));
                 }
-                return (initPositions || []).map(p => ({
-                    ...p,
-                    expanded: false,
-                    notizen: '',
-                    manualMenge: '',
-                    // Manueller Rechenweg (fertiggestellt → wird in VOB-Karte angezeigt)
-                    manualRechenweg: [], // [{id, text, vorzeichen:'plus'|'minus'}]
-                    manualErgebnis: 0,
-                    hasManualRW: false, // true = manueller Rechenweg wurde fertiggestellt
-                }));
+                // Vorraum-posCards für manuelle Einträge (Stück, manualMenge etc.)
+                var vorraumPosCards = (lastRaumData && lastRaumData.posCardsData) || [];
+                return (initPositions || []).map(p => {
+                    // Prüfe ob diese Position im Vorraum manuelle Daten hatte
+                    var vorraum = vorraumPosCards.find(function(vp) { return vp.pos === p.pos; });
+                    return {
+                        ...p,
+                        expanded: false,
+                        notizen: (vorraum && vorraum.notizen) || '',
+                        manualMenge: (vorraum && vorraum.manualMenge) || '',
+                        manualRechenweg: (vorraum && vorraum.manualRechenweg) || [],
+                        manualErgebnis: (vorraum && vorraum.manualErgebnis) || 0,
+                        hasManualRW: (vorraum && vorraum.hasManualRW) || false,
+                    };
+                });
             });
             const [expandedPos, setExpandedPos] = useState(null);
 
@@ -12490,11 +12495,21 @@
                 setPositionen(selected.map(function(p, i) {
                     var ep = parseFloat(p.einzelpreis) || parseFloat(p.ep) || 0;
                     var menge = parseFloat(p.menge) || 0;
-                    // EP aus LV wenn vorhanden
-                    if (ep === 0) {
-                        var lvMatch = lvPositionen.find(function(lv) { return lv.pos === p.pos || lv.posNr === p.pos; });
-                        if (lvMatch && lvMatch.einzelpreis) ep = parseFloat(lvMatch.einzelpreis);
+                    // EP aus LV wenn vorhanden (auch wenn ep bereits gesetzt, LV hat Vorrang)
+                    var lvMatch = lvPositionen.find(function(lv) {
+                        var lvPos = lv.pos || lv.posNr || '';
+                        var pPos = p.pos || p.posNr || '';
+                        return lvPos === pPos || lvPos.replace(/^0+/, '') === pPos.replace(/^0+/, '');
+                    });
+                    if (lvMatch) {
+                        var lvEP = parseFloat(lvMatch.einzelpreis) || parseFloat(lvMatch.ep) || 0;
+                        if (lvEP > 0) ep = lvEP;
+                        if (menge === 0) menge = parseFloat(lvMatch.menge) || 0;
                     }
+                    // Aufmaß-Menge übernehmen wenn vorhanden
+                    var aufmassMenge = aufmassMassen[p.pos || p.posNr] || 0;
+                    if (aufmassMenge > 0) menge = aufmassMenge;
+
                     return { id: i, pos: p.pos || p.posNr || String(i+1), bez: p.bez || p.titel || '', einheit: p.einheit || 'm²', menge: menge, einzelpreis: ep, aktiv: true };
                 }));
             };
@@ -13021,7 +13036,8 @@
                                                     style={{padding:'4px 3px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', fontWeight:'700', color: typColor, textAlign:'center', width:'100%', boxSizing:'border-box'}} />
                                                 {/* Menge */}
                                                 <input type="number" step="0.001" value={p.menge || ''} onChange={function(e){updatePos(p.id,'menge',e.target.value);}} placeholder="0,00"
-                                                    onBlur={function(e){ if (!e.target.value && e.target.value !== 0) updatePos(p.id, 'menge', 0); }}
+                                                    onBlur={function(e){ var v = parseFloat(e.target.value); updatePos(p.id, 'menge', isNaN(v) ? 0 : Number(v.toFixed(2))); }}
+                                                    onKeyDown={function(e){ if(e.key==='Enter'){e.target.blur();} }}
                                                     style={{padding:'4px 4px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right', width:'100%', boxSizing:'border-box'}} />
                                                 {/* Einheit */}
                                                 <input value={p.einheit} onChange={function(e){updatePos(p.id,'einheit',e.target.value);}}
@@ -13036,7 +13052,8 @@
                                                 </div>
                                                 {/* EP */}
                                                 <input type="number" step="0.01" value={p.einzelpreis || ''} onChange={function(e){updatePos(p.id,'einzelpreis',e.target.value);}} placeholder="0,00"
-                                                    onBlur={function(e){ if (!e.target.value && e.target.value !== 0) updatePos(p.id, 'einzelpreis', 0); }}
+                                                    onBlur={function(e){ var v = parseFloat(e.target.value); updatePos(p.id, 'einzelpreis', isNaN(v) ? 0 : Number(v.toFixed(2))); }}
+                                                    onKeyDown={function(e){ if(e.key==='Enter'){e.target.blur();} }}
                                                     style={{padding:'4px 4px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right', width:'100%', boxSizing:'border-box'}} />
                                                 {/* GP (berechnet) */}
                                                 <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'4px 2px', color: typColor}}>
@@ -14146,6 +14163,8 @@
                     // ── Komplette Einträge für Vorladung im nächsten Raum ──
                     tuerenEntries: (roomResult && roomResult.tuerenEntries) || null,
                     fensterEntries: (roomResult && roomResult.fensterEntries) || null,
+                    // ── PosCards mit manuellen Eingaben (Stück, manuelle Mengen etc.) ──
+                    posCardsData: (roomResult && roomResult.raumState && roomResult.raumState.posCards) || null,
                     // ── Positionen (welche LV-Positionen sind aktiv) ──
                     positionen: selectedPositions || [],
                     // ── Meta ──
