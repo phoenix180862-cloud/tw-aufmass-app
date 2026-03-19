@@ -83,6 +83,12 @@
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
     };
 
+    // ── Gmail-Konfiguration ──
+    const GMAIL_CONFIG = {
+        ABSENDER_EMAIL: localStorage.getItem('gmail_absender') || 'phoenix180862@gmail.com',
+        ABSENDER_NAME: 'Thomas Willwacher Fliesenlegermeister e.K.',
+    };
+
     // ═══════════════════════════════════════════════════════
     // GOOGLE GEMINI KI-API Konfiguration
     // ═══════════════════════════════════════════════════════
@@ -5995,6 +6001,21 @@
                                     <strong>Key holen:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" style={{color:'var(--accent-blue)'}}>aistudio.google.com/apikey</a><br/>
                                     → "Create API Key" → Key kopieren → hier einfügen
                                 </div>
+
+                                {/* Gmail-Absender Einstellung */}
+                                <div style={{marginTop:'12px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
+                                    <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'6px'}}>✉️ Gmail-Absender für Mailversand</div>
+                                    <input
+                                        type="email"
+                                        value={localStorage.getItem('gmail_absender') || 'phoenix180862@gmail.com'}
+                                        onChange={function(e){ localStorage.setItem('gmail_absender', e.target.value); GMAIL_CONFIG.ABSENDER_EMAIL = e.target.value; }}
+                                        placeholder="meine@gmail.com"
+                                        style={{width:'100%', padding:'8px 10px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'12px', color:'var(--text-primary)', boxSizing:'border-box'}}
+                                    />
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'4px'}}>
+                                        Diese Adresse wird für Rechnungs- und Schriftverkehr-Versand via Gmail API verwendet.
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -7650,10 +7671,12 @@
                 if (hasData) {
                     return raum.waende.map(w => ({ id: w.id, l: formatMass(w.l) }));
                 }
-                // Auch manuell eingegebene Wände übernehmen
+                // Auch manuell eingegebene Wände übernehmen (z.B. aus Raumerkennung)
                 if (raum && raum.waende && raum.waende.length > 0) {
                     return raum.waende.map(w => ({ id: w.id, l: formatMass(w.l) }));
                 }
+                // WICHTIG: KEINE Wandmaße aus Vorraum übernehmen!
+                // Neuer Raum beginnt immer mit leeren Wandmaßen
                 return [];
             });
             const [abzuege, setAbzuege] = useState(() => {
@@ -9249,6 +9272,10 @@
                 setPosCards(prev => prev.map(p => p.pos === posNr ? { ...p, [field]: value } : p));
             };
 
+            const removePosCard = (posNr) => {
+                setPosCards(prev => prev.filter(p => p.pos !== posNr));
+            };
+
             const toggleExpand = (posNr) => {
                 setExpandedPos(prev => prev === posNr ? null : posNr);
             };
@@ -10113,6 +10140,17 @@
                                                 <input className="masse-input" type="text" value={t.name}
                                                     onChange={e => updateTuer(t.id, 'name', e.target.value)} />
                                             </div>
+                                            {/* Anzahl-Multiplikator */}
+                                            <div className="masse-field" style={{marginBottom:'8px'}}>
+                                                <span className="masse-label">Anzahl (gleiche Türen)</span>
+                                                <div className="masse-input-wrap">
+                                                    <input className="masse-input" type="number" min="1" step="1"
+                                                        value={t.anzahl || 1}
+                                                        onChange={e => updateTuer(t.id, 'anzahl', parseInt(e.target.value) || 1)}
+                                                        style={{textAlign:'center', fontWeight:'700', color:'var(--accent-blue)'}} />
+                                                    <span className="masse-unit">Stk</span>
+                                                </div>
+                                            </div>
                                             {/* DIN Tür-Größen Button */}
                                             <div style={{marginBottom:'10px'}}>
                                                 <button className="din-tuer-btn" onClick={() => setDinTuerOpen(dinTuerOpen === t.id ? null : t.id)}>
@@ -10307,6 +10345,17 @@
                                                 <span className="masse-label">Bezeichnung</span>
                                                 <input className="masse-input" type="text" value={f.name}
                                                     onChange={e => updateFenster(f.id, 'name', e.target.value)} />
+                                            </div>
+                                            {/* Anzahl-Multiplikator */}
+                                            <div className="masse-field" style={{marginBottom:'8px'}}>
+                                                <span className="masse-label">Anzahl (gleiche Fenster)</span>
+                                                <div className="masse-input-wrap">
+                                                    <input className="masse-input" type="number" min="1" step="1"
+                                                        value={f.anzahl || 1}
+                                                        onChange={e => updateFenster(f.id, 'anzahl', parseInt(e.target.value) || 1)}
+                                                        style={{textAlign:'center', fontWeight:'700', color:'var(--accent-blue)'}} />
+                                                    <span className="masse-unit">Stk</span>
+                                                </div>
                                             </div>
                                             <div className="masse-grid">
                                                 <div className="masse-field">
@@ -10574,6 +10623,9 @@
                                         <span className="pos-card-nr">{pos.pos}</span>
                                         <div className="pos-card-bez">{pos.bez}</div>
                                         {hasResult && <span className="pos-card-result">{fmtDe(result)} {pos.einheit}</span>}
+                                        <button onClick={function(e) { e.stopPropagation(); removePosCard(pos.pos); }}
+                                            style={{background:'none', border:'none', color:'#e74c3c', fontSize:'14px', cursor:'pointer', padding:'4px 6px', marginLeft:'4px', opacity:0.6}}
+                                            title="Position entfernen">🗑️</button>
                                         <span className="pos-card-arrow">{isExpanded ? '▲' : '▼'}</span>
                                     </div>
                                     {isExpanded && (
@@ -12018,6 +12070,17 @@
                                 Aufmaß weiter bearbeiten · Räume hinzufügen · Werte ändern
                             </div>
                         </button>
+
+                        {/* Zurück zur Modulwahl (nach Fertigstellung) */}
+                        {aufmassGespeichert && (
+                            <button className="gl-back-btn" onClick={function() { if (onClose) onClose(); setTimeout(function() { window._navigateToModulwahl && window._navigateToModulwahl(); }, 100); }}
+                                style={{background:'linear-gradient(135deg, #27ae60, #1e8449)', color:'white', border:'none', marginTop:'8px'}}>
+                                🏠 Zurück zur Modulwahl
+                                <div style={{fontSize:'11px', fontWeight:400, marginTop:'2px', color:'rgba(255,255,255,0.8)'}}>
+                                    Rechnung · Kalkulation · Schriftverkehr
+                                </div>
+                            </button>
+                        )}
                     </>)}
                 </div>
             );
@@ -12377,6 +12440,8 @@
             const [rechnungsNr, setRechnungsNr] = useState('');
             const [rechnungsDatum, setRechnungsDatum] = useState(new Date().toISOString().split('T')[0]);
             const [leistungszeitraum, setLeistungszeitraum] = useState('');
+            const [auftragsnummer, setAuftragsnummer] = useState('');
+            const [kostenstelle, setKostenstelle] = useState('');
             const [skontoProzent, setSkontoProzent] = useState(2);
             const [skontoTage, setSkontoTage] = useState(10);
             const [zahlungszielTage, setZahlungszielTage] = useState(30);
@@ -12598,6 +12663,8 @@
                 h += '<div><span class="l">Rechnungs-Nr.:</span> <span class="v">'+rechnungsNr+'</span></div>';
                 h += '<div><span class="l">Bauvorhaben:</span> <span class="v">'+(kunde.adresse||kunde.name||'')+'</span></div>';
                 if(leistungszeitraum) h += '<div><span class="l">Leistungszeitraum:</span> <span class="v">'+leistungszeitraum+'</span></div>';
+                if(auftragsnummer) h += '<div><span class="l">Auftragsnummer:</span> <span class="v">'+auftragsnummer+'</span></div>';
+                if(kostenstelle) h += '<div><span class="l">Kostenstelle:</span> <span class="v">'+kostenstelle+'</span></div>';
                 h += '<div><span class="l">Steuernummer:</span> <span class="v">30/220/1234/5</span></div>';
                 h += '</div>';
 
@@ -12631,7 +12698,7 @@
             };
 
             // ── E-Mail Versand ──
-            var sendPerEmail = function() {
+            var sendPerEmail = async function() {
                 // Empfänger-E-Mail ermitteln (Auftraggeber bevorzugt)
                 var empfaengerEmail = kunde.ag_email || kunde.bl_email || kunde.arch_email || '';
                 var kName = kunde.auftraggeber || kunde.name || 'Auftraggeber';
@@ -12651,6 +12718,9 @@
 
                 if (leistungszeitraum) {
                     mailBody += 'Leistungszeitraum: ' + leistungszeitraum + '\n';
+                }
+                if (auftragsnummer) {
+                    mailBody += 'Auftragsnummer: ' + auftragsnummer + '\n';
                 }
 
                 mailBody += '\nRechnungsbetrag (brutto): ' + fmt(bruttoSumme) + ' €\n';
@@ -12673,10 +12743,41 @@
                     + 'Flurweg 14a · 56472 Nisterau\n'
                     + 'Tel. 02661-63101 · Mobil 0170-2024161';
 
-                // Zuerst PDF erzeugen und Druck-Dialog öffnen
+                // Zuerst PDF erzeugen
                 generatePDF();
 
-                // Dann E-Mail-Client öffnen (kleine Verzögerung damit PDF-Fenster zuerst kommt)
+                // Versuche Gmail-API-Versand, Fallback auf mailto
+                var service = window.GoogleDriveService;
+                if (service && service.accessToken && empfaengerEmail) {
+                    try {
+                        var boundary = 'boundary_' + Date.now();
+                        var rawParts = [
+                            'From: ' + GMAIL_CONFIG.ABSENDER_EMAIL,
+                            'To: ' + empfaengerEmail,
+                            'Subject: =?UTF-8?B?' + btoa(unescape(encodeURIComponent(betreffText))) + '?=',
+                            'MIME-Version: 1.0',
+                            'Content-Type: text/plain; charset=UTF-8',
+                            '',
+                            mailBody
+                        ];
+                        var rawMail = rawParts.join('\r\n');
+                        var encoded = btoa(unescape(encodeURIComponent(rawMail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+                        var resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+                            method: 'POST',
+                            headers: { 'Authorization': 'Bearer ' + service.accessToken, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ raw: encoded })
+                        });
+                        if (resp.ok) {
+                            alert('✅ Rechnung per Gmail an ' + empfaengerEmail + ' gesendet!');
+                            return;
+                        }
+                    } catch(gmailErr) {
+                        console.warn('Gmail-Versand fehlgeschlagen, Fallback auf mailto:', gmailErr);
+                    }
+                }
+
+                // Fallback: mailto-Link
                 setTimeout(function() {
                     var mailtoLink = 'mailto:' + encodeURIComponent(empfaengerEmail)
                         + '?subject=' + encodeURIComponent(betreffText)
@@ -12877,6 +12978,10 @@
                                 <input type="number" min="1" value={abschlagNr} onChange={function(e){setAbschlagNr(parseInt(e.target.value)||1);}} style={inputStyle} /></div>}
                             {rechnungsTyp === 'schluss' && <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Bisher abgerechnet (netto €)</label>
                                 <input type="number" step="0.01" value={bisherAbgerechnet} onChange={function(e){setBisherAbgerechnet(e.target.value);}} style={inputStyle} /></div>}
+                            <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Auftragsnummer</label>
+                                <input value={auftragsnummer} onChange={function(e){setAuftragsnummer(e.target.value);}} placeholder="z.B. A-2026-001" style={inputStyle} /></div>
+                            <div><label style={{fontSize:'10px', color:'var(--text-muted)', display:'block'}}>Kostenstelle</label>
+                                <input value={kostenstelle} onChange={function(e){setKostenstelle(e.target.value);}} placeholder="optional" style={inputStyle} /></div>
                         </div>
                     </div>
 
@@ -12915,7 +13020,8 @@
                                                 <input value={p.pos} onChange={function(e){updatePos(p.id,'pos',e.target.value);}}
                                                     style={{padding:'4px 3px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', fontWeight:'700', color: typColor, textAlign:'center', width:'100%', boxSizing:'border-box'}} />
                                                 {/* Menge */}
-                                                <input type="number" step="0.001" value={p.menge} onChange={function(e){updatePos(p.id,'menge',e.target.value);}} placeholder="Menge"
+                                                <input type="number" step="0.001" value={p.menge || ''} onChange={function(e){updatePos(p.id,'menge',e.target.value);}} placeholder="0,00"
+                                                    onBlur={function(e){ if (!e.target.value && e.target.value !== 0) updatePos(p.id, 'menge', 0); }}
                                                     style={{padding:'4px 4px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right', width:'100%', boxSizing:'border-box'}} />
                                                 {/* Einheit */}
                                                 <input value={p.einheit} onChange={function(e){updatePos(p.id,'einheit',e.target.value);}}
@@ -12929,7 +13035,8 @@
                                                     </div>
                                                 </div>
                                                 {/* EP */}
-                                                <input type="number" step="0.01" value={p.einzelpreis} onChange={function(e){updatePos(p.id,'einzelpreis',e.target.value);}} placeholder="EP"
+                                                <input type="number" step="0.01" value={p.einzelpreis || ''} onChange={function(e){updatePos(p.id,'einzelpreis',e.target.value);}} placeholder="0,00"
+                                                    onBlur={function(e){ if (!e.target.value && e.target.value !== 0) updatePos(p.id, 'einzelpreis', 0); }}
                                                     style={{padding:'4px 4px', borderRadius:'4px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'11px', color:'var(--text-primary)', textAlign:'right', width:'100%', boxSizing:'border-box'}} />
                                                 {/* GP (berechnet) */}
                                                 <div style={{fontSize:'12px', fontWeight:'700', textAlign:'right', padding:'4px 2px', color: typColor}}>
@@ -13257,7 +13364,7 @@
                     // MIME-Mail aufbauen
                     var boundary = 'boundary_' + Date.now();
                     var rawParts = [
-                        'From: info@thomas-willwacher.de',
+                        'From: ' + GMAIL_CONFIG.ABSENDER_EMAIL,
                         'To: ' + empfEmail,
                         'Subject: =?UTF-8?B?' + btoa(unescape(encodeURIComponent(vollBetreff))) + '?=',
                         'MIME-Version: 1.0',
@@ -13686,6 +13793,9 @@
                     return newHistory;
                 });
             }, [historyIdx]);
+
+            // Globale Navigation für Module (z.B. Gesamtliste → Modulwahl)
+            window._navigateToModulwahl = () => navigateTo('modulwahl');
 
             const goBack = () => {
                 if (historyIdx > 0) {
