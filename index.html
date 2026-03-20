@@ -108,6 +108,35 @@
         MAX_RETRIES: 3,
     };
 
+    // ═══════════════════════════════════════════════════════
+    // KI-ORDNERANALYSE – Konfiguration
+    // ═══════════════════════════════════════════════════════
+    const ORDNER_ANALYSE_CONFIG = {
+        ORDNER: {
+            '01': { name: 'Baustellenauswertung', icon: '📋', color: '#3498db', keywords: ['baustellenauswertung', 'notebooklm', 'zusammenfassung'] },
+            '02': { name: 'Angebote / LV / Verträge', icon: '📑', color: '#e74c3c', kritisch: true, keywords: ['angebot', 'lv', 'leistungsverzeichnis', 'vertrag', 'nachtrag', 'nachtrag'] },
+            '03': { name: 'Zeichnungen', icon: '📐', color: '#2ecc71', keywords: ['zeichnung', 'plan', 'grundriss', 'schnitt', 'raumbuch'] },
+            '04': { name: 'Stundennachweis', icon: '⏱️', color: '#f39c12', keywords: ['stunden', 'stundennachweis', 'stundenzettel', 'rapportzettel'] },
+            '05': { name: 'Schriftverkehr', icon: '✉️', color: '#9b59b6', keywords: ['schriftverkehr', 'mail', 'protokoll', 'bauzeitenplan', 'brief'] },
+            '06': { name: 'Rechnung / Kontozahlung', icon: '💰', color: '#1abc9c', keywords: ['rechnung', 'kontozahlung', 'abschlag', 'schlussrechnung', 'ausgangsbuch'] },
+            '07': { name: 'Lieferanten', icon: '🏗️', color: '#e67e22', keywords: ['lieferant', 'material', 'fliesen', 'angebot lieferant'] },
+            '08': { name: 'Aufmaß', icon: '📏', color: '#34495e', keywords: ['aufmaß', 'aufmass', 'abrechnung', 'mengenermittlung'] }
+        },
+        THRESHOLDS: {
+            '01': { pages: 30, docs: 5 },
+            '02': { pages: 50, docs: 10 },
+            '03': { pages: 20, docs: 8 },
+            '04': { pages: 15, docs: 20 },
+            '05': { pages: 30, docs: 15 },
+            '06': { pages: 20, docs: 10 },
+            '07': { pages: 15, docs: 10 },
+            '08': { pages: 30, docs: 10 }
+        },
+        QUALITY_THRESHOLD: 70,
+        MAX_PARALLEL: 3,
+        TIMEOUT_PER_DOC: 90000,
+    };
+
     // ── Gemini API-Aufruf (universell — Text + Bild + PDF) ──
     try { window.callGeminiAPI = async function(messages, maxTokens, options) {
         options = options || {};
@@ -1674,6 +1703,441 @@
             }
 
             return processResult;
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════
+    // KI-ORDNERANALYSE — IndexedDB Persistenz
+    // ═══════════════════════════════════════════════════════
+    window.OrdnerAnalyseDB = {
+        DB_NAME: 'TWBusinessSuite_OrdnerAnalysen',
+        DB_VERSION: 1,
+        STORE_ANALYSEN: 'ordnerAnalysen',
+        STORE_META: 'analyseMeta',
+        STORE_CROSSREF: 'crossReferencing',
+
+        _openDB: function() {
+            var self = this;
+            return new Promise(function(resolve, reject) {
+                var req = indexedDB.open(self.DB_NAME, self.DB_VERSION);
+                req.onupgradeneeded = function(e) {
+                    var db = e.target.result;
+                    if (!db.objectStoreNames.contains(self.STORE_ANALYSEN)) {
+                        db.createObjectStore(self.STORE_ANALYSEN, { keyPath: 'id' });
+                    }
+                    if (!db.objectStoreNames.contains(self.STORE_META)) {
+                        db.createObjectStore(self.STORE_META, { keyPath: 'kundenId' });
+                    }
+                    if (!db.objectStoreNames.contains(self.STORE_CROSSREF)) {
+                        db.createObjectStore(self.STORE_CROSSREF, { keyPath: 'kundenId' });
+                    }
+                };
+                req.onsuccess = function(e) { resolve(e.target.result); };
+                req.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        saveOrdnerAnalyse: async function(kundenId, ordnerNr, data) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('ordnerAnalysen', 'readwrite');
+                var store = tx.objectStore('ordnerAnalysen');
+                var record = Object.assign({}, data, { id: kundenId + '_' + ordnerNr, kundenId: kundenId, ordnerNr: ordnerNr });
+                store.put(record);
+                tx.oncomplete = function() { resolve(record); };
+                tx.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        getOrdnerAnalyse: async function(kundenId, ordnerNr) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('ordnerAnalysen', 'readonly');
+                var store = tx.objectStore('ordnerAnalysen');
+                var req = store.get(kundenId + '_' + ordnerNr);
+                req.onsuccess = function() { resolve(req.result || null); };
+                req.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        getAllOrdnerAnalysen: async function(kundenId) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('ordnerAnalysen', 'readonly');
+                var store = tx.objectStore('ordnerAnalysen');
+                var req = store.getAll();
+                req.onsuccess = function() {
+                    var all = req.result || [];
+                    resolve(kundenId ? all.filter(function(a) { return a.kundenId === kundenId; }) : all);
+                };
+                req.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        saveMeta: async function(kundenId, meta) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('analyseMeta', 'readwrite');
+                var store = tx.objectStore('analyseMeta');
+                store.put(Object.assign({}, meta, { kundenId: kundenId }));
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        getMeta: async function(kundenId) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('analyseMeta', 'readonly');
+                var req = tx.objectStore('analyseMeta').get(kundenId);
+                req.onsuccess = function() { resolve(req.result || null); };
+                req.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        saveCrossRef: async function(kundenId, data) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('crossReferencing', 'readwrite');
+                tx.objectStore('crossReferencing').put(Object.assign({}, data, { kundenId: kundenId }));
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        getCrossRef: async function(kundenId) {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('crossReferencing', 'readonly');
+                var req = tx.objectStore('crossReferencing').get(kundenId);
+                req.onsuccess = function() { resolve(req.result || null); };
+                req.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        getAllKundenMeta: async function() {
+            var db = await this._openDB();
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('analyseMeta', 'readonly');
+                var req = tx.objectStore('analyseMeta').getAll();
+                req.onsuccess = function() { resolve(req.result || []); };
+                req.onerror = function(e) { reject(e.target.error); };
+            });
+        },
+
+        deleteKundenAnalysen: async function(kundenId) {
+            var db = await this._openDB();
+            var analysen = await this.getAllOrdnerAnalysen(kundenId);
+            var tx = db.transaction(['ordnerAnalysen', 'analyseMeta', 'crossReferencing'], 'readwrite');
+            analysen.forEach(function(a) { tx.objectStore('ordnerAnalysen').delete(a.id); });
+            tx.objectStore('analyseMeta').delete(kundenId);
+            tx.objectStore('crossReferencing').delete(kundenId);
+            return new Promise(function(resolve, reject) {
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function(e) { reject(e.target.error); };
+            });
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════
+    // KI-ORDNERANALYSE — Ordner-spezifische Prompts (Gemini)
+    // ═══════════════════════════════════════════════════════
+    var ORDNER_PROMPTS = {
+        '01': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere den folgenden Text aus einer Baustellenauswertung.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "01_Baustellenauswertung",\n  "personen": {\n    "bauherr": { "name":"", "anschrift":"", "telefon":null, "email":null },\n    "bauherrVertreter": { "name":"", "funktion":"", "telefon":null, "email":null },\n    "architekt": { "name":"", "buero":"", "telefon":null, "email":null },\n    "bauleitung": { "name":"", "firma":"", "telefon":null, "email":null },\n    "sonstigePersonen": []\n  },\n  "lvPositionen": [{ "posNr":"", "menge":0, "einheit":"", "leistung":"", "epPreis":null, "gesamtPreis":null, "herkunft":"01_Baustellenauswertung" }],\n  "nachtraege": [{ "nachtragNr":"", "bezeichnung":"", "positionen":[], "summNetto":null, "status":"offen" }],\n  "projektDaten": { "bauvorhaben":"", "baustelleAdresse":"", "auftragssumme":null },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "personenKomplett":true, "lvKomplett":true, "fehlendeDaten":[] }\n}\n\nWICHTIG: Jede LV-Position MUSS erfasst werden! EP-Preis rechnerisch prüfen!',
+
+        '02': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere alle Dokumente aus dem Ordner "Angebote, Nachträge, LV, Verträge".\n\n⚠ DIESER ORDNER ERFORDERT HÖCHSTE SORGFALT! ⚠\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "02_Angebote_LV_Vertraege",\n  "lvPositionen": [{ "posNr":"", "menge":0, "einheit":"", "leistung":"", "kurztext":"", "epPreis":null, "gesamtPreis":null, "rechnerischGeprueft":true, "herkunft":"02_Angebote_LV_Vertraege" }],\n  "nachtraege": [{ "nachtragNr":"", "bezeichnung":"", "positionen":[], "summNetto":null, "status":"offen", "bezugHauptLV":"" }],\n  "vertrag": { "auftraggeber":"", "vertragsart":"", "auftragssumme_netto":null, "mwstSatz":19, "zahlungsbedingungen":"", "gewaehrleistung":{} },\n  "gesamtPositionsListe": { "anzahlLV":0, "anzahlNachtraege":0, "summeLVNetto":0, "gesamtSummeNetto":0 },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "lvKomplett":true, "fehlendeDaten":[] }\n}\n\nKRITISCH: JEDE Position MUSS erfasst werden! Positionsnummer EXAKT übernehmen!',
+
+        '03': 'Du bist ein Experte für Bauzeichnungen mit Fokus auf Fliesenlegerarbeiten.\nAnalysiere die Zeichnungen/Pläne und extrahiere alle Raum-Informationen.\n\nBEVORZUGT: Räume, in denen Fliesen verlegt werden sollen!\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "03_Zeichnungen",\n  "geschosse": [{ "geschoss":"EG", "raeume": [{ "raumNr":"", "raumBezeichnung":"", "fliesenRelevant":true, "masse": { "laenge_m":0, "breite_m":0, "bodenflaeche_m2":0, "wandflaeche_m2":0 }, "fliesenArbeiten": { "boden":{}, "wand":{}, "sockel":{} } }] }],\n  "zusammenfassung": { "gesamtRaeume":0, "fliesenRaeume":0, "gesamtBodenflaeche_m2":0, "gesamtWandflaeche_m2":0 },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleRaeumeErfasst":true, "fehlendeDaten":[] }\n}\n\nAlle Maße in METERN (m) und QUADRATMETERN (m²)!',
+
+        '04': 'Du bist ein Experte für Baustellenabrechnung.\nAnalysiere alle Stundennachweise und fasse zusammen.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "04_Stundennachweis",\n  "stundenZusammenfassung": { "gesamtStunden":0, "nachMitarbeiter":[], "nachWoche":[] },\n  "materialVerbrauch": { "gesamt":[] },\n  "rechnungsVorbereitung": { "stundenSumme":0, "materialListe":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "lueckenloseDokumentation":true, "fehlendeDaten":[] }\n}',
+
+        '05': 'Du bist ein Experte für Baustellendokumentation.\nAnalysiere Schriftverkehr, Mails, Protokolle und Bauzeitenplan.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "05_Schriftverkehr",\n  "kontaktdaten": { "neuGefunden":[], "ergaenzungenZuBekannten":[] },\n  "protokolle": [{ "datum":"", "typ":"", "relevantePunkte":[] }],\n  "bauzeitenplan": { "vorhanden":false, "twRelevant":[] },\n  "vereinbarungen": [],\n  "warnhinweise": [],\n  "vollstaendigkeit": { "kontaktdatenKomplett":true, "fehlendeDaten":[] }\n}',
+
+        '06': 'Du bist ein Experte für VOB-konforme Bauabrechnung.\nAnalysiere alle Rechnungen und Abschlagszahlungen.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "06_Rechnung_Kontozahlung",\n  "rechnungen": [{ "rechnungsNr":"", "rechnungsTyp":"", "datum":"", "nettoBetrag":0, "bruttoBetrag":0, "positionen":[], "zahlungsStatus":"offen" }],\n  "zusammenfassung": { "anzahlRechnungen":0, "gesamtNetto":0, "gesamtBrutto":0, "gesamtBezahlt":0, "gesamtOffen":0 },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "abgleichKomplett":true, "fehlendeDaten":[] }\n}',
+
+        '07': 'Du bist ein Experte für Fliesen-Materialwirtschaft.\nAnalysiere alle Lieferantenangebote und -rechnungen.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "07_Lieferanten",\n  "lieferanten": [{ "firmenname":"", "ansprechpartner":"", "telefon":"", "email":"" }],\n  "fliesen": [{ "bezeichnung":"", "format":"", "menge":0, "einheit":"m²", "epPreis":0, "gesamtPreis":0 }],\n  "zubehoer": [{ "bezeichnung":"", "kategorie":"", "menge":0, "einheit":"", "epPreis":0, "gesamtPreis":0 }],\n  "kalkulationsVorbereitung": { "materialKostenGesamt":0, "nachLVPosition":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleAngebotsPositionen":true, "fehlendeDaten":[] }\n}',
+
+        '08': 'Du bist ein VOB-Experte für Aufmaß nach DIN 18352.\nAnalysiere alle Aufmaß-Dokumente.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "08_Aufmass",\n  "aufmassPositionen": [{ "posNr":"", "leistung":"", "einheit":"", "aufmassZeilen":[{ "raumNr":"", "berechnung":"", "ergebnis":0 }], "mengeGesamt":0, "lvMenge":null, "differenzZuLV":null }],\n  "zusammenfassung": { "anzahlPositionen":0, "gesamtBodenflaeche_m2":0, "gesamtWandflaeche_m2":0, "abweichungenZuLV":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleLVPositionenAbgerechnet":true, "fehlendeLVPositionen":[], "fehlendeDaten":[] }\n}'
+    };
+
+    // ═══════════════════════════════════════════════════════
+    // KI-ORDNERANALYSE — Analyse-Engine
+    // ═══════════════════════════════════════════════════════
+    window.OrdnerAnalyseEngine = {
+        // ── Ordner-Mapping: Google Drive Folder → Ordner-Typ ──
+        mapDriveFolderToOrdner: function(folderName) {
+            if (!folderName) return null;
+            var name = folderName.toLowerCase().trim();
+            var cfg = ORDNER_ANALYSE_CONFIG.ORDNER;
+            for (var nr in cfg) {
+                var keywords = cfg[nr].keywords || [];
+                for (var i = 0; i < keywords.length; i++) {
+                    if (name.indexOf(keywords[i]) >= 0) return nr;
+                }
+            }
+            // Fallback: Nummer am Anfang des Ordnernamens
+            var numMatch = name.match(/^(\d{1,2})/);
+            if (numMatch) {
+                var num = numMatch[1].padStart(2, '0');
+                if (cfg[num]) return num;
+            }
+            return null;
+        },
+
+        // ── Hilfsfunktionen ──
+        normalizeEinheit: function(einheit) {
+            if (!einheit) return '';
+            var map = { 'm2':'m²', 'qm':'m²', 'm²':'m²', 'm3':'m³', 'cbm':'m³', 'm³':'m³', 'stk':'Stück', 'stück':'Stück', 'st':'Stück', 'lfm':'m', 'lm':'m', 'psch':'pauschal', 'pa':'pauschal' };
+            return map[einheit.toLowerCase()] || einheit;
+        },
+
+        calculateSimilarity: function(str1, str2) {
+            if (!str1 || !str2) return 0;
+            var words1 = new Set(str1.toLowerCase().split(/\s+/));
+            var words2 = new Set(str2.toLowerCase().split(/\s+/));
+            var intersection = 0;
+            words1.forEach(function(w) { if (words2.has(w)) intersection++; });
+            var union = new Set([...words1, ...words2]).size;
+            return union === 0 ? 0 : intersection / union;
+        },
+
+        // ── Einzelnen Ordner analysieren ──
+        analyzeOrdner: async function(kundenId, ordnerNr, dokumente, onProgress) {
+            var prompt = ORDNER_PROMPTS[ordnerNr];
+            if (!prompt) return { status: 'error', fehler: ['Kein Prompt für Ordner ' + ordnerNr] };
+
+            var startTime = Date.now();
+            var ordnerName = ORDNER_ANALYSE_CONFIG.ORDNER[ordnerNr].name;
+            if (onProgress) onProgress('Analysiere ' + ordnerName + ' (' + dokumente.length + ' Dokumente)...');
+
+            try {
+                // Dokument-Texte sammeln (max 3 PDFs parallel via Gemini)
+                var allTexts = [];
+                for (var i = 0; i < dokumente.length; i++) {
+                    var doc = dokumente[i];
+                    try {
+                        if (doc.mimeType && doc.mimeType.indexOf('pdf') >= 0 && doc.id) {
+                            var blob = await window.GoogleDriveService.downloadFile(doc.id);
+                            var text = await window.FileProcessor.extractTextFromPDF(blob);
+                            if (text && text.trim().length > 50) {
+                                allTexts.push('--- Datei: ' + doc.name + ' ---\n' + text.substring(0, 15000));
+                            }
+                        } else if (doc.text) {
+                            allTexts.push('--- Datei: ' + (doc.name || 'Unbekannt') + ' ---\n' + doc.text.substring(0, 10000));
+                        }
+                    } catch(docErr) {
+                        console.warn('Ordner ' + ordnerNr + ': Fehler bei ' + doc.name, docErr.message);
+                    }
+                }
+
+                if (allTexts.length === 0) {
+                    return {
+                        status: 'completed', ordnerNr: ordnerNr, ordnerName: ordnerName,
+                        ergebnis: {}, dokumenteAnalysiert: 0, analyseDauer: (Date.now() - startTime) / 1000,
+                        warnhinweise: ['Keine analysierbaren Dokumente im Ordner gefunden.']
+                    };
+                }
+
+                var fullText = allTexts.join('\n\n');
+                if (onProgress) onProgress(ordnerName + ': KI analysiert ' + allTexts.length + ' Dokumente...');
+
+                var apiResult = await window.callGeminiAPI([
+                    { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
+                ], 8000);
+
+                if (!apiResult) throw new Error('Keine KI-Antwort');
+
+                var cleaned = apiResult.replace(/```json|```/g, '').trim();
+                var parsed = JSON.parse(cleaned);
+
+                var result = {
+                    status: 'completed',
+                    ordnerNr: ordnerNr,
+                    ordnerName: ordnerName,
+                    analyseZeitpunkt: new Date().toISOString(),
+                    analyseDauer: (Date.now() - startTime) / 1000,
+                    dokumenteAnalysiert: allTexts.length,
+                    ergebnis: parsed,
+                    fehler: []
+                };
+
+                // In IndexedDB speichern
+                await window.OrdnerAnalyseDB.saveOrdnerAnalyse(kundenId, ordnerNr, result);
+                return result;
+
+            } catch(err) {
+                console.error('OrdnerAnalyse ' + ordnerNr + ' Fehler:', err);
+                var errorResult = {
+                    status: 'error',
+                    ordnerNr: ordnerNr,
+                    ordnerName: ordnerName,
+                    analyseDauer: (Date.now() - startTime) / 1000,
+                    dokumenteAnalysiert: 0,
+                    ergebnis: {},
+                    fehler: [err.message]
+                };
+                await window.OrdnerAnalyseDB.saveOrdnerAnalyse(kundenId, ordnerNr, errorResult);
+                return errorResult;
+            }
+        },
+
+        // ── Cross-Referencing: Ordnerübergreifender Vergleich ──
+        runCrossReferencing: async function(kundenId) {
+            var self = this;
+            var analysen = {};
+            for (var i = 1; i <= 8; i++) {
+                var nr = String(i).padStart(2, '0');
+                analysen[nr] = await window.OrdnerAnalyseDB.getOrdnerAnalyse(kundenId, nr);
+            }
+
+            var ergebnis = {
+                zeitpunkt: new Date().toISOString(),
+                status: 'completed',
+                positionsVergleich: [],
+                mengenVergleich: [],
+                preisVergleich: [],
+                adressVergleich: [],
+                warnungen: [],
+                zusammenfassung: {}
+            };
+
+            // 1. LV-Positionsvergleich (01 ↔ 02)
+            var pos01 = (analysen['01'] && analysen['01'].ergebnis && analysen['01'].ergebnis.lvPositionen) || [];
+            var pos02 = (analysen['02'] && analysen['02'].ergebnis && analysen['02'].ergebnis.lvPositionen) || [];
+
+            for (var j = 0; j < pos02.length; j++) {
+                var p02 = pos02[j];
+                var match = pos01.find(function(p) { return p.posNr === p02.posNr; });
+                if (match) {
+                    var abw = [];
+                    if (match.menge !== p02.menge) abw.push({ feld: 'menge', wert01: match.menge, wert02: p02.menge });
+                    if (self.normalizeEinheit(match.einheit) !== self.normalizeEinheit(p02.einheit)) abw.push({ feld: 'einheit', wert01: match.einheit, wert02: p02.einheit });
+                    ergebnis.positionsVergleich.push({ posNr: p02.posNr, status: abw.length > 0 ? 'abweichung' : 'match', abweichungen: abw });
+                } else {
+                    // Semantischer Match?
+                    var semMatch = pos01.find(function(p) { return p.menge === p02.menge && self.normalizeEinheit(p.einheit) === self.normalizeEinheit(p02.einheit) && self.calculateSimilarity(p.leistung, p02.leistung) > 0.7; });
+                    if (semMatch) {
+                        ergebnis.positionsVergleich.push({ posNr02: p02.posNr, posNr01: semMatch.posNr, status: 'posNr_abweichung' });
+                    } else {
+                        ergebnis.positionsVergleich.push({ posNr: p02.posNr, status: 'nur_in_ordner02' });
+                    }
+                }
+            }
+            // Positionen nur in 01
+            for (var k = 0; k < pos01.length; k++) {
+                if (!pos02.find(function(p) { return p.posNr === pos01[k].posNr; })) {
+                    var alreadyMatched = ergebnis.positionsVergleich.find(function(v) { return v.posNr01 === pos01[k].posNr; });
+                    if (!alreadyMatched) ergebnis.positionsVergleich.push({ posNr: pos01[k].posNr, status: 'nur_in_ordner01' });
+                }
+            }
+
+            // 2. Aufmaß ↔ LV (08 ↔ 02)
+            var pos08 = (analysen['08'] && analysen['08'].ergebnis && analysen['08'].ergebnis.aufmassPositionen) || [];
+            for (var m = 0; m < pos08.length; m++) {
+                var pA = pos08[m];
+                var pLV = pos02.find(function(p) { return p.posNr === pA.posNr; });
+                if (pLV && pA.mengeGesamt != null && pLV.menge != null) {
+                    var diff = pA.mengeGesamt - pLV.menge;
+                    var pct = pLV.menge !== 0 ? (diff / pLV.menge) * 100 : 0;
+                    ergebnis.mengenVergleich.push({ posNr: pA.posNr, lvMenge: pLV.menge, aufmassMenge: pA.mengeGesamt, differenz: diff, differenzProzent: pct, bewertung: Math.abs(pct) < 5 ? 'im_rahmen' : Math.abs(pct) < 15 ? 'auffaellig' : 'kritisch' });
+                }
+            }
+
+            // 3. Zusammenfassung
+            ergebnis.zusammenfassung = {
+                positionenGeprueft: ergebnis.positionsVergleich.length,
+                exaktGleich: ergebnis.positionsVergleich.filter(function(v) { return v.status === 'match'; }).length,
+                abweichungen: ergebnis.positionsVergleich.filter(function(v) { return v.status === 'abweichung'; }).length,
+                nurPosNrAnders: ergebnis.positionsVergleich.filter(function(v) { return v.status === 'posNr_abweichung'; }).length,
+                nurInOrdner01: ergebnis.positionsVergleich.filter(function(v) { return v.status === 'nur_in_ordner01'; }).length,
+                nurInOrdner02: ergebnis.positionsVergleich.filter(function(v) { return v.status === 'nur_in_ordner02'; }).length,
+                mengenAbweichungenKritisch: ergebnis.mengenVergleich.filter(function(v) { return v.bewertung === 'kritisch'; }).length,
+                preisAbweichungen: ergebnis.preisVergleich.length
+            };
+            ergebnis.zusammenfassung.gesamtFehler = ergebnis.zusammenfassung.abweichungen + ergebnis.zusammenfassung.nurInOrdner01 + ergebnis.zusammenfassung.nurInOrdner02 + ergebnis.zusammenfassung.mengenAbweichungenKritisch;
+
+            await window.OrdnerAnalyseDB.saveCrossRef(kundenId, ergebnis);
+            return ergebnis;
+        },
+
+        // ── Hauptfunktion: Alle 8 Ordner analysieren ──
+        analyzeKunde: async function(kundenId, kundeName, driveFolderId, onProgress) {
+            var self = this;
+            var startTime = Date.now();
+            if (onProgress) onProgress({ phase: 'start', message: 'Ordnerstruktur wird geladen...' });
+
+            try {
+                // 1. Ordnerinhalt laden
+                var contents = await window.GoogleDriveService.listFolderContents(driveFolderId);
+                var folders = contents.folders || [];
+
+                // 2. Ordner → Typ zuordnen
+                var ordnerMap = {};
+                folders.forEach(function(folder) {
+                    var typ = self.mapDriveFolderToOrdner(folder.name);
+                    if (typ) {
+                        ordnerMap[typ] = { folder: folder, files: folder.files || [] };
+                    }
+                });
+
+                // 3. Meta speichern
+                var totalDocs = Object.values(ordnerMap).reduce(function(s, o) { return s + o.files.length; }, 0);
+                await window.OrdnerAnalyseDB.saveMeta(kundenId, {
+                    kundeName: kundeName,
+                    driveFolderId: driveFolderId,
+                    status: 'running',
+                    startZeitpunkt: new Date().toISOString(),
+                    ordnerGefunden: Object.keys(ordnerMap).length,
+                    gesamtDokumente: totalDocs
+                });
+
+                // 4. Ordner analysieren (sequentiell, um Rate-Limits zu schonen)
+                var analyseErgebnisse = {};
+                var ordnerNummern = Object.keys(ordnerMap).sort();
+                for (var idx = 0; idx < ordnerNummern.length; idx++) {
+                    var nr = ordnerNummern[idx];
+                    var ordnerInfo = ordnerMap[nr];
+                    if (onProgress) onProgress({
+                        phase: 'analyse',
+                        message: 'Ordner ' + nr + ': ' + ORDNER_ANALYSE_CONFIG.ORDNER[nr].name + ' (' + (idx + 1) + '/' + ordnerNummern.length + ')',
+                        current: idx + 1,
+                        total: ordnerNummern.length
+                    });
+                    analyseErgebnisse[nr] = await self.analyzeOrdner(kundenId, nr, ordnerInfo.files, function(msg) {
+                        if (onProgress) onProgress({ phase: 'analyse', message: msg, current: idx + 1, total: ordnerNummern.length });
+                    });
+                }
+
+                // 5. Cross-Referencing
+                if (onProgress) onProgress({ phase: 'crossref', message: 'Cross-Referencing läuft...' });
+                var crossRef = await self.runCrossReferencing(kundenId);
+
+                // 6. Meta aktualisieren
+                var completedCount = Object.values(analyseErgebnisse).filter(function(a) { return a.status === 'completed'; }).length;
+                await window.OrdnerAnalyseDB.saveMeta(kundenId, {
+                    kundeName: kundeName,
+                    driveFolderId: driveFolderId,
+                    status: 'completed',
+                    startZeitpunkt: new Date().toISOString(),
+                    abschlussZeitpunkt: new Date().toISOString(),
+                    analyseDauerGesamt: (Date.now() - startTime) / 1000,
+                    ordnerGefunden: Object.keys(ordnerMap).length,
+                    ordnerAnalysiert: completedCount,
+                    gesamtDokumente: totalDocs,
+                    crossRefStatus: crossRef.status,
+                    gesamtFehler: crossRef.zusammenfassung.gesamtFehler || 0
+                });
+
+                if (onProgress) onProgress({ phase: 'done', message: 'Analyse abgeschlossen! ' + completedCount + '/' + ordnerNummern.length + ' Ordner.' });
+                return { analyseErgebnisse: analyseErgebnisse, crossRef: crossRef, meta: await window.OrdnerAnalyseDB.getMeta(kundenId) };
+
+            } catch(err) {
+                console.error('OrdnerAnalyse Kunde Fehler:', err);
+                await window.OrdnerAnalyseDB.saveMeta(kundenId, {
+                    kundeName: kundeName, driveFolderId: driveFolderId, status: 'error', fehler: err.message
+                });
+                throw err;
+            }
         }
     };
     </script>
@@ -12100,7 +12564,7 @@
            MODULWAHL — Dashboard nach Kundenauswahl
            5 Kacheln: Aufmaß, Rechnung, Kalkulation, Schriftverkehr, Baustellen-App
            ═══════════════════════════════════════════ */
-        function ModulWahl({ kunde, onSelectModul, kiAkte, onShowKiAkte }) {
+        function ModulWahl({ kunde, onSelectModul, ordnerAnalyseMeta }) {
             const module = [
                 { id: 'aufmass', icon: '📐', name: 'Aufmaß', desc: 'VOB-konforme Aufmaß-Erfassung', color: '#1E88E5', ready: true },
                 { id: 'rechnung', icon: '💶', name: 'Rechnungen', desc: 'Abschlags- & Schlussrechnungen', color: '#27ae60', ready: true },
@@ -12120,25 +12584,32 @@
                         </div>
                     </div>
 
-                    {/* KI-Akte Banner */}
-                    {kiAkte && kiAkte.meta && kiAkte.meta.status === 'completed' && (
-                        <button onClick={onShowKiAkte} style={{
-                            width:'100%', padding:'12px 16px', marginBottom:'16px',
-                            background:'linear-gradient(135deg, rgba(30,136,229,0.1) 0%, rgba(142,68,173,0.1) 100%)',
-                            border:'1px solid rgba(30,136,229,0.25)', borderRadius:'12px',
-                            display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
-                            color:'var(--text-primary)', fontSize:'13px', textAlign:'left'
-                        }}>
-                            <span style={{fontSize:'22px'}}>🤖</span>
-                            <div>
-                                <div style={{fontWeight:'700'}}>KI-Akte verfügbar</div>
-                                <div style={{fontSize:'11px', color:'var(--text-muted)'}}>
-                                    {kiAkte.positionen ? kiAkte.positionen.length : 0} Positionen erkannt · {kiAkte.nachtraege ? kiAkte.nachtraege.length : 0} Nachträge · Klicken zum Öffnen
-                                </div>
+                    {/* KI-Ordneranalyse Banner */}
+                    <button onClick={function() { onSelectModul('ordnerAnalyse'); }} style={{
+                        width:'100%', padding:'12px 16px', marginBottom:'16px',
+                        background: ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed'
+                            ? 'linear-gradient(135deg, rgba(46,204,113,0.1) 0%, rgba(30,136,229,0.1) 100%)'
+                            : 'linear-gradient(135deg, rgba(243,156,18,0.08) 0%, rgba(231,76,60,0.08) 100%)',
+                        border: ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed'
+                            ? '1px solid rgba(46,204,113,0.3)'
+                            : '1px solid rgba(243,156,18,0.25)',
+                        borderRadius:'12px',
+                        display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
+                        color:'var(--text-primary)', fontSize:'13px', textAlign:'left'
+                    }}>
+                        <span style={{fontSize:'22px'}}>📊</span>
+                        <div>
+                            <div style={{fontWeight:'700'}}>
+                                {ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed' ? 'Ordneranalyse ✓' : 'KI-Ordneranalyse'}
                             </div>
-                            <span style={{marginLeft:'auto', fontSize:'18px'}}>→</span>
-                        </button>
-                    )}
+                            <div style={{fontSize:'11px', color:'var(--text-muted)'}}>
+                                {ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed'
+                                    ? (ordnerAnalyseMeta.ordnerAnalysiert || 0) + '/' + (ordnerAnalyseMeta.ordnerGefunden || 0) + ' Ordner · ' + (ordnerAnalyseMeta.gesamtDokumente || 0) + ' Dok. · ' + (ordnerAnalyseMeta.gesamtFehler > 0 ? '⚠ ' + ordnerAnalyseMeta.gesamtFehler + ' Unstimmigkeiten' : 'Keine Fehler')
+                                    : '8 Ordner einzeln analysieren · Cross-Referencing · Fehlervergleich'}
+                            </div>
+                        </div>
+                        <span style={{marginLeft:'auto', fontSize:'18px'}}>→</span>
+                    </button>
 
                     {/* Modul-Kacheln */}
                     <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
@@ -12398,6 +12869,305 @@
                             </button>
                         </div>
                     </div>
+                </div>
+            );
+        }
+
+        /* ═══════════════════════════════════════════
+           KI-ORDNERANALYSE — UI-Komponenten
+           ═══════════════════════════════════════════ */
+
+        // ── Kundenübersicht: Alle Kunden mit ihren Analysen ──
+        function OrdnerAnalyseUebersicht({ kunde, onStartAnalyse, onOpenDetail, onBack }) {
+            const [meta, setMeta] = useState(null);
+            const [analysen, setAnalysen] = useState([]);
+            const [crossRef, setCrossRef] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(function() {
+                if (!kunde) return;
+                var kundenId = kunde._driveFolderId || kunde.id || kunde.name;
+                Promise.all([
+                    window.OrdnerAnalyseDB.getMeta(kundenId),
+                    window.OrdnerAnalyseDB.getAllOrdnerAnalysen(kundenId),
+                    window.OrdnerAnalyseDB.getCrossRef(kundenId)
+                ]).then(function(results) {
+                    setMeta(results[0]);
+                    setAnalysen(results[1]);
+                    setCrossRef(results[2]);
+                    setLoading(false);
+                }).catch(function() { setLoading(false); });
+            }, [kunde]);
+
+            if (loading) return React.createElement('div', {className:'page-container', style:{padding:'40px', textAlign:'center'}}, '⏳ Lade Analysedaten...');
+
+            var cfg = ORDNER_ANALYSE_CONFIG.ORDNER;
+            var kundenId = kunde ? (kunde._driveFolderId || kunde.id || kunde.name) : '';
+
+            // Qualitäts-Score berechnen
+            var completedAnalysen = analysen.filter(function(a) { return a.status === 'completed'; });
+            var avgQuality = completedAnalysen.length > 0 ? Math.round(completedAnalysen.reduce(function(s,a) { return s + (a.ergebnis && a.ergebnis.vollstaendigkeit ? 85 : 70); }, 0) / completedAnalysen.length) : 0;
+            var gesamtFehler = crossRef && crossRef.zusammenfassung ? crossRef.zusammenfassung.gesamtFehler : 0;
+
+            return (
+                <div className="page-container" style={{padding:'20px 16px', minHeight:'100vh'}}>
+                    {/* Header */}
+                    <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'20px'}}>
+                        <button onClick={onBack} style={{background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'var(--text-primary)', padding:'4px'}}>←</button>
+                        <div>
+                            <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)'}}>🤖 KI-Ordneranalyse</div>
+                            <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1px', textTransform:'uppercase'}}>{kunde ? kunde.name : ''}</div>
+                        </div>
+                    </div>
+
+                    {/* Status-Banner */}
+                    {meta && meta.status === 'completed' ? (
+                        <div style={{padding:'14px 16px', marginBottom:'16px', background:'linear-gradient(135deg, rgba(46,204,113,0.12) 0%, rgba(30,136,229,0.12) 100%)', border:'1px solid rgba(46,204,113,0.3)', borderRadius:'12px'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                <div>
+                                    <div style={{fontWeight:'700', fontSize:'13px', color:'var(--success)'}}>✅ Analyse abgeschlossen</div>
+                                    <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>
+                                        {meta.ordnerAnalysiert || 0}/{meta.ordnerGefunden || 0} Ordner · {meta.gesamtDokumente || 0} Dokumente · {gesamtFehler > 0 ? '⚠ ' + gesamtFehler + ' Unstimmigkeiten' : '✓ Keine Unstimmigkeiten'}
+                                    </div>
+                                </div>
+                                <div style={{textAlign:'right'}}>
+                                    <div style={{fontSize:'20px', fontWeight:'700', color: avgQuality >= 80 ? 'var(--success)' : avgQuality >= 60 ? '#f39c12' : '#e74c3c'}}>{avgQuality}%</div>
+                                    <div style={{fontSize:'9px', color:'var(--text-muted)'}}>Qualität</div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{padding:'14px 16px', marginBottom:'16px', background:'rgba(231,76,60,0.08)', border:'1px solid rgba(231,76,60,0.2)', borderRadius:'12px', textAlign:'center'}}>
+                            <div style={{fontSize:'13px', fontWeight:'600', color:'#e74c3c', marginBottom:'8px'}}>Noch keine Ordneranalyse durchgeführt</div>
+                            <button onClick={function() { onStartAnalyse(kundenId); }} style={{
+                                padding:'10px 20px', background:'linear-gradient(135deg, #1E88E5 0%, #8e44ad 100%)',
+                                color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer'
+                            }}>🚀 Ordneranalyse starten</button>
+                        </div>
+                    )}
+
+                    {/* Ordner-Karten */}
+                    <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+                        {['01','02','03','04','05','06','07','08'].map(function(nr) {
+                            var ordnerCfg = cfg[nr];
+                            var analyse = analysen.find(function(a) { return a.ordnerNr === nr; });
+                            var status = analyse ? analyse.status : 'pending';
+                            var statusIcon = status === 'completed' ? '✅' : status === 'error' ? '❌' : status === 'running' ? '⏳' : '⬜';
+                            var docsCount = analyse ? (analyse.dokumenteAnalysiert || 0) : 0;
+
+                            // Zusammenfassung aus Ergebnis
+                            var summary = '';
+                            if (analyse && analyse.ergebnis) {
+                                var e = analyse.ergebnis;
+                                if (e.lvPositionen) summary = e.lvPositionen.length + ' LV-Pos.';
+                                if (e.nachtraege && e.nachtraege.length > 0) summary += (summary ? ' · ' : '') + e.nachtraege.length + ' Nachträge';
+                                if (e.geschosse) summary = (e.zusammenfassung ? e.zusammenfassung.fliesenRaeume || 0 : 0) + ' Räume';
+                                if (e.stundenZusammenfassung) summary = (e.stundenZusammenfassung.gesamtStunden || 0) + ' Stunden';
+                                if (e.rechnungen) summary = e.rechnungen.length + ' Rechnungen';
+                                if (e.fliesen) summary = (e.fliesen.length || 0) + ' Fliesen · ' + (e.zubehoer ? e.zubehoer.length : 0) + ' Zubehör';
+                                if (e.aufmassPositionen) summary = e.aufmassPositionen.length + ' Aufmaß-Pos.';
+                                if (e.kontaktdaten) summary = ((e.kontaktdaten.neuGefunden||[]).length) + ' Kontakte';
+                            }
+
+                            return (
+                                <button key={nr} onClick={function() { if (analyse) onOpenDetail(nr); }}
+                                    style={{
+                                        width:'100%', padding:'12px 14px', borderRadius:'12px', border:'1px solid var(--border-subtle)',
+                                        background:'var(--bg-secondary)', display:'flex', alignItems:'center', gap:'12px',
+                                        cursor: analyse ? 'pointer' : 'default', opacity: analyse ? 1 : 0.6, textAlign:'left'
+                                    }}>
+                                    <span style={{fontSize:'24px'}}>{ordnerCfg.icon}</span>
+                                    <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'13px', fontWeight:'700', color: ordnerCfg.color}}>
+                                            {nr} {ordnerCfg.name}
+                                            {ordnerCfg.kritisch && <span style={{fontSize:'9px', background:'rgba(231,76,60,0.15)', color:'#e74c3c', padding:'1px 5px', borderRadius:'4px', marginLeft:'6px', fontWeight:'600'}}>KRITISCH</span>}
+                                        </div>
+                                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>
+                                            {status === 'completed' ? (docsCount + ' Dok. · ' + (summary || 'Analysiert')) : status === 'error' ? 'Fehler bei Analyse' : 'Nicht analysiert'}
+                                        </div>
+                                    </div>
+                                    <span style={{fontSize:'16px'}}>{statusIcon}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Cross-Referencing Zusammenfassung */}
+                    {crossRef && crossRef.zusammenfassung && (
+                        <div style={{marginTop:'16px', padding:'14px 16px', background:'var(--bg-secondary)', borderRadius:'12px', border:'1px solid var(--border-subtle)'}}>
+                            <div style={{fontWeight:'700', fontSize:'13px', marginBottom:'8px', color:'var(--text-primary)'}}>📊 Cross-Referencing</div>
+                            <div style={{fontSize:'11px', color:'var(--text-secondary)', lineHeight:'1.8'}}>
+                                ✅ {crossRef.zusammenfassung.exaktGleich || 0} Positionen exakt gleich<br/>
+                                {crossRef.zusammenfassung.nurPosNrAnders > 0 && <span>⚠️ {crossRef.zusammenfassung.nurPosNrAnders} nur Positionsnr. anders<br/></span>}
+                                {crossRef.zusammenfassung.abweichungen > 0 && <span>🔴 {crossRef.zusammenfassung.abweichungen} Abweichungen<br/></span>}
+                                {crossRef.zusammenfassung.nurInOrdner01 > 0 && <span>🔴 {crossRef.zusammenfassung.nurInOrdner01} nur in Baustellenauswertung<br/></span>}
+                                {crossRef.zusammenfassung.nurInOrdner02 > 0 && <span>🔴 {crossRef.zusammenfassung.nurInOrdner02} nur in LV<br/></span>}
+                                {crossRef.zusammenfassung.mengenAbweichungenKritisch > 0 && <span>🔴 {crossRef.zusammenfassung.mengenAbweichungenKritisch} kritische Mengenabweichungen<br/></span>}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Aktionen */}
+                    {meta && meta.status === 'completed' && (
+                        <div style={{marginTop:'16px', display:'flex', gap:'8px'}}>
+                            <button onClick={function() { onStartAnalyse(kundenId); }} style={{
+                                flex:1, padding:'10px', background:'var(--bg-tertiary)', color:'var(--text-secondary)', border:'1px solid var(--border-subtle)',
+                                borderRadius:'10px', fontSize:'12px', fontWeight:'600', cursor:'pointer'
+                            }}>🔄 Alle neu analysieren</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── Ordneranalyse-Fortschritt (Overlay) ──
+        function OrdnerAnalyseProgress({ progress, onClose }) {
+            return (
+                <div className="modal-overlay" style={{zIndex:5000}}>
+                    <div style={{width:'90%', maxWidth:'500px', background:'var(--bg-primary)', borderRadius:'16px', padding:'28px', textAlign:'center'}}>
+                        <div style={{fontSize:'48px', marginBottom:'12px'}}>🤖</div>
+                        <div style={{fontSize:'16px', fontWeight:'700', marginBottom:'8px', color:'var(--text-primary)'}}>KI-Ordneranalyse läuft...</div>
+                        <div style={{fontSize:'13px', color:'var(--accent-blue)', marginBottom:'16px', minHeight:'20px'}}>
+                            {progress.message || 'Vorbereitung...'}
+                        </div>
+                        {progress.total > 0 && (
+                            <div style={{marginBottom:'16px'}}>
+                                <div style={{height:'8px', background:'var(--bg-tertiary)', borderRadius:'4px', overflow:'hidden'}}>
+                                    <div style={{
+                                        height:'100%', borderRadius:'4px', transition:'width 0.3s',
+                                        background:'linear-gradient(90deg, #1E88E5, #8e44ad)',
+                                        width: (progress.current / progress.total * 100) + '%'
+                                    }} />
+                                </div>
+                                <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>
+                                    Ordner {progress.current || 0} von {progress.total || 0}
+                                </div>
+                            </div>
+                        )}
+                        {progress.phase === 'done' && (
+                            <button onClick={onClose} style={{padding:'10px 24px', background:'var(--success)', color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', marginTop:'8px'}}>
+                                ✅ Ergebnis anzeigen
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Ordner-Detail-Ansicht ──
+        function OrdnerAnalyseDetail({ kunde, ordnerNr, onBack }) {
+            const [analyse, setAnalyse] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(function() {
+                if (!kunde || !ordnerNr) return;
+                var kundenId = kunde._driveFolderId || kunde.id || kunde.name;
+                window.OrdnerAnalyseDB.getOrdnerAnalyse(kundenId, ordnerNr).then(function(data) {
+                    setAnalyse(data);
+                    setLoading(false);
+                }).catch(function() { setLoading(false); });
+            }, [kunde, ordnerNr]);
+
+            if (loading) return React.createElement('div', {className:'page-container', style:{padding:'40px', textAlign:'center'}}, '⏳ Lade...');
+            if (!analyse) return React.createElement('div', {className:'page-container', style:{padding:'40px', textAlign:'center'}}, '❌ Keine Daten');
+
+            var cfg = ORDNER_ANALYSE_CONFIG.ORDNER[ordnerNr];
+            var ergebnis = analyse.ergebnis || {};
+
+            // Dynamischer Content je nach Ordner
+            var renderContent = function() {
+                // LV-Positionen (01, 02)
+                var positionen = ergebnis.lvPositionen || ergebnis.aufmassPositionen || [];
+                if (positionen.length > 0) {
+                    return React.createElement('div', null,
+                        React.createElement('div', {style:{fontWeight:'700', fontSize:'13px', marginBottom:'8px', color:'var(--text-primary)'}}, '📋 ' + positionen.length + ' Positionen'),
+                        React.createElement('div', {style:{maxHeight:'400px', overflowY:'auto', borderRadius:'8px', border:'1px solid var(--border-subtle)'}},
+                            positionen.map(function(pos, idx) {
+                                return React.createElement('div', {key:idx, style:{padding:'8px 12px', borderBottom:'1px solid var(--border-subtle)', fontSize:'12px'}},
+                                    React.createElement('div', {style:{display:'flex', justifyContent:'space-between'}},
+                                        React.createElement('span', {style:{fontWeight:'700', color:'var(--accent-blue)'}}, pos.posNr || pos.positionsnummer || ('Pos ' + (idx+1))),
+                                        React.createElement('span', {style:{color:'var(--text-muted)'}}, (pos.menge || pos.mengeGesamt || '–') + ' ' + (pos.einheit || ''))
+                                    ),
+                                    React.createElement('div', {style:{color:'var(--text-secondary)', marginTop:'2px', lineHeight:'1.4'}}, (pos.leistung || pos.kurztext || '').substring(0, 120)),
+                                    pos.epPreis != null && React.createElement('div', {style:{color:'var(--success)', fontSize:'11px', marginTop:'2px'}}, 'EP: ' + pos.epPreis + ' € · GP: ' + (pos.gesamtPreis || '–') + ' €')
+                                );
+                            })
+                        )
+                    );
+                }
+
+                // Personen (01)
+                if (ergebnis.personen) {
+                    var personenItems = [];
+                    ['bauherr','bauherrVertreter','architekt','bauleitung'].forEach(function(rolle) {
+                        var p = ergebnis.personen[rolle];
+                        if (p && p.name) personenItems.push(React.createElement('div', {key:rolle, style:{padding:'6px 0', borderBottom:'1px solid var(--border-subtle)', fontSize:'12px'}},
+                            React.createElement('span', {style:{fontWeight:'600', textTransform:'capitalize'}}, rolle + ': '),
+                            React.createElement('span', {style:{color:'var(--text-secondary)'}}, p.name + (p.firma ? ' (' + p.firma + ')' : ''))
+                        ));
+                    });
+                    if (personenItems.length > 0) return React.createElement('div', null,
+                        React.createElement('div', {style:{fontWeight:'700', fontSize:'13px', marginBottom:'8px'}}, '👥 Personen'),
+                        personenItems
+                    );
+                }
+
+                // Räume (03)
+                if (ergebnis.geschosse) {
+                    var allRaeume = [];
+                    (ergebnis.geschosse || []).forEach(function(g) { (g.raeume || []).forEach(function(r) { allRaeume.push(Object.assign({geschoss: g.geschoss}, r)); }); });
+                    return React.createElement('div', null,
+                        React.createElement('div', {style:{fontWeight:'700', fontSize:'13px', marginBottom:'8px'}}, '🏠 ' + allRaeume.length + ' Räume erkannt'),
+                        allRaeume.slice(0, 20).map(function(r, i) {
+                            return React.createElement('div', {key:i, style:{padding:'6px 10px', borderBottom:'1px solid var(--border-subtle)', fontSize:'12px', display:'flex', justifyContent:'space-between'}},
+                                React.createElement('span', null, (r.raumNr || '') + ' ' + (r.raumBezeichnung || '')),
+                                React.createElement('span', {style:{color:'var(--text-muted)'}}, r.geschoss + (r.masse ? ' · ' + (r.masse.bodenflaeche_m2 || '?') + ' m²' : ''))
+                            );
+                        })
+                    );
+                }
+
+                // Rechnungen (06)
+                if (ergebnis.rechnungen) {
+                    return React.createElement('div', null,
+                        React.createElement('div', {style:{fontWeight:'700', fontSize:'13px', marginBottom:'8px'}}, '💰 ' + ergebnis.rechnungen.length + ' Rechnungen'),
+                        ergebnis.rechnungen.map(function(r, i) {
+                            return React.createElement('div', {key:i, style:{padding:'6px 10px', borderBottom:'1px solid var(--border-subtle)', fontSize:'12px', display:'flex', justifyContent:'space-between'}},
+                                React.createElement('span', null, r.rechnungsNr + ' (' + (r.rechnungsTyp || '') + ')'),
+                                React.createElement('span', {style:{color: r.zahlungsStatus === 'bezahlt' ? 'var(--success)' : '#e74c3c', fontWeight:'600'}}, (r.bruttoBetrag || r.nettoBetrag || 0).toLocaleString('de-DE') + ' €')
+                            );
+                        })
+                    );
+                }
+
+                // Fallback: JSON anzeigen
+                return React.createElement('pre', {style:{fontSize:'10px', color:'var(--text-muted)', overflow:'auto', maxHeight:'400px', whiteSpace:'pre-wrap'}}, JSON.stringify(ergebnis, null, 2));
+            };
+
+            return (
+                <div className="page-container" style={{padding:'20px 16px', minHeight:'100vh'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px'}}>
+                        <button onClick={onBack} style={{background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'var(--text-primary)'}}>←</button>
+                        <div>
+                            <div style={{fontSize:'16px', fontWeight:'700', color: cfg.color}}>{cfg.icon} {ordnerNr} {cfg.name}</div>
+                            <div style={{fontSize:'11px', color:'var(--text-muted)'}}>
+                                {analyse.dokumenteAnalysiert || 0} Dokumente · {analyse.analyseDauer ? Math.round(analyse.analyseDauer) + 's' : '–'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Warnhinweise */}
+                    {ergebnis.warnhinweise && ergebnis.warnhinweise.length > 0 && (
+                        <div style={{padding:'10px 14px', marginBottom:'12px', background:'rgba(243,156,18,0.1)', border:'1px solid rgba(243,156,18,0.25)', borderRadius:'10px'}}>
+                            <div style={{fontWeight:'700', fontSize:'12px', color:'#f39c12', marginBottom:'4px'}}>⚠ Warnhinweise</div>
+                            {ergebnis.warnhinweise.map(function(w, i) {
+                                return React.createElement('div', {key:i, style:{fontSize:'11px', color:'var(--text-secondary)', paddingLeft:'8px', marginTop:'3px'}}, '• ' + w);
+                            })}
+                        </div>
+                    )}
+
+                    {/* Hauptinhalt */}
+                    {renderContent()}
                 </div>
             );
         }
@@ -13663,7 +14433,7 @@
         }
 
         function App() {
-            // Pages: 'start' | 'auswahl' | 'akte' | 'geladen' | 'modulwahl' | 'raumerkennung' | 'raumblatt' | 'rechnung' | 'kalkulation' | 'schriftverkehr' | 'baustelle'
+            // Pages: 'start' | 'auswahl' | 'akte' | 'geladen' | 'modulwahl' | 'raumerkennung' | 'raumblatt' | 'rechnung' | 'kalkulation' | 'schriftverkehr' | 'baustelle' | 'ordnerAnalyse' | 'ordnerAnalyseDetail'
             const [page, setPage] = useState('start');
             const [driveStatus, setDriveStatus] = useState('offline');
             const [showAuth, setShowAuth] = useState(false);
@@ -13683,13 +14453,13 @@
             const [isDriveMode, setIsDriveMode] = useState(false);
             const [loadProgress, setLoadProgress] = useState('');
             const [importResult, setImportResult] = useState(null);
-            // ── NEU: KI-Analyse & KI-Akte State ──
-            const [kiAkte, setKiAkte] = useState(null);
-            const [showKiAkte, setShowKiAkte] = useState(false);
-            const [isAnalyzing, setIsAnalyzing] = useState(false);
-            const [analyzeProgress, setAnalyzeProgress] = useState({ progress: '', currentDoc: 0, totalDocs: 0, details: [] });
             const [kundeMode, setKundeMode] = useState('neu'); // 'neu' | 'analysiert'
             const [analyseConfig, setAnalyseConfig] = useState(null);
+            // ── NEU: KI-Ordneranalyse State ──
+            const [ordnerAnalyseMeta, setOrdnerAnalyseMeta] = useState(null);
+            const [ordnerAnalyseProgress, setOrdnerAnalyseProgress] = useState({ phase: '', message: '', current: 0, total: 0 });
+            const [isOrdnerAnalyseRunning, setIsOrdnerAnalyseRunning] = useState(false);
+            const [selectedOrdnerNr, setSelectedOrdnerNr] = useState(null);
 
             /* ══════════════════════════════════════════════════
                GLOBALER AUTO-FOCUS & ENTER-NAVIGATION
@@ -13967,10 +14737,56 @@
                     case 'baustelle':
                         navigateTo('baustelle');
                         break;
+                    case 'ordnerAnalyse':
+                        navigateTo('ordnerAnalyse');
+                        break;
                     default:
                         break;
                 }
             };
+
+            // ── NEU: Ordneranalyse starten ──
+            const handleStartOrdnerAnalyse = async (kundenId) => {
+                if (!selectedKunde || !selectedKunde._driveFolderId) {
+                    alert('Kein Google Drive Ordner verknüpft. Bitte über "Kunde NEU" verbinden.');
+                    return;
+                }
+                // Drive-Verbindung prüfen
+                var service = window.GoogleDriveService;
+                if (!service.accessToken) {
+                    try {
+                        await service.init();
+                        await service.requestAuth();
+                    } catch(authErr) {
+                        alert('Google Drive Verbindung fehlgeschlagen.');
+                        return;
+                    }
+                }
+                setIsOrdnerAnalyseRunning(true);
+                setOrdnerAnalyseProgress({ phase: 'start', message: 'Vorbereitung...', current: 0, total: 0 });
+                try {
+                    var result = await window.OrdnerAnalyseEngine.analyzeKunde(
+                        kundenId || selectedKunde._driveFolderId,
+                        selectedKunde.name || 'Unbekannt',
+                        selectedKunde._driveFolderId,
+                        function(p) { setOrdnerAnalyseProgress(p); }
+                    );
+                    setOrdnerAnalyseMeta(result.meta);
+                } catch(err) {
+                    console.error('Ordneranalyse Fehler:', err);
+                    alert('Ordneranalyse Fehler: ' + err.message);
+                }
+                setIsOrdnerAnalyseRunning(false);
+            };
+
+            // ── NEU: Ordneranalyse Meta laden wenn Kunde wechselt ──
+            useEffect(function() {
+                if (!selectedKunde) return;
+                var kundenId = selectedKunde._driveFolderId || selectedKunde.id || selectedKunde.name;
+                window.OrdnerAnalyseDB.getMeta(kundenId).then(function(m) {
+                    setOrdnerAnalyseMeta(m);
+                }).catch(function() {});
+            }, [selectedKunde]);
 
             const handleAuth = async (authResult) => {
                 setShowAuth(false);
@@ -14366,7 +15182,20 @@
                             onBack={function(){ navigateTo('auswahl'); }}
                         />;
                     case 'modulwahl':
-                        return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} kiAkte={kiAkte} onShowKiAkte={() => setShowKiAkte(true)} />;
+                        return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} ordnerAnalyseMeta={ordnerAnalyseMeta} />;
+                    case 'ordnerAnalyse':
+                        return <OrdnerAnalyseUebersicht
+                            kunde={selectedKunde}
+                            onStartAnalyse={handleStartOrdnerAnalyse}
+                            onOpenDetail={function(nr) { setSelectedOrdnerNr(nr); navigateTo('ordnerAnalyseDetail'); }}
+                            onBack={function() { navigateTo('modulwahl'); }}
+                        />;
+                    case 'ordnerAnalyseDetail':
+                        return <OrdnerAnalyseDetail
+                            kunde={selectedKunde}
+                            ordnerNr={selectedOrdnerNr}
+                            onBack={function() { navigateTo('ordnerAnalyse'); }}
+                        />;
                     case 'geladen':
                         return <AkteGeladen kunde={selectedKunde} onStartAufmass={handleStartAufmass} importResult={importResult} />;
                     case 'raumerkennung':
@@ -14428,23 +15257,14 @@
                             : null
                     } />
 
-                    {/* KI-Akte Modal */}
-                    {showKiAkte && (
-                        <KiAkteView
-                            kiAkte={kiAkte}
-                            kunde={selectedKunde}
-                            onClose={() => setShowKiAkte(false)}
-                            onNeuAnalyse={() => { setShowKiAkte(false); /* TODO: Neu-Analyse triggern */ }}
-                        />
-                    )}
-
-                    {/* KI-Analyse Fortschritts-Overlay */}
-                    {isAnalyzing && (
-                        <KiAnalyseOverlay
-                            progress={analyzeProgress.progress}
-                            currentDoc={analyzeProgress.currentDoc}
-                            totalDocs={analyzeProgress.totalDocs}
-                            details={analyzeProgress.details}
+                    {/* KI-Ordneranalyse Fortschritts-Overlay */}
+                    {isOrdnerAnalyseRunning && (
+                        <OrdnerAnalyseProgress
+                            progress={ordnerAnalyseProgress}
+                            onClose={function() {
+                                setIsOrdnerAnalyseRunning(false);
+                                navigateTo('ordnerAnalyse');
+                            }}
                         />
                     )}
                 </React.Fragment>
