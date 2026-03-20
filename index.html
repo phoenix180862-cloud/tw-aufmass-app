@@ -98,6 +98,12 @@
         API_KEY: localStorage.getItem('gemini_api_key') || '',
         MODEL: localStorage.getItem('gemini_model') || 'gemini-2.5-flash',
         MODEL_PRO: 'gemini-2.5-pro',
+        MODEL_PRO_31: 'gemini-2.5-pro-preview-06-05',
+        MODELS: {
+            'flash': { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', icon: '⚡', desc: 'Schnell & günstig', color: '#1E88E5' },
+            'pro': { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', icon: '🧠', desc: 'Präzise Analyse', color: '#8e44ad' },
+            'pro31': { id: 'gemini-2.5-pro-preview-06-05', name: 'Gemini 2.5 Pro Preview', icon: '🚀', desc: 'Neuestes Modell', color: '#e74c3c' }
+        },
         BASE_URL: 'https://generativelanguage.googleapis.com/v1beta',
         MAX_RETRIES: 3,
     };
@@ -115,8 +121,8 @@
 
         // Modell: Option > Präferenz > Config
         var modelPref = localStorage.getItem('gemini_model_pref') || 'pro';
-        var defaultModel = modelPref === 'pro' ? 'gemini-2.5-pro' : (localStorage.getItem('gemini_model') || GEMINI_CONFIG.MODEL);
-        var modelId = options.model || defaultModel;
+        var modelInfo = GEMINI_CONFIG.MODELS[modelPref] || GEMINI_CONFIG.MODELS['pro'];
+        var modelId = options.model || modelInfo.id;
 
         try {
             // Nachrichten in Gemini-Format konvertieren
@@ -5693,32 +5699,27 @@
                                 {/* Modell-Auswahl */}
                                 <div style={{marginTop:'12px', paddingTop:'10px', borderTop:'1px solid var(--border-color)'}}>
                                     <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'6px'}}>🧠 KI-Modell für Dokumentenanalyse</div>
-                                    <div style={{display:'flex', gap:'6px'}}>
-                                        <button onClick={function(){
-                                            localStorage.setItem('gemini_model_pref', 'flash');
-                                            GEMINI_CONFIG.MODEL = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
-                                        }} style={{
-                                            flex:1, padding:'10px 8px', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
-                                            background: (localStorage.getItem('gemini_model_pref') || 'pro') === 'flash' ? 'rgba(30,136,229,0.15)' : 'var(--bg-tertiary)',
-                                            border: (localStorage.getItem('gemini_model_pref') || 'pro') === 'flash' ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)',
-                                            color: (localStorage.getItem('gemini_model_pref') || 'pro') === 'flash' ? 'var(--accent-blue)' : 'var(--text-muted)'
-                                        }}>
-                                            ⚡ Flash<br/><span style={{fontSize:'9px', fontWeight:'400'}}>Schnell & günstig</span>
-                                        </button>
-                                        <button onClick={function(){
-                                            localStorage.setItem('gemini_model_pref', 'pro');
-                                            GEMINI_CONFIG.MODEL = 'gemini-2.5-pro';
-                                        }} style={{
-                                            flex:1, padding:'10px 8px', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
-                                            background: (localStorage.getItem('gemini_model_pref') || 'pro') === 'pro' ? 'rgba(142,68,173,0.15)' : 'var(--bg-tertiary)',
-                                            border: (localStorage.getItem('gemini_model_pref') || 'pro') === 'pro' ? '2px solid #8e44ad' : '1px solid var(--border-color)',
-                                            color: (localStorage.getItem('gemini_model_pref') || 'pro') === 'pro' ? '#8e44ad' : 'var(--text-muted)'
-                                        }}>
-                                            🧠 Pro<br/><span style={{fontSize:'9px', fontWeight:'400'}}>Präziser, EP-Preise</span>
-                                        </button>
+                                    <div style={{display:'flex', gap:'4px'}}>
+                                        {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
+                                            var m = GEMINI_CONFIG.MODELS[key];
+                                            var isActive = (localStorage.getItem('gemini_model_pref') || 'pro') === key;
+                                            return (
+                                                <button key={key} onClick={function(){
+                                                    localStorage.setItem('gemini_model_pref', key);
+                                                }} style={{
+                                                    flex:1, padding:'8px 4px', borderRadius:'8px', cursor:'pointer', fontSize:'10px', fontWeight:'700', textAlign:'center',
+                                                    background: isActive ? m.color + '18' : 'var(--bg-tertiary)',
+                                                    border: isActive ? '2px solid ' + m.color : '1px solid var(--border-color)',
+                                                    color: isActive ? m.color : 'var(--text-muted)'
+                                                }}>
+                                                    {m.icon} {m.name.replace('Gemini ', '')}<br/>
+                                                    <span style={{fontSize:'8px', fontWeight:'400'}}>{m.desc}</span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                     <div style={{fontSize:'9px', color:'var(--text-muted)', marginTop:'4px'}}>
-                                        Pro empfohlen für genaue EP-Preise & Kontaktdaten. Flash für schnelle Übersicht.
+                                        Aktiv: <strong>{(GEMINI_CONFIG.MODELS[localStorage.getItem('gemini_model_pref') || 'pro'] || {}).name || 'Gemini 2.5 Pro'}</strong>
                                     </div>
                                 </div>
 
@@ -5897,6 +5898,32 @@
                             )}
                         </div>
                     )}
+
+                    {/* KI-Modell Auswahl */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', border:'1px solid var(--border-color)', marginBottom:'14px'}}>
+                        <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'8px'}}>🧠 KI-Modell auswählen</div>
+                        <div style={{display:'flex', gap:'4px'}}>
+                            {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
+                                var m = GEMINI_CONFIG.MODELS[key];
+                                var isActive = (localStorage.getItem('gemini_model_pref') || 'pro') === key;
+                                return (
+                                    <button key={key} onClick={function(){
+                                        localStorage.setItem('gemini_model_pref', key);
+                                    }} style={{
+                                        flex:1, padding:'10px 6px', borderRadius:'10px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
+                                        background: isActive ? m.color + '18' : 'var(--bg-tertiary)',
+                                        border: isActive ? '2px solid ' + m.color : '1px solid var(--border-color)',
+                                        color: isActive ? m.color : 'var(--text-muted)',
+                                        transition:'all 0.2s'
+                                    }}>
+                                        <span style={{fontSize:'18px', display:'block', marginBottom:'2px'}}>{m.icon}</span>
+                                        {m.name.replace('Gemini ', '')}<br/>
+                                        <span style={{fontSize:'9px', fontWeight:'400'}}>{m.desc}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
 
                     {/* Info-Box */}
                     <div style={{background:'rgba(30,136,229,0.06)', borderRadius:'10px', padding:'12px', border:'1px solid rgba(30,136,229,0.15)', marginBottom:'14px'}}>
