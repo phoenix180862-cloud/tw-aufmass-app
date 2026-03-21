@@ -1869,18 +1869,50 @@
             if (!folderName) return null;
             var name = folderName.toLowerCase().trim();
             var cfg = ORDNER_ANALYSE_CONFIG.ORDNER;
+
+            // 1. Exakte Nummer am Anfang prüfen (z.B. "01 Baustellenauswertung", "1 - Angebote")
+            var numMatch = name.match(/^0?(\d)\b/);
+            if (numMatch) {
+                var num = numMatch[1].padStart(2, '0');
+                if (cfg[num]) {
+                    console.log('  📁 Ordner "' + folderName + '" → Typ ' + num + ' (via Nummer)');
+                    return num;
+                }
+            }
+
+            // 2. Keyword-basierte Zuordnung
             for (var nr in cfg) {
                 var keywords = cfg[nr].keywords || [];
                 for (var i = 0; i < keywords.length; i++) {
-                    if (name.indexOf(keywords[i]) >= 0) return nr;
+                    if (name.indexOf(keywords[i]) >= 0) {
+                        console.log('  📁 Ordner "' + folderName + '" → Typ ' + nr + ' (via Keyword "' + keywords[i] + '")');
+                        return nr;
+                    }
                 }
             }
-            // Fallback: Nummer am Anfang des Ordnernamens
-            var numMatch = name.match(/^(\d{1,2})/);
-            if (numMatch) {
-                var num = numMatch[1].padStart(2, '0');
-                if (cfg[num]) return num;
+
+            // 3. Zusätzliche flexible Patterns
+            var flexMap = {
+                '01': ['baustellenausw', 'baustelle', 'notebooklm', 'auswertung', 'zusammenfass'],
+                '02': ['angebot', 'leistungs', 'lv', 'vertrag', 'nachtrag', 'vertrae', 'nachtra'],
+                '03': ['zeichnung', 'plan', 'grundriss', 'schnitt', 'raumbuch', 'plae'],
+                '04': ['stunden', 'rapportzettel', 'stundenzettel', 'arbeitszeit'],
+                '05': ['schrift', 'mail', 'protokoll', 'bauzeit', 'brief', 'korrespondenz', 'email'],
+                '06': ['rechnung', 'konto', 'zahlung', 'abschlag', 'schlussrechnung'],
+                '07': ['lieferant', 'material', 'fliese', 'zubehoer', 'zubehör'],
+                '08': ['aufma', 'abrechnung', 'mengenermittlung', 'masse']
+            };
+            for (var flexNr in flexMap) {
+                var flexKw = flexMap[flexNr];
+                for (var fi = 0; fi < flexKw.length; fi++) {
+                    if (name.indexOf(flexKw[fi]) >= 0) {
+                        console.log('  📁 Ordner "' + folderName + '" → Typ ' + flexNr + ' (via Flex-Keyword "' + flexKw[fi] + '")');
+                        return flexNr;
+                    }
+                }
             }
+
+            console.log('  ⚠️ Ordner "' + folderName + '" → KEIN TYP ZUGEORDNET');
             return null;
         },
 
@@ -1908,47 +1940,74 @@
 
             var startTime = Date.now();
             var ordnerName = ORDNER_ANALYSE_CONFIG.ORDNER[ordnerNr].name;
+            console.log('📂 analyzeOrdner', ordnerNr, ordnerName, '— Dokumente:', dokumente.length, dokumente.map(function(d){return d.name + '(' + d.type + ')';}).join(', '));
             if (onProgress) onProgress('Analysiere ' + ordnerName + ' (' + dokumente.length + ' Dokumente)...');
 
             try {
-                // Dokument-Texte sammeln (max 3 PDFs parallel via Gemini)
+                // Dokument-Texte sammeln
                 var allTexts = [];
                 for (var i = 0; i < dokumente.length; i++) {
                     var doc = dokumente[i];
                     try {
-                        if (doc.mimeType && doc.mimeType.indexOf('pdf') >= 0 && doc.id) {
+                        // PDF-Dateien: Herunterladen + Text extrahieren
+                        var isPdf = doc.type === 'pdf' || (doc.name && doc.name.toLowerCase().endsWith('.pdf'));
+                        var isDoc = doc.type === 'doc' || (doc.name && (doc.name.toLowerCase().endsWith('.docx') || doc.name.toLowerCase().endsWith('.doc')));
+
+                        if ((isPdf || isDoc) && doc.id) {
+                            console.log('  📄 Lade Datei:', doc.name, '(Typ:', doc.type, ')');
+                            if (onProgress) onProgress(ordnerName + ': Lade ' + doc.name + '...');
                             var blob = await window.GoogleDriveService.downloadFile(doc.id);
-                            var text = await window.FileProcessor.extractTextFromPDF(blob);
-                            if (text && text.trim().length > 50) {
-                                allTexts.push('--- Datei: ' + doc.name + ' ---\n' + text.substring(0, 15000));
+                            if (isPdf) {
+                                var text = await window.FileProcessor.extractTextFromPDF(blob);
+                                if (text && text.trim().length > 50) {
+                                    allTexts.push('--- Datei: ' + doc.name + ' ---\n' + text.substring(0, 15000));
+                                    console.log('  ✅', doc.name, '→', text.length, 'Zeichen extrahiert');
+                                } else {
+                                    console.log('  ⚠️', doc.name, '→ Kein/wenig Text extrahiert');
+                                }
+                            } else if (isDoc && window.FileProcessor.extractTextFromWord) {
+                                var wordText = await window.FileProcessor.extractTextFromWord(blob);
+                                if (wordText && wordText.trim().length > 50) {
+                                    allTexts.push('--- Datei: ' + doc.name + ' ---\n' + wordText.substring(0, 10000));
+                                }
                             }
                         } else if (doc.text) {
                             allTexts.push('--- Datei: ' + (doc.name || 'Unbekannt') + ' ---\n' + doc.text.substring(0, 10000));
                         }
                     } catch(docErr) {
-                        console.warn('Ordner ' + ordnerNr + ': Fehler bei ' + doc.name, docErr.message);
+                        console.warn('  ❌ Ordner ' + ordnerNr + ': Fehler bei ' + doc.name + ':', docErr.message);
                     }
                 }
+
+                console.log('📂 Ordner', ordnerNr, ':', allTexts.length, 'Texte extrahiert von', dokumente.length, 'Dokumenten');
 
                 if (allTexts.length === 0) {
                     return {
                         status: 'completed', ordnerNr: ordnerNr, ordnerName: ordnerName,
                         ergebnis: {}, dokumenteAnalysiert: 0, analyseDauer: (Date.now() - startTime) / 1000,
-                        warnhinweise: ['Keine analysierbaren Dokumente im Ordner gefunden.']
+                        warnhinweise: ['Keine analysierbaren Dokumente im Ordner gefunden. (' + dokumente.length + ' Dateien vorhanden, aber kein Text extrahierbar)']
                     };
                 }
 
                 var fullText = allTexts.join('\n\n');
                 if (onProgress) onProgress(ordnerName + ': KI analysiert ' + allTexts.length + ' Dokumente...');
+                console.log('🤖 Sende an Gemini:', ordnerName, '—', fullText.length, 'Zeichen');
 
                 var apiResult = await window.callGeminiAPI([
                     { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
                 ], 8000);
 
-                if (!apiResult) throw new Error('Keine KI-Antwort');
+                if (!apiResult) throw new Error('Keine KI-Antwort — API Key gesetzt?');
 
                 var cleaned = apiResult.replace(/```json|```/g, '').trim();
-                var parsed = JSON.parse(cleaned);
+                var parsed;
+                try { parsed = JSON.parse(cleaned); } catch(parseErr) {
+                    console.warn('⚠️ JSON-Parse fehlgeschlagen, versuche Extraktion...', cleaned.substring(0, 200));
+                    var jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+                    else throw new Error('KI-Antwort konnte nicht als JSON geparst werden');
+                }
+                console.log('✅ Ordner', ordnerNr, 'analysiert:', JSON.stringify(parsed).substring(0, 200) + '...');
 
                 var result = {
                     status: 'completed',
@@ -1961,12 +2020,11 @@
                     fehler: []
                 };
 
-                // In IndexedDB speichern
                 await window.OrdnerAnalyseDB.saveOrdnerAnalyse(kundenId, ordnerNr, result);
                 return result;
 
             } catch(err) {
-                console.error('OrdnerAnalyse ' + ordnerNr + ' Fehler:', err);
+                console.error('❌ OrdnerAnalyse ' + ordnerNr + ' Fehler:', err);
                 var errorResult = {
                     status: 'error',
                     ordnerNr: ordnerNr,
@@ -2064,21 +2122,48 @@
         analyzeKunde: async function(kundenId, kundeName, driveFolderId, onProgress) {
             var self = this;
             var startTime = Date.now();
+            console.log('═══════════════════════════════════════');
+            console.log('🤖 ORDNERANALYSE GESTARTET');
+            console.log('  Kunde:', kundeName);
+            console.log('  Drive-Folder-ID:', driveFolderId);
+            console.log('  Gemini API Key:', (localStorage.getItem('gemini_api_key') || '').substring(0, 8) + '...');
+            console.log('═══════════════════════════════════════');
             if (onProgress) onProgress({ phase: 'start', message: 'Ordnerstruktur wird geladen...' });
 
             try {
                 // 1. Ordnerinhalt laden
                 var contents = await window.GoogleDriveService.listFolderContents(driveFolderId);
                 var folders = contents.folders || [];
+                console.log('📁 ' + folders.length + ' Unterordner gefunden:', folders.map(function(f) { return '"' + f.name + '" (' + (f.files||[]).length + ' Dateien)'; }).join(', '));
+                if (contents.files && contents.files.length > 0) {
+                    console.log('📄 ' + contents.files.length + ' Root-Dateien:', contents.files.map(function(f) { return f.name; }).join(', '));
+                }
 
                 // 2. Ordner → Typ zuordnen
                 var ordnerMap = {};
+                console.log('\n🔍 Ordner-Zuordnung:');
                 folders.forEach(function(folder) {
                     var typ = self.mapDriveFolderToOrdner(folder.name);
                     if (typ) {
                         ordnerMap[typ] = { folder: folder, files: folder.files || [] };
                     }
                 });
+
+                var mappedCount = Object.keys(ordnerMap).length;
+                console.log('\n📊 Ergebnis: ' + mappedCount + '/' + folders.length + ' Ordner zugeordnet');
+                if (mappedCount === 0) {
+                    console.warn('⚠️ KEIN ORDNER KONNTE ZUGEORDNET WERDEN!');
+                    console.log('Tipp: Ordner müssen Nummern (1-8) oder Schlüsselwörter im Namen haben.');
+                    if (onProgress) onProgress({ phase: 'done', message: '⚠️ Keine Ordner erkannt. Ordner müssen Nummern (1-8) oder Schlüsselwörter enthalten: baustellenauswertung, angebot/lv, zeichnung, stunden, schriftverkehr, rechnung, lieferant, aufmaß' });
+                    // Trotzdem Meta speichern
+                    await window.OrdnerAnalyseDB.saveMeta(kundenId, {
+                        kundeName: kundeName, driveFolderId: driveFolderId, status: 'completed',
+                        ordnerGefunden: 0, ordnerAnalysiert: 0, gesamtDokumente: 0,
+                        startZeitpunkt: new Date().toISOString(), abschlussZeitpunkt: new Date().toISOString(),
+                        hinweis: 'Keine Ordner konnten zugeordnet werden. Benennung prüfen.'
+                    });
+                    return { analyseErgebnisse: {}, crossRef: { zusammenfassung: {} }, meta: await window.OrdnerAnalyseDB.getMeta(kundenId) };
+                }
 
                 // 3. Meta speichern
                 var totalDocs = Object.values(ordnerMap).reduce(function(s, o) { return s + o.files.length; }, 0);
