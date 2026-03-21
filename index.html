@@ -6429,6 +6429,7 @@
             const [mode, setMode] = useState('komplett'); // 'komplett' | 'ordner'
             const [selectedFolders, setSelectedFolders] = useState({});
             const [includeRootFiles, setIncludeRootFiles] = useState(true);
+            const [kiModelPref, setKiModelPref] = useState(localStorage.getItem('gemini_model_pref') || 'pro');
 
             // Ordner aus dem Kunden-Objekt
             var folders = (kunde.folders || []);
@@ -6480,6 +6481,8 @@
             }
 
             var handleStart = function() {
+                console.log('🔵 handleStart aufgerufen, mode:', mode, 'selectedFiles:', selectedFiles);
+                window._kiDisabled = false; // Sicherstellen dass KI aktiv ist!
                 if (mode === 'komplett') {
                     onStart({ mode: 'komplett', selectedFolders: null, includeRootFiles: true });
                 } else {
@@ -6583,10 +6586,11 @@
                         <div style={{display:'flex', gap:'4px'}}>
                             {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
                                 var m = GEMINI_CONFIG.MODELS[key];
-                                var isActive = (localStorage.getItem('gemini_model_pref') || 'pro') === key;
+                                var isActive = kiModelPref === key;
                                 return (
                                     <button key={key} onClick={function(){
                                         localStorage.setItem('gemini_model_pref', key);
+                                        setKiModelPref(key);
                                     }} style={{
                                         flex:1, padding:'10px 6px', borderRadius:'10px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
                                         background: isActive ? m.color + '18' : 'var(--bg-tertiary)',
@@ -6624,10 +6628,10 @@
                             ← Zurück
                         </button>
                         <button onClick={handleStart}
-                            disabled={mode === 'ordner' && selectedCount === 0 && !includeRootFiles}
-                            style={{flex:1, padding:'12px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700', color:'white',
-                                background: (mode === 'ordner' && selectedCount === 0 && !includeRootFiles) ? '#ccc' : 'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
-                                boxShadow:'0 4px 12px rgba(30,136,229,0.3)'}}>
+                            style={{flex:1, padding:'14px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white',
+                                background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
+                                boxShadow:'0 4px 12px rgba(30,136,229,0.3)',
+                                opacity: (mode === 'ordner' && selectedCount === 0 && !includeRootFiles) ? 0.4 : 1}}>
                             🤖 Analyse starten ({selectedFiles} Dateien)
                         </button>
                     </div>
@@ -15987,6 +15991,7 @@
 
             // ═══ ANALYSE MIT CONFIG: Wird vom AnalyseKonfiguration-Screen aufgerufen ═══
             const handleLoadAkteWithConfig = async (config) => {
+                window._kiDisabled = false; // Safety-Reset
                 var kunde = selectedKunde;
                 if (!kunde) {
                     alert('Kein Kunde ausgewählt. Bitte zuerst einen Kunden laden.');
