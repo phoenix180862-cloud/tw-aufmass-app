@@ -15903,32 +15903,57 @@
             // ═══ ANALYSE MIT CONFIG: Wird vom AnalyseKonfiguration-Screen aufgerufen ═══
             const handleLoadAkteWithConfig = async (config) => {
                 var kunde = selectedKunde;
-                if (!kunde) return;
+                if (!kunde) {
+                    alert('Kein Kunde ausgewählt. Bitte zuerst einen Kunden laden.');
+                    return;
+                }
 
+                console.log('🤖 handleLoadAkteWithConfig gestartet', { mode: kundeMode, hasDriveId: !!kunde._driveFolderId, config });
                 setLoading(true);
                 navigateTo('akte');
 
-                if (kundeMode === 'neu') {
-                    setLoadProgress('🤖 KI-Ordneranalyse läuft...');
-                } else {
-                    setLoadProgress('Dateien werden analysiert (ohne KI)...');
+                // KI-Modus bestimmen
+                var useKI = (kundeMode === 'neu');
+                if (!useKI) {
                     window._kiDisabled = true;
+                    setLoadProgress('Dateien werden analysiert (ohne KI)...');
+                } else {
+                    window._kiDisabled = false;
+                    setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
                 }
 
                 try {
                     var result;
-                    if (kundeMode === 'neu' && kunde._driveFolderId) {
-                        // ═══ NEU: Ordner-basierte KI-Analyse ═══
-                        result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
-                            kunde,
-                            function(p) {
-                                if (p && p.message) setLoadProgress('🤖 ' + p.message);
-                            }
-                        );
-                        // OrdnerAnalyse-Meta aktualisieren
-                        setOrdnerAnalyseMeta(result.meta || null);
+
+                    if (useKI && kunde._driveFolderId) {
+                        // ═══ NEUE Ordner-basierte KI-Analyse ═══
+                        console.log('🤖 Starte OrdnerAnalyseEngine für', kunde.name);
+                        setLoadProgress('🤖 Ordnerstruktur wird geladen...');
+                        try {
+                            result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
+                                kunde,
+                                function(p) {
+                                    if (p && p.message) {
+                                        console.log('📊 Fortschritt:', p.message);
+                                        setLoadProgress('🤖 ' + p.message);
+                                    }
+                                }
+                            );
+                            setOrdnerAnalyseMeta(result.meta || null);
+                            console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen');
+                        } catch(oaErr) {
+                            console.warn('⚠️ OrdnerAnalyse fehlgeschlagen, Fallback auf FileProcessor:', oaErr.message);
+                            setLoadProgress('⚠️ Ordneranalyse fehlgeschlagen — Fallback-Analyse...');
+                            // Fallback: Alter FileProcessor
+                            result = await window.FileProcessor.processKundenAkte(
+                                kunde,
+                                function(msg) { setLoadProgress('🔄 ' + msg); },
+                                config
+                            );
+                        }
                     } else {
-                        // Fallback: alter FileProcessor (Offline / ohne Drive)
+                        // ═══ Fallback: alter FileProcessor ═══
+                        console.log('📄 Starte FileProcessor (kein Drive oder Offline)');
                         result = await window.FileProcessor.processKundenAkte(
                             kunde,
                             function(msg) { setLoadProgress(msg); },
@@ -15936,9 +15961,8 @@
                         );
                     }
 
-                    if (kundeMode !== 'neu') {
-                        window._kiDisabled = false;
-                    }
+                    // KI wieder aktivieren
+                    window._kiDisabled = false;
 
                     // Positionen in LV_POSITIONEN injizieren
                     if (result.positionen && result.positionen.length > 0) {
@@ -16203,10 +16227,15 @@
                         return <AnalyseKonfiguration
                             kunde={selectedKunde}
                             onStart={function(config) {
-                                setAnalyseConfig(config);
-                                navigateTo('akte');
-                                // Analyse direkt starten mit Config
-                                handleLoadAkteWithConfig(config);
+                                console.log('🔵 Analyse-Button geklickt, Config:', config);
+                                try {
+                                    setAnalyseConfig(config);
+                                    navigateTo('akte');
+                                    handleLoadAkteWithConfig(config);
+                                } catch(startErr) {
+                                    console.error('❌ Analyse-Start Fehler:', startErr);
+                                    alert('Fehler beim Start der Analyse:\n' + startErr.message);
+                                }
                             }}
                             onBack={function(){ navigateTo('auswahl'); }}
                         />;
