@@ -1053,125 +1053,39 @@
             };
 
             // ══════════════════════════════════════════════
-            // STRATEGIE: KI ZUERST (Online) → Regex NUR als Fallback (Offline)
+            // NUR REGEX-ANALYSE: KI-Analyse erfolgt zentral über OrdnerAnalyseEngine
+            // FileProcessor dient nur noch als Offline-Regex-Fallback
             // ══════════════════════════════════════════════
 
-            if (this.isOnline()) {
-                // ═══ ONLINE: KI macht die Hauptarbeit ═══
-                result.aiVerfuegbar = true;
-                if (onProgress) onProgress('KI-Analyse läuft (optimale Erkennung)...');
+            if (onProgress) onProgress('PDF wird analysiert (Regex)...');
+            var text = await this.extractPdfText(pdfBlob);
 
-                try {
-                    // Direkter PDF-Upload an Claude → beste Qualität
-                    var aiResult = await this.parseLvAIFromPdf(pdfBlob);
-
-                    if (aiResult && aiResult.positionen && aiResult.positionen.length > 0) {
-                        result.positionen = aiResult.positionen.map(function(p) {
-                            return {
-                                pos: String(p.pos || ''),
-                                bez: String(p.bez || ''),
-                                einheit: String(p.einheit || '?'),
-                                menge: Number(p.menge) || 0,
-                                bereich: String(p.bereich || 'Allgemein'),
-                                kategorie: String(p.kategorie || 'allgemein'),
-                                tags: Array.isArray(p.tags) ? p.tags : [],
-                                quelle: 'ki'
-                            };
-                        });
-                        result.quelle = 'ki';
-                        if (aiResult.kundendaten) result.kundendaten = aiResult.kundendaten;
-                        if (aiResult.raeume && aiResult.raeume.length > 0) result.raeume = aiResult.raeume;
-
-                        if (onProgress) onProgress('KI: ' + result.positionen.length + ' Positionen erkannt ✓');
-                        return result;
-                    }
-                } catch (err) {
-                    console.warn('KI PDF-Analyse fehlgeschlagen:', err.message);
-                }
-
-                // KI-PDF hat nichts geliefert → Text extrahieren und KI nochmal mit Text versuchen
-                if (onProgress) onProgress('KI-Textanalyse als Fallback...');
-                try {
-                    var text = await this.extractPdfText(pdfBlob);
-                    if (text && text.trim().length > 50) {
-                        var aiTextResult = await this.parseLvAI(text, []);
-                        if (aiTextResult && aiTextResult.length > 0) {
-                            result.positionen = aiTextResult;
-                            result.quelle = 'ki-text';
-                            if (onProgress) onProgress('KI-Text: ' + result.positionen.length + ' Positionen erkannt ✓');
-                            return result;
-                        }
-                    }
-                } catch (err2) {
-                    console.warn('KI Text-Analyse fehlgeschlagen:', err2.message);
-                }
-
-                // KI komplett fehlgeschlagen → Volle Regex-Analyse als Fallback
-                if (onProgress) onProgress('KI nicht verfügbar – Regex-Analyse...');
-                var text2 = text || await this.extractPdfText(pdfBlob);
-
-                // 1. Positionen
-                var regexResult = this.parseLvRegex(text2);
-                if (regexResult.length > 0) {
-                    result.positionen = regexResult;
-                    result.quelle = 'regex-fallback';
-                }
-
-                // 2. Kundendaten
-                result.kundendaten = this.parseKundendatenRegex(text2);
-
-                // 3. Räume
-                var fallbackRaeume = this.parseRaeumeRegex(text2);
-                result.raeume = fallbackRaeume;
-
-                // 4. Bereiche als zusätzliche Räume
-                var bereiche = {};
-                regexResult.forEach(function(p) {
-                    if (p.bereich && p.bereich !== 'Allgemein') bereiche[p.bereich] = true;
-                });
-                Object.keys(bereiche).forEach(function(b) {
-                    var exists = result.raeume.some(function(r) { return r.bez.toLowerCase() === b.toLowerCase(); });
-                    if (!exists) {
-                        result.raeume.push({ nr: '', bez: b, geschoss: '', quelle: 'lv-bereich', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
-                    }
-                });
-
-                if (onProgress) onProgress('Regex: ' + result.positionen.length + ' Positionen, ' + result.raeume.length + ' Räume');
-
-            } else {
-                // ═══ OFFLINE: Volle Regex-Analyse ═══
-                if (onProgress) onProgress('Offline-Modus: PDF wird analysiert...');
-                var offlineText = await this.extractPdfText(pdfBlob);
-
-                // 1. LV-Positionen
-                if (onProgress) onProgress('Offline: Positionen werden erkannt...');
-                var offlineResult = this.parseLvRegex(offlineText);
-                result.positionen = offlineResult;
-                result.quelle = 'regex-offline';
-
-                // 2. Kundendaten aus Text
-                if (onProgress) onProgress('Offline: Kundendaten werden gesucht...');
-                result.kundendaten = this.parseKundendatenRegex(offlineText);
-
-                // 3. Räume aus Text
-                if (onProgress) onProgress('Offline: Räume werden erkannt...');
-                var offlineRaeume = this.parseRaeumeRegex(offlineText);
-                result.raeume = offlineRaeume;
-
-                // 4. Bereiche als zusätzliche Räume
-                var offlineBereiche = {};
-                offlineResult.forEach(function(p) {
-                    if (p.bereich && p.bereich !== 'Allgemein') offlineBereiche[p.bereich] = true;
-                });
-                Object.keys(offlineBereiche).forEach(function(b) {
-                    var exists = result.raeume.some(function(r) { return r.bez.toLowerCase() === b.toLowerCase(); });
-                    if (!exists) {
-                        result.raeume.push({ nr: '', bez: b, geschoss: '', quelle: 'lv-bereich', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
-                    }
-                });
-
-                if (onProgress) onProgress('Offline: ' + result.positionen.length + ' Positionen, ' + result.raeume.length + ' Räume, ' + Object.keys(result.kundendaten).length + ' Kontaktfelder');
+            // 1. LV-Positionen per Regex
+            var regexResult = this.parseLvRegex(text);
+            if (regexResult.length > 0) {
+                result.positionen = regexResult;
+                result.quelle = 'regex';
             }
+
+            // 2. Kundendaten per Regex
+            result.kundendaten = this.parseKundendatenRegex(text);
+
+            // 3. Räume per Regex
+            result.raeume = this.parseRaeumeRegex(text);
+
+            // 4. Bereiche als zusätzliche Räume
+            var bereiche = {};
+            regexResult.forEach(function(p) {
+                if (p.bereich && p.bereich !== 'Allgemein') bereiche[p.bereich] = true;
+            });
+            Object.keys(bereiche).forEach(function(b) {
+                var exists = result.raeume.some(function(r) { return r.bez.toLowerCase() === b.toLowerCase(); });
+                if (!exists) {
+                    result.raeume.push({ nr: '', bez: b, geschoss: '', quelle: 'lv-bereich', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
+                }
+            });
+
+            if (onProgress) onProgress('Regex: ' + result.positionen.length + ' Positionen, ' + result.raeume.length + ' Räume');
 
             return result;
         },
@@ -1517,19 +1431,7 @@
                             });
                         }
 
-                        // KI als Bonus wenn online (verbessert/ergänzt Regex-Ergebnis)
-                        if (this.isOnline()) {
-                            try {
-                                if (onProgress) onProgress(file.name + ': KI analysiert Räume...');
-                                var kiRaeume = await this.analyzeRaumblattPdf(pdfBlob, file.name);
-                                if (kiRaeume && kiRaeume.length > 0) {
-                                    mergeRaeume(kiRaeume);
-                                    processResult.quellenInfo.push({ datei: file.name, typ: 'raumblatt-ki', raeume: kiRaeume.length });
-                                }
-                            } catch (kiErr) {
-                                console.warn('KI-Raumanalyse fehlgeschlagen (Regex-Ergebnis wird verwendet):', kiErr.message);
-                            }
-                        }
+                        // KI-Raumanalyse entfernt — OrdnerAnalyseEngine ist einzige KI-Quelle
 
                         // Räume aus LV-Bereichen übernehmen (Fallback, immer)
                         if (lvResult.raeume && lvResult.raeume.length > 0) {
@@ -1575,117 +1477,15 @@
                             folderName: file.folderName || ''
                         });
 
-                        // ── KI-Analyse IMMER wenn online (KI-first Strategie) ──
-                        if (this.isOnline()) {
-                            if (onProgress) onProgress(file.name + ': KI erkennt Räume aus Zeichnung...');
-                            try {
-                                var imgRaeume = await this.analyzeDrawingForRooms(imgBlob, file.name);
-                                if (imgRaeume.length > 0) {
-                                    var existingKeys = {};
-                                    processResult.raeume.forEach(function(r) {
-                                        existingKeys[r.bez.toLowerCase().replace(/\s+/g, '')] = true;
-                                    });
-                                    imgRaeume.forEach(function(r) {
-                                        var key = r.bez.toLowerCase().replace(/\s+/g, '');
-                                        if (!existingKeys[key]) {
-                                            existingKeys[key] = true;
-                                            processResult.raeume.push(r);
-                                        } else {
-                                            // Merge: KI-Zeichnungsdaten in bestehenden Raum
-                                            var existing = processResult.raeume.find(function(er) {
-                                                return er.bez.toLowerCase().replace(/\s+/g, '') === key;
-                                            });
-                                            if (existing) {
-                                                if (r.waende && r.waende.some(function(w) { return w.l && w.l !== ''; })) {
-                                                    existing.waende = r.waende;
-                                                }
-                                                if (r.abzuege && r.abzuege.length > 0) existing.abzuege = r.abzuege;
-                                                if (r.fliesenhoehe) existing.fliesenhoehe = r.fliesenhoehe;
-                                                if (r.flaeche) existing.flaeche = r.flaeche;
-                                                if (r.material) existing.material = r.material;
-                                                existing.zeichnung = file.name;
-                                                existing.quelle = (existing.quelle || '') + ' + Zeichnung';
-                                            }
-                                        }
-                                    });
-                                    processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung-analyse', raeume: imgRaeume.length });
-                                }
-                            } catch (imgErr) {
-                                console.warn('Zeichnungsanalyse fehlgeschlagen für ' + file.name + ':', imgErr.message);
-                            }
-                        }
+                        // KI-Zeichnungsanalyse entfernt — OrdnerAnalyseEngine ist einzige KI-Quelle
 
                         processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung' });
                         imgCount++;
                     }
 
-                    // ── Word-Dokumente: Kundendaten, Räume, Kontakte per KI extrahieren ──
-                    if (file.type === 'doc' && file.id && this.isOnline()) {
-                        if (onProgress) onProgress(file.name + ': Word-Dokument wird analysiert...');
-                        try {
-                            var docBlob = await window.GoogleDriveService.downloadFile(file.id);
-                            var docBase64 = await this.pdfToBase64(docBlob);
-                            // Word-Docs an KI senden zur Kontaktdaten-Extraktion
-                            var docText = await window.callAnthropicAPI([{
-                                        role: 'user',
-                                        content: [
-                                            { type: 'document', source: { type: 'base64', media_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data: docBase64 } },
-                                            { type: 'text', text: 'Analysiere dieses Dokument und extrahiere alle Kontakt- und Projektdaten.\n\nAntworte NUR mit JSON (kein Markdown):\n{"kundendaten":{"auftraggeber":"","ag_adresse":"","ag_telefon":"","ag_email":"","adresse":"","baumassnahme":"","bauleitung":"","bl_adresse":"","bl_telefon":"","bl_email":"","architekt":"","arch_adresse":"","arch_telefon":"","arch_email":""},"raeume":["Raum1","Raum2"]}\n\nExtrahiere ALLE Kontaktdaten die du findest: Namen, Firmen, Adressen, Telefonnummern, E-Mail-Adressen, Faxnummern. Ordne sie den richtigen Rollen zu (Auftraggeber/Bauherr, Bauleitung, Architekt/Planer). Leere Felder weglassen.' }
-                                        ]
-                                    }], 4000);
-                            if (docText) {
-                                var docCleaned = docText.replace(/```json|```/g, '').trim();
-                                try {
-                                    var docParsed = JSON.parse(docCleaned);
-                                    if (docParsed.kundendaten) {
-                                        Object.keys(docParsed.kundendaten).forEach(function(key) {
-                                            if (docParsed.kundendaten[key] && !processResult.kundendaten[key]) {
-                                                processResult.kundendaten[key] = docParsed.kundendaten[key];
-                                            }
-                                        });
-                                    }
-                                    if (docParsed.raeume && docParsed.raeume.length > 0) {
-                                        docParsed.raeume.forEach(function(r) {
-                                            var rName = typeof r === 'string' ? r : (r.bez || '');
-                                            if (rName) processResult.raeume.push({ nr: '', bez: rName, geschoss: '', quelle: 'word-doc', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
-                                        });
-                                    }
-                                    processResult.quellenInfo.push({ datei: file.name, typ: 'word' });
-                                } catch(je) { console.warn('Word JSON parse:', je.message); }
-                            }
-                        } catch (docErr) {
-                            console.warn('Word-Analyse fehlgeschlagen:', file.name, docErr.message);
-                            processResult.fehler.push({ datei: file.name, fehler: 'Word: ' + docErr.message });
-                        }
-                    }
-
-                    // ── Sonstige Dateien: an KI senden wenn online (E-Mails etc.) ──
-                    if (file.type === 'sonstige' && file.id && this.isOnline()) {
-                        var sonstName = (file.name || '').toLowerCase();
-                        // E-Mails (.eml, .msg) oder Textdateien mit Kontaktdaten
-                        if (sonstName.match(/\.(eml|msg|txt|rtf)$/)) {
-                            if (onProgress) onProgress(file.name + ': wird auf Kontaktdaten untersucht...');
-                            try {
-                                var sonstBlob = await window.GoogleDriveService.downloadFile(file.id);
-                                var sonstText = await sonstBlob.text();
-                                if (sonstText && sonstText.length > 20 && sonstText.length < 50000) {
-                                    var sonstContent = await window.callAnthropicAPI([{ role: 'user', content: 'Extrahiere Kontaktdaten aus diesem Text (E-Mail/Dokument). Antworte NUR mit JSON:\n{"kundendaten":{"auftraggeber":"","ag_adresse":"","ag_telefon":"","ag_email":"","bauleitung":"","bl_telefon":"","bl_email":"","architekt":"","arch_telefon":"","arch_email":""}}\nNur befuellte Felder! Text:\n' + sonstText.substring(0, 15000) }], 2000);
-                                    if (sonstContent) {
-                                        try {
-                                            var sonstParsed = JSON.parse(sonstContent.replace(/```json|```/g, '').trim());
-                                            if (sonstParsed.kundendaten) {
-                                                Object.keys(sonstParsed.kundendaten).forEach(function(key) {
-                                                    if (sonstParsed.kundendaten[key] && !processResult.kundendaten[key]) {
-                                                        processResult.kundendaten[key] = sonstParsed.kundendaten[key];
-                                                    }
-                                                });
-                                            }
-                                            processResult.quellenInfo.push({ datei: file.name, typ: 'kontakte' });
-                                        } catch(se) {}
-                                    }
-                                }
-                            } catch(sonstErr) { /* still not critical */ }
-                        }
+                    // Word- und sonstige Dateien: KI entfernt — OrdnerAnalyseEngine analysiert diese zentral
+                    if (file.type === 'doc' && file.id) {
+                        processResult.quellenInfo.push({ datei: file.name, typ: 'word-skipped' });
                     }
 
                 } catch (err) {
@@ -15957,10 +15757,10 @@
                     }
                 }
 
-                // ═══ AUS DRIVE LADEN: Zuerst Ordnerstruktur laden, dann Config-Screen ═══
+                // ═══ AUS DRIVE LADEN: Ordnerstruktur laden → DIREKT OrdnerAnalyse starten ═══
                 if (isDriveMode && kunde.id && !kunde.files) {
                     setLoading(true);
-                    setLoadProgress('Ordnerinhalt wird geladen...');
+                    setLoadProgress('📂 Ordnerinhalt wird geladen...');
                     navigateTo('akte');
                     try {
                         const contents = await window.GoogleDriveService.listFolderContents(kunde.id);
@@ -15974,11 +15774,78 @@
                             _driveFolderId: kunde.id,
                         };
                         setSelectedKunde(enriched);
+
+                        // ═══ DIREKT: OrdnerAnalyse automatisch starten (Skill-konform: einmalig, automatisch) ═══
+                        window._kiDisabled = false;
+                        setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
+                        console.log('🤖 Auto-Start OrdnerAnalyse für', enriched.name);
+
+                        try {
+                            var result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
+                                enriched,
+                                function(p) {
+                                    if (p && p.message) {
+                                        console.log('📊 Fortschritt:', p.message);
+                                        setLoadProgress('🤖 ' + p.message);
+                                    }
+                                }
+                            );
+                            setOrdnerAnalyseMeta(result.meta || null);
+                            console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen');
+
+                            // Positionen in LV_POSITIONEN injizieren
+                            if (result.positionen && result.positionen.length > 0) {
+                                var kundeKey = enriched._driveFolderId || enriched.id || 'drive_import';
+                                LV_POSITIONEN[kundeKey] = result.positionen;
+                            }
+
+                            // Kundendaten mergen
+                            var kd = result.kundendaten || {};
+                            var vt = result.vertrag || {};
+                            var fullyLoaded = Object.assign({}, enriched, {
+                                auftraggeber: kd.auftraggeber || enriched.auftraggeber || enriched.name,
+                                adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
+                                baumassnahme: kd.baumassnahme || enriched.baumassnahme || '',
+                                bauleitung: kd.bauleitung || enriched.bauleitung || '',
+                                bl_adresse: kd.bl_adresse || '', bl_telefon: kd.bl_telefon || '', bl_email: kd.bl_email || '',
+                                architekt: kd.architekt || enriched.architekt || '',
+                                arch_adresse: kd.arch_adresse || '', arch_telefon: kd.arch_telefon || '', arch_email: kd.arch_email || '',
+                                ag_adresse: kd.ag_adresse || '', ag_telefon: kd.ag_telefon || '', ag_email: kd.ag_email || '',
+                                vertrag: vt.auftraggeber ? vt : {},
+                                raeume: (result.raeume || []).map(function(r, idx) {
+                                    if (typeof r === 'string') return { id: 'oa_' + idx, nr: String(idx+1), bez: r, geschoss: '', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] };
+                                    return Object.assign({ id: 'oa_' + idx }, r, { nr: r.nr || String(idx+1) });
+                                }),
+                                zeichnungen: result.zeichnungen || [],
+                                _importResult: result,
+                                _lvPositionenKey: enriched._driveFolderId || enriched.id,
+                                _fullyLoaded: true,
+                                _ordnerAnalyseCompleted: true,
+                            });
+                            setSelectedKunde(fullyLoaded);
+                            setImportResult(result);
+
+                            // Lokal speichern für "Kunde ANALYSIERT"
+                            try {
+                                var saveKey = 'aufmass_kunde_' + (enriched._driveFolderId || enriched.id || enriched.name || 'unknown');
+                                var toSave = Object.assign({}, fullyLoaded);
+                                delete toSave.folders; delete toSave.files;
+                                toSave._lvPositionen = result.positionen || [];
+                                toSave._gespeichertAm = new Date().toLocaleString('de-DE');
+                                toSave._ordnerAnalyseCompleted = true;
+                                localStorage.setItem(saveKey, JSON.stringify(toSave));
+                            } catch(saveErr) { console.warn('Speichern fehlgeschlagen:', saveErr.message); }
+
+                        } catch(oaErr) {
+                            console.error('❌ OrdnerAnalyse fehlgeschlagen:', oaErr.message);
+                            setLoadProgress('⚠️ Analyse fehlgeschlagen: ' + oaErr.message);
+                            // Trotzdem Kundendaten setzen
+                            setSelectedKunde(enriched);
+                        }
+
                         setLoading(false);
                         setLoadProgress('');
-
-                        // → Analyse-Konfiguration zeigen (Ordner-Auswahl)
-                        navigateTo('analyseConfig');
+                        navigateTo('modulwahl');
                         return;
 
                     } catch (err) {
@@ -15989,66 +15856,41 @@
                 }
             };
 
-            // ═══ ANALYSE MIT CONFIG: Wird vom AnalyseKonfiguration-Screen aufgerufen ═══
+            // ═══ ANALYSE: Wird bei Bedarf aufgerufen (z.B. Update oder Nachladen) ═══
             const handleLoadAkteWithConfig = async (config) => {
-                window._kiDisabled = false; // Safety-Reset
+                window._kiDisabled = false;
                 var kunde = selectedKunde;
                 if (!kunde) {
                     alert('Kein Kunde ausgewählt. Bitte zuerst einen Kunden laden.');
                     return;
                 }
 
-                console.log('🤖 handleLoadAkteWithConfig gestartet', { mode: kundeMode, hasDriveId: !!kunde._driveFolderId, config });
+                console.log('🤖 handleLoadAkteWithConfig gestartet — NUR OrdnerAnalyse', { hasDriveId: !!kunde._driveFolderId });
                 setLoading(true);
                 navigateTo('akte');
-
-                // KI-Modus bestimmen
-                var useKI = (kundeMode === 'neu');
-                if (!useKI) {
-                    window._kiDisabled = true;
-                    setLoadProgress('Dateien werden analysiert (ohne KI)...');
-                } else {
-                    window._kiDisabled = false;
-                    setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
-                }
+                setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
 
                 try {
                     var result;
 
-                    if (useKI && kunde._driveFolderId) {
-                        // ═══ NEUE Ordner-basierte KI-Analyse ═══
+                    if (kunde._driveFolderId) {
+                        // ═══ EINZIGER PFAD: OrdnerAnalyse-Engine (Skill-konform) ═══
                         console.log('🤖 Starte OrdnerAnalyseEngine für', kunde.name);
-                        setLoadProgress('🤖 Ordnerstruktur wird geladen...');
-                        try {
-                            result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
-                                kunde,
-                                function(p) {
-                                    if (p && p.message) {
-                                        console.log('📊 Fortschritt:', p.message);
-                                        setLoadProgress('🤖 ' + p.message);
-                                    }
-                                }
-                            );
-                            setOrdnerAnalyseMeta(result.meta || null);
-                            console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen');
-                        } catch(oaErr) {
-                            console.warn('⚠️ OrdnerAnalyse fehlgeschlagen, Fallback auf FileProcessor:', oaErr.message);
-                            setLoadProgress('⚠️ Ordneranalyse fehlgeschlagen — Fallback-Analyse...');
-                            // Fallback: Alter FileProcessor
-                            result = await window.FileProcessor.processKundenAkte(
-                                kunde,
-                                function(msg) { setLoadProgress('🔄 ' + msg); },
-                                config
-                            );
-                        }
-                    } else {
-                        // ═══ Fallback: alter FileProcessor ═══
-                        console.log('📄 Starte FileProcessor (kein Drive oder Offline)');
-                        result = await window.FileProcessor.processKundenAkte(
+                        result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
                             kunde,
-                            function(msg) { setLoadProgress(msg); },
-                            config
+                            function(p) {
+                                if (p && p.message) {
+                                    console.log('📊 Fortschritt:', p.message);
+                                    setLoadProgress('🤖 ' + p.message);
+                                }
+                            }
                         );
+                        setOrdnerAnalyseMeta(result.meta || null);
+                        console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen');
+                    } else {
+                        // Kein Drive-Ordner → leeres Result
+                        console.warn('⚠️ Kein Drive-Ordner — keine Analyse möglich');
+                        result = { positionen: [], kundendaten: {}, raeume: [], zeichnungen: [], quellenInfo: [], vertrag: {} };
                     }
 
                     // KI wieder aktivieren
@@ -16314,21 +16156,9 @@
                             loadProgress={loadProgress}
                         />;
                     case 'analyseConfig':
-                        return <AnalyseKonfiguration
-                            kunde={selectedKunde}
-                            onStart={function(config) {
-                                console.log('🔵 Analyse-Button geklickt, Config:', config);
-                                try {
-                                    setAnalyseConfig(config);
-                                    navigateTo('akte');
-                                    handleLoadAkteWithConfig(config);
-                                } catch(startErr) {
-                                    console.error('❌ Analyse-Start Fehler:', startErr);
-                                    alert('Fehler beim Start der Analyse:\n' + startErr.message);
-                                }
-                            }}
-                            onBack={function(){ navigateTo('auswahl'); }}
-                        />;
+                        // AnalyseConfig entfernt — OrdnerAnalyse startet jetzt automatisch
+                        // Fallback: direkt zur ModulWahl
+                        return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} ordnerAnalyseMeta={ordnerAnalyseMeta} />;
                     case 'modulwahl':
                         return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} ordnerAnalyseMeta={ordnerAnalyseMeta} />;
                     case 'ordnerAnalyse':
