@@ -495,7 +495,10 @@
             if (mimeType === 'application/pdf' || (name && name.endsWith('.pdf'))) return 'pdf';
             if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || (name && (name.endsWith('.xlsx') || name.endsWith('.xls')))) return 'xlsx';
             if (mimeType.includes('image')) return 'img';
-            if (mimeType.includes('word') || mimeType.includes('document') || (name && (name.endsWith('.docx') || name.endsWith('.doc')))) return 'doc';
+            // Google Docs (cloud-native) → eigener Typ, braucht Export statt Download
+            if (mimeType === 'application/vnd.google-apps.document') return 'gdoc';
+            if (mimeType === 'application/vnd.google-apps.spreadsheet') return 'gsheet';
+            if (mimeType.includes('word') || (name && (name.endsWith('.docx') || name.endsWith('.doc')))) return 'doc';
             return 'sonstige';
         },
 
@@ -574,6 +577,14 @@
                 'https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media'
             );
             return resp.blob();
+        },
+
+        // ── Google Docs/Sheets als Text exportieren ──
+        async exportAsText(fileId) {
+            const resp = await this._fetch(
+                'https://www.googleapis.com/drive/v3/files/' + fileId + '/export?mimeType=text/plain'
+            );
+            return resp.text();
         },
     };
 
@@ -1761,25 +1772,86 @@
                         // PDF-Dateien: Herunterladen + Text extrahieren
                         var isPdf = doc.type === 'pdf' || (doc.name && doc.name.toLowerCase().endsWith('.pdf'));
                         var isDoc = doc.type === 'doc' || (doc.name && (doc.name.toLowerCase().endsWith('.docx') || doc.name.toLowerCase().endsWith('.doc')));
+                        var isGDoc = doc.type === 'gdoc';
+                        var isGSheet = doc.type === 'gsheet';
+                        var isXlsx = doc.type === 'xlsx';
 
-                        if ((isPdf || isDoc) && doc.id) {
-                            console.log('  📄 Lade Datei:', doc.name, '(Typ:', doc.type, ')');
+                        if (isPdf && doc.id) {
+                            // ── PDF: Herunterladen + pdf.js Text-Extraktion ──
+                            console.log('  📄 Lade PDF:', doc.name);
                             if (onProgress) onProgress(ordnerName + ': Lade ' + doc.name + '...');
                             var blob = await window.GoogleDriveService.downloadFile(doc.id);
-                            if (isPdf) {
-                                var text = await window.FileProcessor.extractTextFromPDF(blob);
-                                if (text && text.trim().length > 50) {
-                                    allTexts.push('--- Datei: ' + doc.name + ' ---\n' + text.substring(0, 15000));
-                                    console.log('  ✅', doc.name, '→', text.length, 'Zeichen extrahiert');
-                                } else {
-                                    console.log('  ⚠️', doc.name, '→ Kein/wenig Text extrahiert');
-                                }
-                            } else if (isDoc && window.FileProcessor.extractTextFromWord) {
-                                var wordText = await window.FileProcessor.extractTextFromWord(blob);
-                                if (wordText && wordText.trim().length > 50) {
-                                    allTexts.push('--- Datei: ' + doc.name + ' ---\n' + wordText.substring(0, 10000));
-                                }
+                            var text = await window.FileProcessor.extractPdfText(blob);
+                            if (text && text.trim().length > 50) {
+                                allTexts.push('--- Datei: ' + doc.name + ' ---\n' + text.substring(0, 15000));
+                                console.log('  ✅', doc.name, '→', text.length, 'Zeichen extrahiert');
+                            } else {
+                                console.log('  ⚠️', doc.name, '→ Kein/wenig Text extrahiert (' + (text || '').length + ' Zeichen)');
                             }
+                        } else if (isGDoc && doc.id) {
+                            // ── Google Doc: Als Text exportieren ──
+                            console.log('  📝 Exportiere Google Doc:', doc.name);
+                            if (onProgress) onProgress(ordnerName + ': Exportiere ' + doc.name + '...');
+                            try {
+                                var gdocText = await window.GoogleDriveService.exportAsText(doc.id);
+                                if (gdocText && gdocText.trim().length > 50) {
+                                    allTexts.push('--- Datei: ' + doc.name + ' ---\n' + gdocText.substring(0, 15000));
+                                    console.log('  ✅', doc.name, '→', gdocText.length, 'Zeichen exportiert');
+                                }
+                            } catch(gdocErr) {
+                                console.warn('  ⚠️ Google Doc Export fehlgeschlagen:', doc.name, gdocErr.message);
+                            }
+                        } else if (isGSheet && doc.id) {
+                            // ── Google Sheet: Als Text exportieren ──
+                            console.log('  📊 Exportiere Google Sheet:', doc.name);
+                            try {
+                                var gsheetText = await window.GoogleDriveService.exportAsText(doc.id);
+                                if (gsheetText && gsheetText.trim().length > 20) {
+                                    allTexts.push('--- Datei: ' + doc.name + ' (Tabelle) ---\n' + gsheetText.substring(0, 15000));
+                                    console.log('  ✅', doc.name, '→', gsheetText.length, 'Zeichen exportiert');
+                                }
+                            } catch(gsErr) { console.warn('  ⚠️ Sheet Export:', doc.name, gsErr.message); }
+                        } else if (isXlsx && doc.id) {
+                            // ── Excel: Herunterladen + SheetJS Text-Extraktion ──
+                            console.log('  📊 Lade Excel:', doc.name);
+                            try {
+                                var xlBlob = await window.GoogleDriveService.downloadFile(doc.id);
+                                var xlArray = await xlBlob.arrayBuffer();
+                                var xlData = new Uint8Array(xlArray);
+                                if (typeof XLSX !== 'undefined') {
+                                    var wb = XLSX.read(xlData, { type: 'array' });
+                                    var xlTexts = [];
+                                    wb.SheetNames.forEach(function(sn) {
+                                        var csv = XLSX.utils.sheet_to_csv(wb.Sheets[sn]);
+                                        if (csv && csv.trim().length > 20) xlTexts.push('Sheet "' + sn + '":\n' + csv);
+                                    });
+                                    if (xlTexts.length > 0) {
+                                        allTexts.push('--- Datei: ' + doc.name + ' ---\n' + xlTexts.join('\n\n').substring(0, 10000));
+                                        console.log('  ✅', doc.name, '→ Excel mit', wb.SheetNames.length, 'Sheets extrahiert');
+                                    }
+                                }
+                            } catch(xlErr) { console.warn('  ⚠️ Excel-Extraktion:', doc.name, xlErr.message); }
+                        } else if (isDoc && doc.id) {
+                            // ── Word: Versuche Herunterladen + einfache Text-Extraktion ──
+                            console.log('  📝 Lade Word:', doc.name);
+                            try {
+                                var wordBlob = await window.GoogleDriveService.downloadFile(doc.id);
+                                // Einfache Extraktion: .docx ist ZIP → XML-Text rausziehen
+                                var wordArray = await wordBlob.arrayBuffer();
+                                var wordView = new Uint8Array(wordArray);
+                                // Prüfe ob es ein ZIP ist (docx = ZIP)
+                                if (wordView[0] === 0x50 && wordView[1] === 0x4B) {
+                                    // Einfacher Text-Extraktor für .docx: XML-Tags entfernen
+                                    var rawText = new TextDecoder('utf-8', { fatal: false }).decode(wordView);
+                                    var textContent = rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                                    // Nur sichtbare Wörter behalten
+                                    var cleanWords = textContent.split(' ').filter(function(w) { return w.length > 1 && /[a-zA-ZäöüÄÖÜß0-9]/.test(w); });
+                                    if (cleanWords.length > 20) {
+                                        allTexts.push('--- Datei: ' + doc.name + ' ---\n' + cleanWords.join(' ').substring(0, 10000));
+                                        console.log('  ✅', doc.name, '→', cleanWords.length, 'Wörter extrahiert (einfach)');
+                                    }
+                                }
+                            } catch(wordErr) { console.warn('  ⚠️ Word-Extraktion:', doc.name, wordErr.message); }
                         } else if (doc.text) {
                             allTexts.push('--- Datei: ' + (doc.name || 'Unbekannt') + ' ---\n' + doc.text.substring(0, 10000));
                         }
