@@ -16074,7 +16074,7 @@
             const handleSelectModul = (modulId) => {
                 switch(modulId) {
                     case 'aufmass':
-                        navigateTo('geladen');
+                        handleStartAufmass(); // → raumerkennung (NICHT zurück zu geladen!)
                         break;
                     case 'rechnung':
                         navigateTo('rechnung');
