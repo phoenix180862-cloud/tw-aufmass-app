@@ -169,14 +169,23 @@
                 }
             }
 
-            // Anthropic-Messages → Gemini-Parts konvertieren
+            // Anthropic-Messages UND Gemini-Messages → Gemini-Parts konvertieren
             if (messages && messages.length > 0) {
                 for (var mi = 0; mi < messages.length; mi++) {
                     var msg = messages[mi];
-                    if (typeof msg.content === 'string') {
+
+                    // ── FORMAT 1: Gemini-native (msg.parts) — von OrdnerAnalyseEngine ──
+                    if (msg.parts && Array.isArray(msg.parts)) {
+                        for (var pi = 0; pi < msg.parts.length; pi++) {
+                            parts.push(msg.parts[pi]);
+                        }
+                    }
+                    // ── FORMAT 2: Anthropic string (msg.content = string) ──
+                    else if (typeof msg.content === 'string') {
                         parts.push({ text: msg.content });
-                    } else if (Array.isArray(msg.content)) {
-                        // Anthropic multimodal format: [{type:'text',...}, {type:'image',...}, {type:'document',...}]
+                    }
+                    // ── FORMAT 3: Anthropic multimodal (msg.content = array) ──
+                    else if (Array.isArray(msg.content)) {
                         for (var ci = 0; ci < msg.content.length; ci++) {
                             var block = msg.content[ci];
                             if (block.type === 'text') {
@@ -2166,6 +2175,18 @@
             box-sizing: border-box;
         }
 
+        /* ── GLOBALE BUTTON TOUCH-OPTIMIERUNG ── */
+        button {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        button:active {
+            transform: scale(0.97);
+            transition: transform 0.05s ease;
+        }
+
         :root {
             --bg-primary: #1a2332;
             --bg-secondary: #243044;
@@ -2445,9 +2466,13 @@
             letter-spacing: 3px;
             text-transform: uppercase;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.15s ease;
             animation: pulse 2.5s infinite;
             box-shadow: var(--shadow-lg);
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .kunde-btn:hover {
@@ -2457,7 +2482,13 @@
         }
 
         .kunde-btn:active {
-            transform: translateY(0) scale(0.98);
+            transform: translateY(1px) scale(0.96);
+            transition: all 0.05s ease;
+        }
+
+        .kunde-btn:disabled {
+            cursor: wait;
+            animation: none;
         }
 
         .kunde-btn-icon {
@@ -6052,6 +6083,10 @@
             const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
             const [geminiStatus, setGeminiStatus] = useState(geminiKey ? 'saved' : 'none'); // none|saved|testing|ok|error
             const [showKey, setShowKey] = useState(false);
+            // ── NEU: KI-Modell als React-State (statt nur localStorage) ──
+            const [geminiModelPref, setGeminiModelPref] = useState(localStorage.getItem('gemini_model_pref') || 'pro');
+            // ── NEU: Button-Loading-State ──
+            const [btnLoading, setBtnLoading] = useState(null); // null | 'neu' | 'analysiert'
 
             var testGeminiKey = async function() {
                 if (!geminiKey) return;
@@ -6111,15 +6146,31 @@
 
                     <div className="kunde-btn-wrapper" style={{gap:'16px'}}>
                         {/* BUTTON 1: Kunde NEU — Google Drive + KI-Analyse */}
-                        <button className="kunde-btn" onClick={onKundeNeu} style={{background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)'}}>
-                            <span className="kunde-btn-icon">🤖</span>
-                            Kunde NEU
+                        <button className="kunde-btn" disabled={!!btnLoading} onClick={function(){
+                            setBtnLoading('neu');
+                            setTimeout(function(){ onKundeNeu(); }, 50);
+                        }} style={{
+                            background: btnLoading === 'neu' ? 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)' : 'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
+                            opacity: btnLoading && btnLoading !== 'neu' ? 0.5 : 1,
+                            WebkitTapHighlightColor:'transparent', touchAction:'manipulation',
+                            transition:'all 0.15s ease'
+                        }}>
+                            <span className="kunde-btn-icon">{btnLoading === 'neu' ? '⏳' : '🤖'}</span>
+                            {btnLoading === 'neu' ? 'Wird geladen...' : 'Kunde NEU'}
                         </button>
 
                         {/* BUTTON 2: Kunde ANALYSIERT — nur lokale Daten */}
-                        <button className="kunde-btn" onClick={onKundeAnalysiert} style={{background:'linear-gradient(135deg, #27ae60 0%, #1e8449 100%)'}}>
-                            <span className="kunde-btn-icon">💾</span>
-                            Kunde ANALYSIERT
+                        <button className="kunde-btn" disabled={!!btnLoading} onClick={function(){
+                            setBtnLoading('analysiert');
+                            setTimeout(function(){ onKundeAnalysiert(); }, 50);
+                        }} style={{
+                            background: btnLoading === 'analysiert' ? 'linear-gradient(135deg, #1e8449 0%, #145a32 100%)' : 'linear-gradient(135deg, #27ae60 0%, #1e8449 100%)',
+                            opacity: btnLoading && btnLoading !== 'analysiert' ? 0.5 : 1,
+                            WebkitTapHighlightColor:'transparent', touchAction:'manipulation',
+                            transition:'all 0.15s ease'
+                        }}>
+                            <span className="kunde-btn-icon">{btnLoading === 'analysiert' ? '⏳' : '💾'}</span>
+                            {btnLoading === 'analysiert' ? 'Wird geladen...' : 'Kunde ANALYSIERT'}
                         </button>
 
                         {gespeicherteKunden.length > 0 && (
@@ -6180,15 +6231,18 @@
                                     <div style={{display:'flex', gap:'4px'}}>
                                         {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
                                             var m = GEMINI_CONFIG.MODELS[key];
-                                            var isActive = (localStorage.getItem('gemini_model_pref') || 'pro') === key;
+                                            var isActive = geminiModelPref === key;
                                             return (
                                                 <button key={key} onClick={function(){
+                                                    setGeminiModelPref(key);
                                                     localStorage.setItem('gemini_model_pref', key);
                                                 }} style={{
                                                     flex:1, padding:'8px 4px', borderRadius:'8px', cursor:'pointer', fontSize:'10px', fontWeight:'700', textAlign:'center',
                                                     background: isActive ? m.color + '18' : 'var(--bg-tertiary)',
                                                     border: isActive ? '2px solid ' + m.color : '1px solid var(--border-color)',
-                                                    color: isActive ? m.color : 'var(--text-muted)'
+                                                    color: isActive ? m.color : 'var(--text-muted)',
+                                                    transition:'all 0.15s ease',
+                                                    WebkitTapHighlightColor:'transparent', touchAction:'manipulation'
                                                 }}>
                                                     {m.icon} {m.name.replace('Gemini ', '')}<br/>
                                                     <span style={{fontSize:'8px', fontWeight:'400'}}>{m.desc}</span>
@@ -6197,7 +6251,7 @@
                                         })}
                                     </div>
                                     <div style={{fontSize:'9px', color:'var(--text-muted)', marginTop:'4px'}}>
-                                        Aktiv: <strong>{(GEMINI_CONFIG.MODELS[localStorage.getItem('gemini_model_pref') || 'pro'] || {}).name || 'Gemini 2.5 Pro'}</strong>
+                                        Aktiv: <strong>{(GEMINI_CONFIG.MODELS[geminiModelPref] || {}).name || 'Gemini 2.5 Pro'}</strong>
                                     </div>
                                 </div>
 
@@ -6627,27 +6681,67 @@
             };
 
             if (loading) {
+                // ── Fortschritt aus loadProgress-String parsen ──
+                var progressPct = 0;
+                var progressPhase = '';
+                if (loadProgress) {
+                    // Ordner x/y Format erkennen
+                    var ordnerMatch = loadProgress.match(/\((\d+)\/(\d+)\)/);
+                    if (ordnerMatch) {
+                        var current = parseInt(ordnerMatch[1]);
+                        var total = parseInt(ordnerMatch[2]);
+                        progressPct = Math.round((current / total) * 85); // 85% = Ordner analysieren
+                    }
+                    // Phasen erkennen
+                    if (loadProgress.indexOf('Ordnerinhalt') >= 0 || loadProgress.indexOf('Ordnerstruktur') >= 0) { progressPct = 5; progressPhase = 'Struktur laden'; }
+                    else if (loadProgress.indexOf('Cross-Referencing') >= 0 || loadProgress.indexOf('crossref') >= 0) { progressPct = 90; progressPhase = 'Abgleich'; }
+                    else if (loadProgress.indexOf('abgeschlossen') >= 0 || loadProgress.indexOf('✅') >= 0) { progressPct = 100; progressPhase = 'Fertig!'; }
+                    else if (loadProgress.indexOf('KI analysiert') >= 0) { progressPhase = 'KI-Analyse'; }
+                    else if (loadProgress.indexOf('Lade') >= 0) { progressPhase = 'Dateien laden'; }
+                    else if (loadProgress.indexOf('gestartet') >= 0) { progressPct = 8; progressPhase = 'Startet...'; }
+                }
                 return (
                     <div className="page-container" style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'80vh', padding:'20px'}}>
-                        <div style={{fontSize:'48px', marginBottom:'16px', animation:'pulse 1.5s ease-in-out infinite'}}>🤖</div>
-                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'12px'}}>
-                            Kundenakte wird analysiert
+                        <div style={{fontSize:'48px', marginBottom:'16px', animation:'spin 2s linear infinite'}}>🤖</div>
+                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'6px'}}>
+                            KI-Analyse läuft
                         </div>
-                        {/* Fortschrittsbalken */}
-                        <div style={{width:'80%', maxWidth:'300px', height:'6px', background:'var(--bg-tertiary)', borderRadius:'3px', overflow:'hidden', marginBottom:'12px'}}>
-                            <div style={{width:'60%', height:'100%', background:'linear-gradient(90deg, var(--accent-blue), #8e44ad)', borderRadius:'3px', animation:'loading-bar 2s ease-in-out infinite'}}></div>
+
+                        {/* Prozent-Anzeige */}
+                        <div style={{fontSize:'32px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'12px', fontFamily:'monospace'}}>
+                            {progressPct > 0 ? progressPct + '%' : '...'}
                         </div>
-                        <div style={{fontSize:'13px', color:'var(--text-muted)', textAlign:'center', maxWidth:'280px', lineHeight:'1.6'}}>
-                            {loadProgress || 'Dokumente werden gelesen und analysiert...'}
+
+                        {/* Fortschrittsbalken (ECHT) */}
+                        <div style={{width:'85%', maxWidth:'320px', height:'8px', background:'var(--bg-tertiary)', borderRadius:'4px', overflow:'hidden', marginBottom:'14px', border:'1px solid var(--border-color)'}}>
+                            <div style={{
+                                width: progressPct > 0 ? progressPct + '%' : '5%',
+                                height:'100%',
+                                background:'linear-gradient(90deg, #1E88E5, #8e44ad, #27ae60)',
+                                borderRadius:'4px',
+                                transition:'width 0.5s ease-out'
+                            }}></div>
                         </div>
-                        {loadProgress && loadProgress.includes('KI') && (
-                            <div style={{fontSize:'11px', color:'var(--accent-blue)', marginTop:'8px', padding:'4px 12px', background:'rgba(30,136,229,0.1)', borderRadius:'8px'}}>
-                                🤖 KI-Analyse aktiv — optimale Erkennung
+
+                        {/* Phase */}
+                        {progressPhase && (
+                            <div style={{fontSize:'12px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'6px', letterSpacing:'0.5px'}}>
+                                {progressPhase}
                             </div>
                         )}
+
+                        {/* Detail-Nachricht */}
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', textAlign:'center', maxWidth:'300px', lineHeight:'1.5', minHeight:'36px'}}>
+                            {loadProgress ? loadProgress.replace(/^🤖\s*/, '') : 'Dokumente werden gelesen und analysiert...'}
+                        </div>
+
+                        {/* Hinweis */}
+                        <div style={{marginTop:'16px', fontSize:'10px', color:'var(--text-muted)', textAlign:'center', opacity:0.6}}>
+                            Bitte nicht schließen — die KI analysiert alle Ordner
+                        </div>
+
                         <style>{`
-                            @keyframes loading-bar { 0%{transform:translateX(-100%)} 50%{transform:translateX(0)} 100%{transform:translateX(100%)} }
-                            @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+                            @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
                         `}</style>
                     </div>
                 );
@@ -13257,7 +13351,7 @@
            ═══════════════════════════════════════════ */
 
         // ── Kundenübersicht: Alle Kunden mit ihren Analysen ──
-        function OrdnerAnalyseUebersicht({ kunde, onStartAnalyse, onOpenDetail, onBack, refreshKey }) {
+        function OrdnerAnalyseUebersicht({ kunde, onStartAnalyse, onReanalyzeOrdner, onOpenDetail, onBack, refreshKey }) {
             const [meta, setMeta] = useState(null);
             const [analysen, setAnalysen] = useState([]);
             const [crossRef, setCrossRef] = useState(null);
@@ -13352,11 +13446,21 @@
                             }
 
                             return (
-                                <button key={nr} onClick={function() { if (analyse) onOpenDetail(nr); }}
+                                <button key={nr} onClick={function() {
+                                    if (analyse) {
+                                        onOpenDetail(nr);
+                                    } else {
+                                        // Nicht analysiert → direkt Einzelordner-Analyse anbieten
+                                        if (onReanalyzeOrdner && confirm('Ordner "' + ordnerCfg.name + '" wurde noch nicht analysiert.\n\nJetzt einzeln analysieren?')) {
+                                            onReanalyzeOrdner(nr);
+                                        }
+                                    }
+                                }}
                                     style={{
                                         width:'100%', padding:'12px 14px', borderRadius:'12px', border:'1px solid var(--border-subtle)',
                                         background:'var(--bg-secondary)', display:'flex', alignItems:'center', gap:'12px',
-                                        cursor: analyse ? 'pointer' : 'default', opacity: analyse ? 1 : 0.6, textAlign:'left'
+                                        cursor: 'pointer', opacity: 1, textAlign:'left',
+                                        WebkitTapHighlightColor:'transparent', touchAction:'manipulation'
                                     }}>
                                     <span style={{fontSize:'24px'}}>{ordnerCfg.icon}</span>
                                     <div style={{flex:1, minWidth:0}}>
@@ -13441,21 +13545,33 @@
 
         // ── Ordneranalyse-Fortschritt (Overlay) ──
         function OrdnerAnalyseProgress({ progress, onClose }) {
+            var pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+            if (progress.phase === 'crossref') pct = 90;
+            if (progress.phase === 'done') pct = 100;
+            if (progress.phase === 'start') pct = 5;
             return (
                 <div className="modal-overlay" style={{zIndex:5000}}>
                     <div style={{width:'90%', maxWidth:'500px', background:'var(--bg-primary)', borderRadius:'16px', padding:'28px', textAlign:'center'}}>
-                        <div style={{fontSize:'48px', marginBottom:'12px'}}>🤖</div>
-                        <div style={{fontSize:'16px', fontWeight:'700', marginBottom:'8px', color:'var(--text-primary)'}}>KI-Ordneranalyse läuft...</div>
+                        <div style={{fontSize:'48px', marginBottom:'12px', animation: progress.phase === 'done' ? 'none' : 'spin 2s linear infinite'}}>{progress.phase === 'done' ? '✅' : '🤖'}</div>
+                        <div style={{fontSize:'16px', fontWeight:'700', marginBottom:'4px', color:'var(--text-primary)'}}>
+                            {progress.phase === 'done' ? 'Analyse abgeschlossen!' : 'KI-Ordneranalyse läuft...'}
+                        </div>
+
+                        {/* Große Prozentanzeige */}
+                        <div style={{fontSize:'36px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'8px', fontFamily:'monospace'}}>
+                            {pct}%
+                        </div>
+
                         <div style={{fontSize:'13px', color:'var(--accent-blue)', marginBottom:'16px', minHeight:'20px'}}>
                             {progress.message || 'Vorbereitung...'}
                         </div>
                         {progress.total > 0 && (
                             <div style={{marginBottom:'16px'}}>
-                                <div style={{height:'8px', background:'var(--bg-tertiary)', borderRadius:'4px', overflow:'hidden'}}>
+                                <div style={{height:'8px', background:'var(--bg-tertiary)', borderRadius:'4px', overflow:'hidden', border:'1px solid var(--border-color)'}}>
                                     <div style={{
-                                        height:'100%', borderRadius:'4px', transition:'width 0.3s',
-                                        background:'linear-gradient(90deg, #1E88E5, #8e44ad)',
-                                        width: (progress.current / progress.total * 100) + '%'
+                                        height:'100%', borderRadius:'4px', transition:'width 0.5s ease-out',
+                                        background:'linear-gradient(90deg, #1E88E5, #8e44ad, #27ae60)',
+                                        width: pct + '%'
                                     }} />
                                 </div>
                                 <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>
@@ -13464,10 +13580,16 @@
                             </div>
                         )}
                         {progress.phase === 'done' && (
-                            <button onClick={onClose} style={{padding:'10px 24px', background:'var(--success)', color:'white', border:'none', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', marginTop:'8px'}}>
-                                ✅ Ergebnis anzeigen
+                            <button onClick={onClose} style={{padding:'12px 28px', background:'var(--success)', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', marginTop:'8px', touchAction:'manipulation', WebkitTapHighlightColor:'transparent'}}>
+                                🚀 Ergebnis anzeigen
                             </button>
                         )}
+                        {progress.phase !== 'done' && (
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'8px', opacity:0.6}}>
+                                Bitte nicht schließen
+                            </div>
+                        )}
+                        <style>{`@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }`}</style>
                     </div>
                 </div>
             );
@@ -15439,7 +15561,7 @@
                             break;
                         case 'geladen':
                             e.preventDefault();
-                            handleStartAufmass();
+                            navigateTo('modulwahl');
                             break;
                     }
                 };
@@ -16220,6 +16342,7 @@
                         return <OrdnerAnalyseUebersicht
                             kunde={selectedKunde}
                             onStartAnalyse={handleStartOrdnerAnalyse}
+                            onReanalyzeOrdner={handleReanalyzeOrdner}
                             onOpenDetail={function(nr) { setSelectedOrdnerNr(nr); navigateTo('ordnerAnalyseDetail'); }}
                             onBack={function() { navigateTo('modulwahl'); }}
                             refreshKey={ordnerAnalyseMeta ? ordnerAnalyseMeta.abschlussZeitpunkt || '' : ''}
