@@ -6301,7 +6301,7 @@
         /* ═══════════════════════════════════════════
            STARTSEITE PAGE
            ═══════════════════════════════════════════ */
-        function Startseite({ onKundeNeu, onKundeAnalysiert }) {
+        function Startseite({ onKundeNeu, onKundeAnalysiert, onKundeManuell }) {
             // Prüfe ob gespeicherte Kunden in localStorage existieren
             var gespeicherteKunden = [];
             try {
@@ -6325,6 +6325,7 @@
             const [geminiModelPref, setGeminiModelPref] = useState(localStorage.getItem('gemini_model_pref') || 'pro');
             // ── NEU: Button-Loading-State ──
             const [btnLoading, setBtnLoading] = useState(null); // null | 'neu' | 'analysiert'
+            const [showNeuAuswahl, setShowNeuAuswahl] = useState(false); // Modal für Kunde NEU Auswahl
 
             var testGeminiKey = async function() {
                 if (!geminiKey) return;
@@ -6383,19 +6384,19 @@
                     </div>
 
                     <div className="kunde-btn-wrapper" style={{gap:'16px'}}>
-                        {/* BUTTON 1: Kunde NEU — Google Drive + KI-Analyse */}
+                        {/* BUTTON 1: Kunde NEU — Auswahl-Dialog öffnen */}
                         <button className="kunde-btn" disabled={!!btnLoading}
-                            onTouchEnd={function(e){ if(!btnLoading){ e.preventDefault(); setBtnLoading('neu'); setTimeout(function(){ onKundeNeu(); }, 50); } }}
-                            onClick={function(){ if(!btnLoading){ setBtnLoading('neu'); setTimeout(function(){ onKundeNeu(); }, 50); } }}
+                            onTouchEnd={function(e){ if(!btnLoading){ e.preventDefault(); setShowNeuAuswahl(true); } }}
+                            onClick={function(){ if(!btnLoading){ setShowNeuAuswahl(true); } }}
                             style={{
                             background: btnLoading === 'neu' ? 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)' : 'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
                             opacity: btnLoading && btnLoading !== 'neu' ? 0.5 : 1,
                         }}>
-                            <span className="kunde-btn-icon">{btnLoading === 'neu' ? '⏳' : '🤖'}</span>
+                            <span className="kunde-btn-icon">{btnLoading === 'neu' ? '⏳' : '➕'}</span>
                             {btnLoading === 'neu' ? 'Wird geladen...' : 'Kunde NEU'}
                         </button>
 
-                        {/* BUTTON 2: Kunde ANALYSIERT — nur lokale Daten */}
+                        {/* BUTTON 2: Kunde ANGELEGT — nur lokale Daten */}
                         <button className="kunde-btn" disabled={!!btnLoading}
                             onTouchEnd={function(e){ if(!btnLoading){ e.preventDefault(); setBtnLoading('analysiert'); setTimeout(function(){ onKundeAnalysiert(); }, 50); } }}
                             onClick={function(){ if(!btnLoading){ setBtnLoading('analysiert'); setTimeout(function(){ onKundeAnalysiert(); }, 50); } }}
@@ -6404,7 +6405,7 @@
                             opacity: btnLoading && btnLoading !== 'analysiert' ? 0.5 : 1,
                         }}>
                             <span className="kunde-btn-icon">{btnLoading === 'analysiert' ? '⏳' : '💾'}</span>
-                            {btnLoading === 'analysiert' ? 'Wird geladen...' : 'Kunde ANALYSIERT'}
+                            {btnLoading === 'analysiert' ? 'Wird geladen...' : 'Kunde ANGELEGT'}
                         </button>
 
                         {gespeicherteKunden.length > 0 && (
@@ -6506,8 +6507,622 @@
                             </div>
                         )}
                     </div>
+
+                    {/* ═══ AUSWAHL-MODAL: Kunde analysieren oder manuell eingeben ═══ */}
+                    {showNeuAuswahl && (
+                        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.7)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'}}
+                            onClick={function(){ setShowNeuAuswahl(false); }}>
+                            <div style={{background:'var(--bg-primary)', borderRadius:'20px', padding:'28px 24px', maxWidth:'380px', width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.4)'}}
+                                onClick={function(e){ e.stopPropagation(); }}>
+                                <div style={{textAlign:'center', marginBottom:'24px'}}>
+                                    <div style={{fontSize:'28px', marginBottom:'8px'}}>➕</div>
+                                    <div style={{fontSize:'18px', fontWeight:'800', color:'var(--text-primary)'}}>Neuer Kunde</div>
+                                    <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'6px'}}>Wie möchtest du den Kunden anlegen?</div>
+                                </div>
+
+                                <button onClick={function(){
+                                    setShowNeuAuswahl(false);
+                                    setBtnLoading('neu');
+                                    setTimeout(function(){ onKundeNeu(); }, 50);
+                                }} style={{
+                                    width:'100%', padding:'16px 20px', borderRadius:'14px', border:'none', cursor:'pointer', marginBottom:'12px',
+                                    background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)', color:'white',
+                                    display:'flex', alignItems:'center', gap:'14px', textAlign:'left',
+                                    boxShadow:'0 4px 15px rgba(30,136,229,0.3)', transition:'transform 0.15s ease'
+                                }}>
+                                    <span style={{fontSize:'28px'}}>🤖</span>
+                                    <div>
+                                        <div style={{fontSize:'15px', fontWeight:'700'}}>Kunde analysieren</div>
+                                        <div style={{fontSize:'11px', opacity:0.85, marginTop:'3px'}}>Google Drive verbinden & KI-Analyse starten</div>
+                                    </div>
+                                </button>
+
+                                <button onClick={function(){
+                                    setShowNeuAuswahl(false);
+                                    onKundeManuell();
+                                }} style={{
+                                    width:'100%', padding:'16px 20px', borderRadius:'14px', border:'none', cursor:'pointer',
+                                    background:'linear-gradient(135deg, #e67e22 0%, #d35400 100%)', color:'white',
+                                    display:'flex', alignItems:'center', gap:'14px', textAlign:'left',
+                                    boxShadow:'0 4px 15px rgba(230,126,34,0.3)', transition:'transform 0.15s ease'
+                                }}>
+                                    <span style={{fontSize:'28px'}}>📝</span>
+                                    <div>
+                                        <div style={{fontSize:'15px', fontWeight:'700'}}>Kunde manuell eingeben</div>
+                                        <div style={{fontSize:'11px', opacity:0.85, marginTop:'3px'}}>LV-Positionen & Räume selbst eintragen oder hochladen</div>
+                                    </div>
+                                </button>
+
+                                <button onClick={function(){ setShowNeuAuswahl(false); }} style={{
+                                    width:'100%', padding:'10px', marginTop:'12px', borderRadius:'10px', border:'1px solid var(--border-color)',
+                                    background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontSize:'13px', fontWeight:'600'
+                                }}>Abbrechen</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )
+        }
+
+        /* ═══════════════════════════════════════════
+           MANUELLE EINGABE — LV-Positionen & Räume
+           ═══════════════════════════════════════════ */
+        function ManuelleEingabe({ onFertig, onBack }) {
+            const [activeTab, setActiveTab] = useState('positionen'); // 'positionen' | 'raeume'
+            const [kundenName, setKundenName] = useState('');
+            const [bauvorhaben, setBauvorhaben] = useState('');
+            
+            // ── LV-Positionen State ──
+            const [positionen, setPositionen] = useState([]);
+            const [editPosIdx, setEditPosIdx] = useState(null);
+            const [posForm, setPosForm] = useState({ posNr:'', menge:'', einheit:'m²', leistung:'', ep:'', gp:'' });
+            const [showPosForm, setShowPosForm] = useState(false);
+            
+            // ── Räume State ──
+            const [raeume, setRaeume] = useState([]);
+            const [editRaumIdx, setEditRaumIdx] = useState(null);
+            const [raumForm, setRaumForm] = useState({ raumNr:'', bezeichnung:'', geschoss:'', bemerkung:'' });
+            const [showRaumForm, setShowRaumForm] = useState(false);
+
+            // ── Upload State ──
+            const [uploadStatus, setUploadStatus] = useState('');
+
+            // ── Einheiten-Optionen ──
+            var einheiten = ['m²', 'm', 'Stk', 'psch', 'lfm', 'kg', 'l', 'Satz'];
+
+            // ═══ POSITIONEN CRUD ═══
+            var resetPosForm = function() {
+                setPosForm({ posNr:'', menge:'', einheit:'m²', leistung:'', ep:'', gp:'' });
+                setEditPosIdx(null);
+                setShowPosForm(false);
+            };
+
+            var handleSavePos = function() {
+                if (!posForm.posNr || !posForm.leistung) {
+                    alert('Bitte mindestens Positionsnummer und Leistungsbeschreibung eingeben.');
+                    return;
+                }
+                var newPos = {
+                    posNr: posForm.posNr.trim(),
+                    menge: parseFloat(posForm.menge) || 0,
+                    einheit: posForm.einheit || 'm²',
+                    leistung: posForm.leistung.trim(),
+                    ep: parseFloat(posForm.ep) || 0,
+                    gp: parseFloat(posForm.gp) || 0
+                };
+                // Auto-berechne GP wenn EP und Menge vorhanden
+                if (newPos.ep > 0 && newPos.menge > 0 && newPos.gp === 0) {
+                    newPos.gp = Math.round(newPos.ep * newPos.menge * 100) / 100;
+                }
+
+                if (editPosIdx !== null) {
+                    setPositionen(function(prev) {
+                        var copy = prev.slice();
+                        copy[editPosIdx] = newPos;
+                        return copy;
+                    });
+                } else {
+                    setPositionen(function(prev) { return prev.concat([newPos]); });
+                }
+                resetPosForm();
+            };
+
+            var handleEditPos = function(idx) {
+                var p = positionen[idx];
+                setPosForm({ posNr: p.posNr, menge: String(p.menge || ''), einheit: p.einheit || 'm²', leistung: p.leistung, ep: String(p.ep || ''), gp: String(p.gp || '') });
+                setEditPosIdx(idx);
+                setShowPosForm(true);
+            };
+
+            var handleDeletePos = function(idx) {
+                if (confirm('Position "' + positionen[idx].posNr + '" wirklich löschen?')) {
+                    setPositionen(function(prev) { return prev.filter(function(_, i) { return i !== idx; }); });
+                }
+            };
+
+            // ═══ RÄUME CRUD ═══
+            var resetRaumForm = function() {
+                setRaumForm({ raumNr:'', bezeichnung:'', geschoss:'', bemerkung:'' });
+                setEditRaumIdx(null);
+                setShowRaumForm(false);
+            };
+
+            var handleSaveRaum = function() {
+                if (!raumForm.bezeichnung) {
+                    alert('Bitte mindestens eine Raumbezeichnung eingeben.');
+                    return;
+                }
+                var newRaum = {
+                    raumNr: raumForm.raumNr.trim(),
+                    bezeichnung: raumForm.bezeichnung.trim(),
+                    geschoss: raumForm.geschoss.trim().toUpperCase(),
+                    bemerkung: raumForm.bemerkung.trim()
+                };
+
+                if (editRaumIdx !== null) {
+                    setRaeume(function(prev) {
+                        var copy = prev.slice();
+                        copy[editRaumIdx] = newRaum;
+                        return copy;
+                    });
+                } else {
+                    setRaeume(function(prev) { return prev.concat([newRaum]); });
+                }
+                resetRaumForm();
+            };
+
+            var handleEditRaum = function(idx) {
+                var r = raeume[idx];
+                setRaumForm({ raumNr: r.raumNr, bezeichnung: r.bezeichnung, geschoss: r.geschoss || '', bemerkung: r.bemerkung || '' });
+                setEditRaumIdx(idx);
+                setShowRaumForm(true);
+            };
+
+            var handleDeleteRaum = function(idx) {
+                if (confirm('Raum "' + raeume[idx].bezeichnung + '" wirklich löschen?')) {
+                    setRaeume(function(prev) { return prev.filter(function(_, i) { return i !== idx; }); });
+                }
+            };
+
+            // ═══ DATEI-UPLOAD (CSV / Excel) ═══
+            var handleFileUpload = function(e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                var ext = file.name.split('.').pop().toLowerCase();
+                setUploadStatus('⏳ ' + file.name + ' wird verarbeitet...');
+
+                if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
+                    // CSV/TSV lesen
+                    var reader = new FileReader();
+                    reader.onload = function(ev) {
+                        try {
+                            var text = ev.target.result;
+                            var lines = text.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+                            var separator = text.indexOf('\t') >= 0 ? '\t' : (text.indexOf(';') >= 0 ? ';' : ',');
+                            var importedPos = [];
+                            var importedRaeume = [];
+                            var headerLine = lines[0].toLowerCase();
+                            var isRaumFile = headerLine.indexOf('raum') >= 0 && headerLine.indexOf('geschoss') >= 0;
+
+                            for (var i = 1; i < lines.length; i++) {
+                                var cols = lines[i].split(separator).map(function(c) { return c.replace(/^"|"$/g, '').trim(); });
+                                if (cols.length < 2) continue;
+
+                                if (isRaumFile) {
+                                    importedRaeume.push({
+                                        raumNr: cols[0] || String(importedRaeume.length + 1),
+                                        bezeichnung: cols[1] || '',
+                                        geschoss: (cols[2] || '').toUpperCase(),
+                                        bemerkung: cols[3] || ''
+                                    });
+                                } else {
+                                    importedPos.push({
+                                        posNr: cols[0] || '',
+                                        menge: parseFloat(cols[1]) || 0,
+                                        einheit: cols[2] || 'm²',
+                                        leistung: cols[3] || cols[1] || '',
+                                        ep: parseFloat(cols[4]) || 0,
+                                        gp: parseFloat(cols[5]) || 0
+                                    });
+                                }
+                            }
+
+                            if (isRaumFile && importedRaeume.length > 0) {
+                                setRaeume(function(prev) { return prev.concat(importedRaeume); });
+                                setUploadStatus('✅ ' + importedRaeume.length + ' Räume importiert aus ' + file.name);
+                                setActiveTab('raeume');
+                            } else if (importedPos.length > 0) {
+                                setPositionen(function(prev) { return prev.concat(importedPos); });
+                                setUploadStatus('✅ ' + importedPos.length + ' Positionen importiert aus ' + file.name);
+                                setActiveTab('positionen');
+                            } else {
+                                setUploadStatus('⚠️ Keine Daten erkannt in ' + file.name);
+                            }
+                        } catch(parseErr) {
+                            setUploadStatus('❌ Fehler beim Lesen: ' + parseErr.message);
+                        }
+                    };
+                    reader.readAsText(file);
+                } else if (ext === 'xlsx' || ext === 'xls') {
+                    // Excel mit SheetJS
+                    var reader2 = new FileReader();
+                    reader2.onload = function(ev) {
+                        try {
+                            if (typeof XLSX === 'undefined') {
+                                setUploadStatus('❌ SheetJS (XLSX) nicht verfügbar. Bitte CSV verwenden.');
+                                return;
+                            }
+                            var workbook = XLSX.read(ev.target.result, { type: 'array' });
+                            var sheet = workbook.Sheets[workbook.SheetNames[0]];
+                            var rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                            if (rows.length < 2) { setUploadStatus('⚠️ Leere Excel-Datei'); return; }
+
+                            var header = (rows[0] || []).map(function(h) { return String(h || '').toLowerCase(); });
+                            var isRaumFile2 = header.some(function(h) { return h.indexOf('raum') >= 0; }) && header.some(function(h) { return h.indexOf('geschoss') >= 0; });
+                            var importedPos2 = [];
+                            var importedRaeume2 = [];
+
+                            for (var ri = 1; ri < rows.length; ri++) {
+                                var r = rows[ri];
+                                if (!r || r.length < 2) continue;
+                                if (isRaumFile2) {
+                                    importedRaeume2.push({
+                                        raumNr: String(r[0] || importedRaeume2.length + 1),
+                                        bezeichnung: String(r[1] || ''),
+                                        geschoss: String(r[2] || '').toUpperCase(),
+                                        bemerkung: String(r[3] || '')
+                                    });
+                                } else {
+                                    importedPos2.push({
+                                        posNr: String(r[0] || ''),
+                                        menge: parseFloat(r[1]) || 0,
+                                        einheit: String(r[2] || 'm²'),
+                                        leistung: String(r[3] || r[1] || ''),
+                                        ep: parseFloat(r[4]) || 0,
+                                        gp: parseFloat(r[5]) || 0
+                                    });
+                                }
+                            }
+
+                            if (isRaumFile2 && importedRaeume2.length > 0) {
+                                setRaeume(function(prev) { return prev.concat(importedRaeume2); });
+                                setUploadStatus('✅ ' + importedRaeume2.length + ' Räume importiert aus ' + file.name);
+                                setActiveTab('raeume');
+                            } else if (importedPos2.length > 0) {
+                                setPositionen(function(prev) { return prev.concat(importedPos2); });
+                                setUploadStatus('✅ ' + importedPos2.length + ' Positionen importiert aus ' + file.name);
+                                setActiveTab('positionen');
+                            } else {
+                                setUploadStatus('⚠️ Keine Daten erkannt in ' + file.name);
+                            }
+                        } catch(xlsErr) {
+                            setUploadStatus('❌ Excel-Fehler: ' + xlsErr.message);
+                        }
+                    };
+                    reader2.readAsArrayBuffer(file);
+                } else {
+                    setUploadStatus('⚠️ Format nicht unterstützt. Bitte CSV, TSV oder XLSX hochladen.');
+                }
+                // Reset file input
+                e.target.value = '';
+            };
+
+            // ═══ FERTIGSTELLEN ═══
+            var handleFertig = function() {
+                if (!kundenName.trim()) {
+                    alert('Bitte gib einen Kundennamen ein.');
+                    return;
+                }
+                if (positionen.length === 0 && raeume.length === 0) {
+                    alert('Bitte mindestens eine Position oder einen Raum eintragen.');
+                    return;
+                }
+                onFertig({
+                    kundenName: kundenName.trim(),
+                    bauvorhaben: bauvorhaben.trim(),
+                    positionen: positionen,
+                    raeume: raeume
+                });
+            };
+
+            // ═══ GP Summe ═══
+            var gpSumme = positionen.reduce(function(s, p) { return s + (p.gp || 0); }, 0);
+
+            // ── Formular-Input-Stil ──
+            var inputStyle = { width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', fontSize:'14px', color:'var(--text-primary)', boxSizing:'border-box' };
+            var labelStyle = { fontSize:'11px', fontWeight:'700', color:'var(--text-muted)', marginBottom:'4px', display:'block', textTransform:'uppercase', letterSpacing:'0.5px' };
+
+            return (
+                <div style={{padding:'16px', maxWidth:'600px', margin:'0 auto'}}>
+                    {/* HEADER */}
+                    <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'20px'}}>
+                        <button onClick={onBack} style={{background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'var(--text-secondary)', padding:'4px'}}>←</button>
+                        <div>
+                            <div style={{fontSize:'20px', fontWeight:'800', color:'var(--text-primary)'}}>📝 Manuelle Eingabe</div>
+                            <div style={{fontSize:'12px', color:'var(--text-muted)'}}>LV-Positionen & Räume eintragen</div>
+                        </div>
+                    </div>
+
+                    {/* KUNDENDATEN */}
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'16px', padding:'16px', marginBottom:'16px', border:'1px solid var(--border-color)'}}>
+                        <div style={{fontSize:'13px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'12px'}}>📋 Kundendaten</div>
+                        <div style={{marginBottom:'10px'}}>
+                            <label style={labelStyle}>Kundenname / Auftraggeber *</label>
+                            <input type="text" value={kundenName} onChange={function(e){ setKundenName(e.target.value); }} placeholder="z.B. Müller, Max" style={inputStyle} />
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Bauvorhaben / Adresse</label>
+                            <input type="text" value={bauvorhaben} onChange={function(e){ setBauvorhaben(e.target.value); }} placeholder="z.B. Neubau EFH, Musterstraße 1" style={inputStyle} />
+                        </div>
+                    </div>
+
+                    {/* TAB-NAVIGATION */}
+                    <div style={{display:'flex', gap:'4px', marginBottom:'16px', background:'var(--bg-secondary)', borderRadius:'12px', padding:'4px', border:'1px solid var(--border-color)'}}>
+                        <button onClick={function(){ setActiveTab('positionen'); }} style={{
+                            flex:1, padding:'10px 8px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700',
+                            background: activeTab === 'positionen' ? 'var(--accent-blue)' : 'transparent',
+                            color: activeTab === 'positionen' ? 'white' : 'var(--text-muted)',
+                            transition:'all 0.2s ease'
+                        }}>
+                            📋 Positionen ({positionen.length})
+                        </button>
+                        <button onClick={function(){ setActiveTab('raeume'); }} style={{
+                            flex:1, padding:'10px 8px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700',
+                            background: activeTab === 'raeume' ? '#e67e22' : 'transparent',
+                            color: activeTab === 'raeume' ? 'white' : 'var(--text-muted)',
+                            transition:'all 0.2s ease'
+                        }}>
+                            🏠 Räume ({raeume.length})
+                        </button>
+                    </div>
+
+                    {/* ═══════ TAB: POSITIONEN ═══════ */}
+                    {activeTab === 'positionen' && (
+                        <div>
+                            {/* Hinzufügen Button */}
+                            <button onClick={function(){ resetPosForm(); setShowPosForm(true); }} style={{
+                                width:'100%', padding:'12px', borderRadius:'12px', border:'2px dashed var(--accent-blue)',
+                                background:'rgba(30,136,229,0.05)', color:'var(--accent-blue)', cursor:'pointer',
+                                fontSize:'14px', fontWeight:'700', marginBottom:'12px'
+                            }}>+ Neue Position hinzufügen</button>
+
+                            {/* Formular (Add/Edit) */}
+                            {showPosForm && (
+                                <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'16px', marginBottom:'16px', border:'2px solid var(--accent-blue)', boxShadow:'0 4px 20px rgba(30,136,229,0.15)'}}>
+                                    <div style={{fontSize:'13px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'12px'}}>
+                                        {editPosIdx !== null ? '✏️ Position bearbeiten' : '➕ Neue Position'}
+                                    </div>
+                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+                                        <div>
+                                            <label style={labelStyle}>Pos.-Nr. *</label>
+                                            <input type="text" value={posForm.posNr} onChange={function(e){ setPosForm(Object.assign({}, posForm, {posNr: e.target.value})); }} placeholder="1.01" style={inputStyle} />
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Menge</label>
+                                            <input type="number" step="0.01" value={posForm.menge} onChange={function(e){ setPosForm(Object.assign({}, posForm, {menge: e.target.value})); }} placeholder="0.00" style={inputStyle} />
+                                        </div>
+                                    </div>
+                                    <div style={{marginTop:'10px'}}>
+                                        <label style={labelStyle}>Einheit</label>
+                                        <div style={{display:'flex', gap:'4px', flexWrap:'wrap'}}>
+                                            {einheiten.map(function(eh) {
+                                                return <button key={eh} onClick={function(){ setPosForm(Object.assign({}, posForm, {einheit: eh})); }} style={{
+                                                    padding:'6px 12px', borderRadius:'8px', border: posForm.einheit === eh ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                                                    background: posForm.einheit === eh ? 'rgba(30,136,229,0.1)' : 'var(--bg-tertiary)',
+                                                    color: posForm.einheit === eh ? 'var(--accent-blue)' : 'var(--text-muted)',
+                                                    cursor:'pointer', fontSize:'12px', fontWeight:'600'
+                                                }}>{eh}</button>;
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div style={{marginTop:'10px'}}>
+                                        <label style={labelStyle}>Leistungsbeschreibung *</label>
+                                        <textarea value={posForm.leistung} onChange={function(e){ setPosForm(Object.assign({}, posForm, {leistung: e.target.value})); }}
+                                            placeholder="z.B. Bodenfliesen 30×60 liefern und verlegen"
+                                            rows={3} style={Object.assign({}, inputStyle, {resize:'vertical', fontFamily:'inherit'})} />
+                                    </div>
+                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginTop:'10px'}}>
+                                        <div>
+                                            <label style={labelStyle}>EP (€)</label>
+                                            <input type="number" step="0.01" value={posForm.ep} onChange={function(e){ setPosForm(Object.assign({}, posForm, {ep: e.target.value})); }} placeholder="0.00" style={inputStyle} />
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Gesamtpreis (€)</label>
+                                            <input type="number" step="0.01" value={posForm.gp} onChange={function(e){ setPosForm(Object.assign({}, posForm, {gp: e.target.value})); }}
+                                                placeholder={posForm.ep && posForm.menge ? String(Math.round(parseFloat(posForm.ep || 0) * parseFloat(posForm.menge || 0) * 100) / 100) : '0.00'}
+                                                style={inputStyle} />
+                                        </div>
+                                    </div>
+                                    <div style={{display:'flex', gap:'8px', marginTop:'14px'}}>
+                                        <button onClick={handleSavePos} style={{
+                                            flex:1, padding:'12px', borderRadius:'10px', border:'none', cursor:'pointer',
+                                            background:'var(--accent-blue)', color:'white', fontSize:'14px', fontWeight:'700'
+                                        }}>{editPosIdx !== null ? '✅ Speichern' : '➕ Hinzufügen'}</button>
+                                        <button onClick={resetPosForm} style={{
+                                            padding:'12px 16px', borderRadius:'10px', border:'1px solid var(--border-color)',
+                                            background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontSize:'14px'
+                                        }}>Abbrechen</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Positionsliste */}
+                            {positionen.length > 0 && (
+                                <div style={{background:'var(--bg-secondary)', borderRadius:'14px', border:'1px solid var(--border-color)', overflow:'hidden'}}>
+                                    <div style={{padding:'12px 16px', borderBottom:'1px solid var(--border-color)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                        <span style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)'}}>{positionen.length} Position{positionen.length !== 1 ? 'en' : ''}</span>
+                                        {gpSumme > 0 && <span style={{fontSize:'12px', fontWeight:'700', color:'var(--accent-blue)'}}>Σ {gpSumme.toLocaleString('de-DE', {minimumFractionDigits:2})} €</span>}
+                                    </div>
+                                    {positionen.map(function(p, idx) {
+                                        return (
+                                            <div key={idx} style={{padding:'12px 16px', borderBottom: idx < positionen.length - 1 ? '1px solid var(--border-color)' : 'none', display:'flex', gap:'10px', alignItems:'flex-start'}}>
+                                                <div style={{flex:1, minWidth:0}}>
+                                                    <div style={{display:'flex', gap:'8px', alignItems:'baseline', marginBottom:'3px'}}>
+                                                        <span style={{fontSize:'13px', fontWeight:'800', color:'var(--accent-blue)', whiteSpace:'nowrap'}}>{p.posNr}</span>
+                                                        <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{p.menge} {p.einheit}</span>
+                                                        {p.ep > 0 && <span style={{fontSize:'11px', color:'var(--text-muted)'}}>EP: {p.ep.toFixed(2)}€</span>}
+                                                        {p.gp > 0 && <span style={{fontSize:'11px', fontWeight:'700', color:'#27ae60'}}>GP: {p.gp.toFixed(2)}€</span>}
+                                                    </div>
+                                                    <div style={{fontSize:'12px', color:'var(--text-secondary)', lineHeight:'1.4', wordBreak:'break-word'}}>{p.leistung}</div>
+                                                </div>
+                                                <div style={{display:'flex', gap:'4px', flexShrink:0}}>
+                                                    <button onClick={function(){ handleEditPos(idx); }} style={{padding:'6px 8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', cursor:'pointer', fontSize:'14px'}}>✏️</button>
+                                                    <button onClick={function(){ handleDeletePos(idx); }} style={{padding:'6px 8px', borderRadius:'8px', border:'1px solid rgba(231,76,60,0.3)', background:'rgba(231,76,60,0.05)', cursor:'pointer', fontSize:'14px'}}>🗑️</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {positionen.length === 0 && !showPosForm && (
+                                <div style={{textAlign:'center', padding:'30px 20px', color:'var(--text-muted)', fontSize:'13px'}}>
+                                    📋 Noch keine Positionen eingetragen.<br/>Füge deine erste LV-Position hinzu oder lade eine Liste hoch.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ═══════ TAB: RÄUME ═══════ */}
+                    {activeTab === 'raeume' && (
+                        <div>
+                            {/* Hinzufügen Button */}
+                            <button onClick={function(){ resetRaumForm(); setShowRaumForm(true); }} style={{
+                                width:'100%', padding:'12px', borderRadius:'12px', border:'2px dashed #e67e22',
+                                background:'rgba(230,126,34,0.05)', color:'#e67e22', cursor:'pointer',
+                                fontSize:'14px', fontWeight:'700', marginBottom:'12px'
+                            }}>+ Neuen Raum hinzufügen</button>
+
+                            {/* Formular (Add/Edit) */}
+                            {showRaumForm && (
+                                <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'16px', marginBottom:'16px', border:'2px solid #e67e22', boxShadow:'0 4px 20px rgba(230,126,34,0.15)'}}>
+                                    <div style={{fontSize:'13px', fontWeight:'700', color:'#e67e22', marginBottom:'12px'}}>
+                                        {editRaumIdx !== null ? '✏️ Raum bearbeiten' : '➕ Neuer Raum'}
+                                    </div>
+                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+                                        <div>
+                                            <label style={labelStyle}>Raumnummer</label>
+                                            <input type="text" value={raumForm.raumNr} onChange={function(e){ setRaumForm(Object.assign({}, raumForm, {raumNr: e.target.value})); }} placeholder="0.01" style={inputStyle} />
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Geschoss</label>
+                                            <div style={{display:'flex', gap:'4px', flexWrap:'wrap'}}>
+                                                {['KG','EG','OG','1.OG','2.OG','DG'].map(function(g) {
+                                                    return <button key={g} onClick={function(){ setRaumForm(Object.assign({}, raumForm, {geschoss: g})); }} style={{
+                                                        padding:'6px 10px', borderRadius:'8px', fontSize:'11px', fontWeight:'600', cursor:'pointer',
+                                                        border: raumForm.geschoss === g ? '2px solid #e67e22' : '1px solid var(--border-color)',
+                                                        background: raumForm.geschoss === g ? 'rgba(230,126,34,0.1)' : 'var(--bg-tertiary)',
+                                                        color: raumForm.geschoss === g ? '#e67e22' : 'var(--text-muted)'
+                                                    }}>{g}</button>;
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={{marginTop:'10px'}}>
+                                        <label style={labelStyle}>Raumbezeichnung *</label>
+                                        <input type="text" value={raumForm.bezeichnung} onChange={function(e){ setRaumForm(Object.assign({}, raumForm, {bezeichnung: e.target.value})); }}
+                                            placeholder="z.B. Bad, Küche, Flur, WC" style={inputStyle} />
+                                    </div>
+                                    <div style={{marginTop:'10px'}}>
+                                        <label style={labelStyle}>Besondere Bemerkung</label>
+                                        <textarea value={raumForm.bemerkung} onChange={function(e){ setRaumForm(Object.assign({}, raumForm, {bemerkung: e.target.value})); }}
+                                            placeholder="z.B. Bodengleiche Dusche, Großformat 120x60, Mosaikfliesen..."
+                                            rows={2} style={Object.assign({}, inputStyle, {resize:'vertical', fontFamily:'inherit'})} />
+                                    </div>
+                                    <div style={{display:'flex', gap:'8px', marginTop:'14px'}}>
+                                        <button onClick={handleSaveRaum} style={{
+                                            flex:1, padding:'12px', borderRadius:'10px', border:'none', cursor:'pointer',
+                                            background:'#e67e22', color:'white', fontSize:'14px', fontWeight:'700'
+                                        }}>{editRaumIdx !== null ? '✅ Speichern' : '➕ Hinzufügen'}</button>
+                                        <button onClick={resetRaumForm} style={{
+                                            padding:'12px 16px', borderRadius:'10px', border:'1px solid var(--border-color)',
+                                            background:'transparent', color:'var(--text-muted)', cursor:'pointer', fontSize:'14px'
+                                        }}>Abbrechen</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Raumliste */}
+                            {raeume.length > 0 && (
+                                <div style={{background:'var(--bg-secondary)', borderRadius:'14px', border:'1px solid var(--border-color)', overflow:'hidden'}}>
+                                    <div style={{padding:'12px 16px', borderBottom:'1px solid var(--border-color)'}}>
+                                        <span style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)'}}>{raeume.length} Raum{raeume.length !== 1 ? '̈e' : ''}</span>
+                                    </div>
+                                    {raeume.map(function(r, idx) {
+                                        return (
+                                            <div key={idx} style={{padding:'12px 16px', borderBottom: idx < raeume.length - 1 ? '1px solid var(--border-color)' : 'none', display:'flex', gap:'10px', alignItems:'center'}}>
+                                                <div style={{flex:1, minWidth:0}}>
+                                                    <div style={{display:'flex', gap:'8px', alignItems:'baseline', marginBottom:'2px'}}>
+                                                        {r.raumNr && <span style={{fontSize:'12px', fontWeight:'800', color:'#e67e22', background:'rgba(230,126,34,0.1)', padding:'2px 8px', borderRadius:'6px'}}>{r.raumNr}</span>}
+                                                        <span style={{fontSize:'14px', fontWeight:'700', color:'var(--text-primary)'}}>{r.bezeichnung}</span>
+                                                        {r.geschoss && <span style={{fontSize:'11px', color:'var(--text-muted)', background:'var(--bg-tertiary)', padding:'2px 6px', borderRadius:'4px'}}>{r.geschoss}</span>}
+                                                    </div>
+                                                    {r.bemerkung && <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>💡 {r.bemerkung}</div>}
+                                                </div>
+                                                <div style={{display:'flex', gap:'4px', flexShrink:0}}>
+                                                    <button onClick={function(){ handleEditRaum(idx); }} style={{padding:'6px 8px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-tertiary)', cursor:'pointer', fontSize:'14px'}}>✏️</button>
+                                                    <button onClick={function(){ handleDeleteRaum(idx); }} style={{padding:'6px 8px', borderRadius:'8px', border:'1px solid rgba(231,76,60,0.3)', background:'rgba(231,76,60,0.05)', cursor:'pointer', fontSize:'14px'}}>🗑️</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {raeume.length === 0 && !showRaumForm && (
+                                <div style={{textAlign:'center', padding:'30px 20px', color:'var(--text-muted)', fontSize:'13px'}}>
+                                    🏠 Noch keine Räume eingetragen.<br/>Füge deinen ersten Raum hinzu oder lade eine Raumliste hoch.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ═══ DATEI-UPLOAD ═══ */}
+                    <div style={{marginTop:'16px', background:'var(--bg-secondary)', borderRadius:'14px', padding:'16px', border:'1px solid var(--border-color)'}}>
+                        <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'10px'}}>📁 Liste hochladen</div>
+                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'10px', lineHeight:'1.5'}}>
+                            CSV/Excel-Datei hochladen. <strong>Positionen:</strong> PosNr; Menge; Einheit; Leistung; EP; GP<br/>
+                            <strong>Räume:</strong> RaumNr; Bezeichnung; Geschoss; Bemerkung (Spalte „Raum" + „Geschoss" im Header = automatische Raum-Erkennung)
+                        </div>
+                        <label style={{
+                            display:'block', width:'100%', padding:'14px', borderRadius:'10px', border:'2px dashed var(--border-color)',
+                            background:'var(--bg-tertiary)', cursor:'pointer', textAlign:'center', fontSize:'13px', fontWeight:'600', color:'var(--text-muted)',
+                            transition:'border-color 0.2s', boxSizing:'border-box'
+                        }}>
+                            📂 Datei auswählen (CSV, XLSX)
+                            <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" onChange={handleFileUpload} style={{display:'none'}} />
+                        </label>
+                        {uploadStatus && (
+                            <div style={{marginTop:'8px', fontSize:'12px', color: uploadStatus.indexOf('✅') >= 0 ? '#27ae60' : uploadStatus.indexOf('❌') >= 0 ? '#e74c3c' : 'var(--text-muted)', fontWeight:'600'}}>
+                                {uploadStatus}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ═══ ZUSAMMENFASSUNG & FERTIG-BUTTON ═══ */}
+                    <div style={{marginTop:'20px'}}>
+                        {(positionen.length > 0 || raeume.length > 0) && (
+                            <div style={{background:'rgba(39,174,96,0.05)', borderRadius:'14px', padding:'14px 16px', border:'1px solid rgba(39,174,96,0.2)', marginBottom:'14px'}}>
+                                <div style={{fontSize:'13px', fontWeight:'700', color:'#27ae60', marginBottom:'6px'}}>📊 Zusammenfassung</div>
+                                <div style={{fontSize:'12px', color:'var(--text-secondary)', lineHeight:'1.8'}}>
+                                    📋 <strong>{positionen.length}</strong> LV-Position{positionen.length !== 1 ? 'en' : ''}
+                                    {gpSumme > 0 ? ' · Σ ' + gpSumme.toLocaleString('de-DE', {minimumFractionDigits:2}) + ' €' : ''}
+                                    <br/>
+                                    🏠 <strong>{raeume.length}</strong> Raum{raeume.length !== 1 ? '̈e' : ''}
+                                </div>
+                            </div>
+                        )}
+
+                        <button onClick={handleFertig} disabled={!kundenName.trim() || (positionen.length === 0 && raeume.length === 0)} style={{
+                            width:'100%', padding:'16px 20px', borderRadius:'14px', border:'none', cursor: (!kundenName.trim() || (positionen.length === 0 && raeume.length === 0)) ? 'not-allowed' : 'pointer',
+                            background: (!kundenName.trim() || (positionen.length === 0 && raeume.length === 0)) ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, #27ae60 0%, #1e8449 100%)',
+                            color: (!kundenName.trim() || (positionen.length === 0 && raeume.length === 0)) ? 'var(--text-muted)' : 'white',
+                            fontSize:'16px', fontWeight:'800', boxShadow: (!kundenName.trim() || (positionen.length === 0 && raeume.length === 0)) ? 'none' : '0 4px 20px rgba(39,174,96,0.3)',
+                            transition:'all 0.2s ease', letterSpacing:'0.5px'
+                        }}>
+                            ✅ Liste fertiggestellt — Weiter zur Modulauswahl
+                        </button>
+                    </div>
+                </div>
+            );
         }
 
         /* ═══════════════════════════════════════════
@@ -15782,7 +16397,7 @@
         }
 
         function App() {
-            // Pages: 'start' | 'auswahl' | 'akte' | 'geladen' | 'modulwahl' | 'raumerkennung' | 'raumblatt' | 'rechnung' | 'ausgangsbuch' | 'schriftverkehr' | 'baustelle' | 'ordnerAnalyse' | 'ordnerAnalyseDetail'
+            // Pages: 'start' | 'auswahl' | 'akte' | 'geladen' | 'modulwahl' | 'manuellEingabe' | 'raumerkennung' | 'raumblatt' | 'rechnung' | 'ausgangsbuch' | 'schriftverkehr' | 'baustelle' | 'ordnerAnalyse' | 'ordnerAnalyseDetail'
             const [page, setPage] = useState('start');
             const [driveStatus, setDriveStatus] = useState('offline');
             const [showAuth, setShowAuth] = useState(false);
@@ -15802,7 +16417,7 @@
             const [isDriveMode, setIsDriveMode] = useState(false);
             const [loadProgress, setLoadProgress] = useState('');
             const [importResult, setImportResult] = useState(null);
-            const [kundeMode, setKundeMode] = useState('neu'); // 'neu' | 'analysiert'
+            const [kundeMode, setKundeMode] = useState('neu'); // 'neu' | 'analysiert' | 'manuell'
             const [analyseConfig, setAnalyseConfig] = useState(null);
             // ── NEU: KI-Ordneranalyse State ──
             const [ordnerAnalyseMeta, setOrdnerAnalyseMeta] = useState(null);
@@ -15948,6 +16563,91 @@
                 setIsDriveMode(false);
                 setDriveStatus('offline');
                 navigateTo('auswahl');
+            };
+
+            // ── NEU: Manueller Kunden-Handler ──
+            const handleKundeManuell = () => {
+                setKundeMode('manuell');
+                setIsDriveMode(false);
+                setDriveStatus('offline');
+                navigateTo('manuellEingabe');
+            };
+
+            // ── NEU: Manuelle Eingabe fertiggestellt ──
+            const handleManuellFertig = (data) => {
+                // Kunde-Objekt aufbauen (kompatibel mit analysiertem Kunden)
+                var kundeId = 'manuell_' + Date.now();
+                var lvPosFormatted = data.positionen.map(function(p) {
+                    return {
+                        pos: p.posNr,
+                        bez: p.leistung,
+                        einheit: p.einheit || 'm²',
+                        menge: p.menge || 0,
+                        einzelpreis: p.ep || 0,
+                        bereich: '',
+                        kategorie: '',
+                        tags: [],
+                        _epPreis: p.ep || null,
+                        _gpPreis: p.gp || null
+                    };
+                });
+
+                var raeumeFormatted = data.raeume.map(function(r) {
+                    return {
+                        nr: r.raumNr || '',
+                        bez: r.bezeichnung || '',
+                        geschoss: (r.geschoss || '').toUpperCase(),
+                        bemerkung: r.bemerkung || '',
+                        quelle: 'manuell',
+                        fliesenhoehe: 0,
+                        raumhoehe: 0,
+                        waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
+                    };
+                });
+
+                var kundeObj = {
+                    id: kundeId,
+                    name: data.kundenName + (data.bauvorhaben ? ' – ' + data.bauvorhaben : ''),
+                    auftraggeber: data.kundenName,
+                    adresse: data.bauvorhaben || '',
+                    _fullyLoaded: true,
+                    _manuellerKunde: true,
+                    _lvPositionen: lvPosFormatted,
+                    _raeume: raeumeFormatted,
+                    _lvPositionenKey: kundeId,
+                    _gespeichertAm: new Date().toLocaleString('de-DE'),
+                    raeume: raeumeFormatted
+                };
+
+                // LV-Positionen in globales Objekt injizieren
+                LV_POSITIONEN[kundeId] = lvPosFormatted;
+
+                // ImportResult erstellen (für Rechnung/Module)
+                var impResult = {
+                    positionen: lvPosFormatted,
+                    raeume: raeumeFormatted,
+                    kundendaten: {
+                        auftraggeber: data.kundenName,
+                        adresse: data.bauvorhaben || '',
+                        baumassnahme: data.bauvorhaben || ''
+                    }
+                };
+                setImportResult(impResult);
+
+                // Lokal speichern (wie analysierter Kunde)
+                var localKey = 'aufmass_kunde_' + kundeId;
+                var toSave = Object.assign({}, kundeObj);
+                toSave._importResult = impResult;
+                try {
+                    localStorage.setItem(localKey, JSON.stringify(toSave));
+                    console.log('✅ Manueller Kunde gespeichert:', localKey);
+                } catch(saveErr) {
+                    console.warn('Speicherfehler:', saveErr);
+                }
+
+                setSelectedKunde(kundeObj);
+                setKundeMode('analysiert'); // Ab jetzt wie ein angelegter Kunde behandeln
+                navigateTo('modulwahl'); // Direkt zur Modulauswahl!
             };
 
             // ── UPDATE-ANALYSE: Kunde aus Drive neu laden + KI-Analyse ──
@@ -16266,7 +16966,7 @@
                             return; // FERTIG – keine Drive-Verbindung nötig
                         } else {
                             setLoadProgress('Keine gespeicherten Daten gefunden.');
-                            alert('Keine lokal gespeicherten Daten für diesen Kunden. Bitte über "Kunde NEU" zuerst analysieren.');
+                            alert('Keine lokal gespeicherten Daten für diesen Kunden. Bitte über "Kunde NEU" erst analysieren oder manuell anlegen.');
                             navigateTo('start');
                             return;
                         }
@@ -16587,7 +17287,9 @@
             const renderPage = () => {
                 switch(page) {
                     case 'start':
-                        return <Startseite onKundeNeu={handleKundeNeu} onKundeAnalysiert={handleKundeAnalysiert} />;
+                        return <Startseite onKundeNeu={handleKundeNeu} onKundeAnalysiert={handleKundeAnalysiert} onKundeManuell={handleKundeManuell} />;
+                    case 'manuellEingabe':
+                        return <ManuelleEingabe onFertig={handleManuellFertig} onBack={function(){ navigateTo('start'); }} />;
                     case 'auswahl':
                         return <Kundenauswahl onSelect={handleSelectKunde} loading={loading} kunden={isDriveMode ? driveKunden : null} onUpdateKunde={handleUpdateKunde} />;
                     case 'akte':
@@ -16647,7 +17349,7 @@
                     case 'baustelle':
                         return <StubModul name="Baustellen-App Admin" icon="📱" color="#e74c3c" onBack={() => navigateTo('modulwahl')} />;
                     default:
-                        return <Startseite onKundeNeu={handleKundeNeu} onKundeAnalysiert={handleKundeAnalysiert} />;
+                        return <Startseite onKundeNeu={handleKundeNeu} onKundeAnalysiert={handleKundeAnalysiert} onKundeManuell={handleKundeManuell} />;
                 }
             };
 
