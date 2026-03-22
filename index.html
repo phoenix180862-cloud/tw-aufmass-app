@@ -1075,27 +1075,78 @@
             };
 
             // ══════════════════════════════════════════════
-            // NUR REGEX-ANALYSE: KI-Analyse erfolgt zentral über OrdnerAnalyseEngine
-            // FileProcessor dient nur noch als Offline-Regex-Fallback
+            // BEWÄHRTE STRATEGIE: KI ZUERST → Regex als Fallback
             // ══════════════════════════════════════════════
 
-            if (onProgress) onProgress('PDF wird analysiert (Regex)...');
-            var text = await this.extractPdfText(pdfBlob);
+            if (this.isOnline()) {
+                // ═══ ONLINE: KI macht die Hauptarbeit (PDF direkt an Gemini) ═══
+                result.aiVerfuegbar = true;
+                if (onProgress) onProgress('KI-Analyse läuft (optimale Erkennung)...');
 
-            // 1. LV-Positionen per Regex
-            var regexResult = this.parseLvRegex(text);
+                try {
+                    var aiResult = await this.parseLvAIFromPdf(pdfBlob);
+
+                    if (aiResult && aiResult.positionen && aiResult.positionen.length > 0) {
+                        result.positionen = aiResult.positionen.map(function(p) {
+                            return {
+                                pos: String(p.pos || ''),
+                                bez: String(p.bez || ''),
+                                einheit: String(p.einheit || '?'),
+                                menge: Number(p.menge) || 0,
+                                einzelpreis: Number(p.einzelpreis) || 0,
+                                bereich: String(p.bereich || 'Allgemein'),
+                                kategorie: String(p.kategorie || 'allgemein'),
+                                tags: Array.isArray(p.tags) ? p.tags : [],
+                                quelle: 'ki'
+                            };
+                        });
+                        result.quelle = 'ki';
+                        if (aiResult.kundendaten) result.kundendaten = aiResult.kundendaten;
+                        if (aiResult.raeume && aiResult.raeume.length > 0) result.raeume = aiResult.raeume;
+                        if (aiResult.vertrag) result.vertrag = aiResult.vertrag;
+
+                        if (onProgress) onProgress('KI: ' + result.positionen.length + ' Positionen erkannt ✓');
+                        return result;
+                    }
+                } catch (err) {
+                    console.warn('KI PDF-Analyse fehlgeschlagen:', err.message);
+                }
+
+                // KI-PDF hat nichts geliefert → Text + KI versuchen
+                if (onProgress) onProgress('KI-Textanalyse als Fallback...');
+                try {
+                    var text = await this.extractPdfText(pdfBlob);
+                    if (text && text.trim().length > 50) {
+                        var aiTextResult = await this.parseLvAI(text, []);
+                        if (aiTextResult && aiTextResult.length > 0) {
+                            result.positionen = aiTextResult;
+                            result.quelle = 'ki-text';
+                            if (onProgress) onProgress('KI-Text: ' + result.positionen.length + ' Positionen erkannt ✓');
+                            return result;
+                        }
+                    }
+                } catch (err2) {
+                    console.warn('KI Text-Analyse fehlgeschlagen:', err2.message);
+                }
+
+                // KI komplett fehlgeschlagen → Regex als Fallback
+                if (onProgress) onProgress('Regex-Analyse...');
+            } else {
+                if (onProgress) onProgress('Offline-Modus: Regex-Analyse...');
+            }
+
+            // ═══ REGEX FALLBACK ═══
+            var offlineText = await this.extractPdfText(pdfBlob);
+
+            var regexResult = this.parseLvRegex(offlineText);
             if (regexResult.length > 0) {
                 result.positionen = regexResult;
                 result.quelle = 'regex';
             }
 
-            // 2. Kundendaten per Regex
-            result.kundendaten = this.parseKundendatenRegex(text);
+            result.kundendaten = this.parseKundendatenRegex(offlineText);
+            result.raeume = this.parseRaeumeRegex(offlineText);
 
-            // 3. Räume per Regex
-            result.raeume = this.parseRaeumeRegex(text);
-
-            // 4. Bereiche als zusätzliche Räume
             var bereiche = {};
             regexResult.forEach(function(p) {
                 if (p.bereich && p.bereich !== 'Allgemein') bereiche[p.bereich] = true;
@@ -1107,8 +1158,7 @@
                 }
             });
 
-            if (onProgress) onProgress('Regex: ' + result.positionen.length + ' Positionen, ' + result.raeume.length + ' Räume');
-
+            if (onProgress) onProgress('Ergebnis: ' + result.positionen.length + ' Positionen, ' + result.raeume.length + ' Räume');
             return result;
         },
 
@@ -1453,7 +1503,19 @@
                             });
                         }
 
-                        // KI-Raumanalyse entfernt — OrdnerAnalyseEngine ist einzige KI-Quelle
+                        // KI-Raumanalyse als Bonus wenn online
+                        if (this.isOnline()) {
+                            try {
+                                if (onProgress) onProgress(file.name + ': KI analysiert Räume...');
+                                var kiRaeume = await this.analyzeRaumblattPdf(pdfBlob, file.name);
+                                if (kiRaeume && kiRaeume.length > 0) {
+                                    mergeRaeume(kiRaeume);
+                                    processResult.quellenInfo.push({ datei: file.name, typ: 'raumblatt-ki', raeume: kiRaeume.length });
+                                }
+                            } catch (kiErr) {
+                                console.warn('KI-Raumanalyse fehlgeschlagen (Regex wird verwendet):', kiErr.message);
+                            }
+                        }
 
                         // Räume aus LV-Bereichen übernehmen (Fallback, immer)
                         if (lvResult.raeume && lvResult.raeume.length > 0) {
@@ -1499,7 +1561,22 @@
                             folderName: file.folderName || ''
                         });
 
-                        // KI-Zeichnungsanalyse entfernt — OrdnerAnalyseEngine ist einzige KI-Quelle
+                        // KI-Zeichnungsanalyse wenn online
+                        if (this.isOnline()) {
+                            if (onProgress) onProgress(file.name + ': KI erkennt Räume aus Zeichnung...');
+                            try {
+                                var imgRaeume = await this.analyzeDrawingForRooms(imgBlob, file.name);
+                                if (imgRaeume && imgRaeume.length > 0) {
+                                    var existingKeys = {};
+                                    processResult.raeume.forEach(function(r) { existingKeys[r.bez.toLowerCase().replace(/\s+/g, '')] = true; });
+                                    imgRaeume.forEach(function(r) {
+                                        var key = r.bez.toLowerCase().replace(/\s+/g, '');
+                                        if (!existingKeys[key]) { existingKeys[key] = true; processResult.raeume.push(r); }
+                                    });
+                                    processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung-analyse', raeume: imgRaeume.length });
+                                }
+                            } catch (imgErr) { console.warn('Zeichnungsanalyse fehlgeschlagen:', file.name, imgErr.message); }
+                        }
 
                         processResult.quellenInfo.push({ datei: file.name, typ: 'zeichnung' });
                         imgCount++;
@@ -16117,7 +16194,7 @@
                     }
                 }
 
-                // ═══ AUS DRIVE LADEN: Ordnerstruktur laden → DIREKT OrdnerAnalyse starten ═══
+                // ═══ AUS DRIVE LADEN: Ordnerstruktur laden → BEWÄHRTER FileProcessor mit KI ═══
                 if (isDriveMode && kunde.id && !kunde.files) {
                     setLoading(true);
                     setLoadProgress('📂 Ordnerinhalt wird geladen...');
@@ -16135,23 +16212,18 @@
                         };
                         setSelectedKunde(enriched);
 
-                        // ═══ DIREKT: OrdnerAnalyse automatisch starten (Skill-konform: einmalig, automatisch) ═══
+                        // ═══ BEWÄHRTER PFAD: FileProcessor mit KI (Gemini 2.5 Flash) ═══
                         window._kiDisabled = false;
-                        setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
-                        console.log('🤖 Auto-Start OrdnerAnalyse für', enriched.name);
+                        setLoadProgress('🤖 KI-Analyse wird gestartet...');
+                        console.log('🤖 FileProcessor-Analyse für', enriched.name);
 
                         try {
-                            var result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
+                            var result = await window.FileProcessor.processKundenAkte(
                                 enriched,
-                                function(p) {
-                                    if (p && p.message) {
-                                        console.log('📊 Fortschritt:', p.message);
-                                        setLoadProgress('🤖 ' + p.message);
-                                    }
-                                }
+                                function(msg) { setLoadProgress('🤖 ' + msg); }
                             );
-                            setOrdnerAnalyseMeta(result.meta || null);
-                            console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen');
+
+                            console.log('✅ FileProcessor abgeschlossen:', (result.positionen || []).length, 'Positionen');
 
                             // Positionen in LV_POSITIONEN injizieren
                             if (result.positionen && result.positionen.length > 0) {
@@ -16161,7 +16233,7 @@
 
                             // Kundendaten mergen
                             var kd = result.kundendaten || {};
-                            var vt = result.vertrag || {};
+                            var vt = result.vertrag || kd.vertrag || {};
                             var fullyLoaded = Object.assign({}, enriched, {
                                 auftraggeber: kd.auftraggeber || enriched.auftraggeber || enriched.name,
                                 adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
@@ -16171,16 +16243,15 @@
                                 architekt: kd.architekt || enriched.architekt || '',
                                 arch_adresse: kd.arch_adresse || '', arch_telefon: kd.arch_telefon || '', arch_email: kd.arch_email || '',
                                 ag_adresse: kd.ag_adresse || '', ag_telefon: kd.ag_telefon || '', ag_email: kd.ag_email || '',
-                                vertrag: vt.auftraggeber ? vt : {},
+                                vertrag: vt,
                                 raeume: (result.raeume || []).map(function(r, idx) {
-                                    if (typeof r === 'string') return { id: 'oa_' + idx, nr: String(idx+1), bez: r, geschoss: '', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] };
-                                    return Object.assign({ id: 'oa_' + idx }, r, { nr: r.nr || String(idx+1) });
+                                    if (typeof r === 'string') return { id: 'fp_' + idx, nr: String(idx+1), bez: r, geschoss: '', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] };
+                                    return Object.assign({ id: 'fp_' + idx }, r, { nr: r.nr || String(idx+1) });
                                 }),
                                 zeichnungen: result.zeichnungen || [],
                                 _importResult: result,
                                 _lvPositionenKey: enriched._driveFolderId || enriched.id,
                                 _fullyLoaded: true,
-                                _ordnerAnalyseCompleted: true,
                             });
                             setSelectedKunde(fullyLoaded);
                             setImportResult(result);
@@ -16192,20 +16263,18 @@
                                 delete toSave.folders; delete toSave.files;
                                 toSave._lvPositionen = result.positionen || [];
                                 toSave._gespeichertAm = new Date().toLocaleString('de-DE');
-                                toSave._ordnerAnalyseCompleted = true;
                                 localStorage.setItem(saveKey, JSON.stringify(toSave));
                             } catch(saveErr) { console.warn('Speichern fehlgeschlagen:', saveErr.message); }
 
-                        } catch(oaErr) {
-                            console.error('❌ OrdnerAnalyse fehlgeschlagen:', oaErr.message);
-                            setLoadProgress('⚠️ Analyse fehlgeschlagen: ' + oaErr.message);
-                            // Trotzdem Kundendaten setzen
+                        } catch(fpErr) {
+                            console.error('❌ FileProcessor fehlgeschlagen:', fpErr.message);
+                            setLoadProgress('⚠️ Analyse fehlgeschlagen: ' + fpErr.message);
                             setSelectedKunde(enriched);
                         }
 
                         setLoading(false);
                         setLoadProgress('');
-                        navigateTo('geladen'); // ← Ergebnis-Seite zeigen!
+                        navigateTo('geladen');
                         return;
 
                     } catch (err) {
@@ -16225,30 +16294,23 @@
                     return;
                 }
 
-                console.log('🤖 handleLoadAkteWithConfig gestartet — NUR OrdnerAnalyse', { hasDriveId: !!kunde._driveFolderId });
+                console.log('🤖 handleLoadAkteWithConfig gestartet — FileProcessor', { hasDriveId: !!kunde._driveFolderId });
                 setLoading(true);
                 navigateTo('akte');
-                setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
+                setLoadProgress('🤖 KI-Analyse wird gestartet...');
 
                 try {
                     var result;
 
                     if (kunde._driveFolderId) {
-                        // ═══ EINZIGER PFAD: OrdnerAnalyse-Engine (Skill-konform) ═══
-                        console.log('🤖 Starte OrdnerAnalyseEngine für', kunde.name);
-                        result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
+                        // ═══ BEWÄHRTER PFAD: FileProcessor mit KI ═══
+                        console.log('🤖 Starte FileProcessor für', kunde.name);
+                        result = await window.FileProcessor.processKundenAkte(
                             kunde,
-                            function(p) {
-                                if (p && p.message) {
-                                    console.log('📊 Fortschritt:', p.message);
-                                    setLoadProgress('🤖 ' + p.message);
-                                }
-                            }
+                            function(msg) { setLoadProgress('🤖 ' + msg); }
                         );
-                        setOrdnerAnalyseMeta(result.meta || null);
-                        console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen');
+                        console.log('✅ FileProcessor abgeschlossen:', (result.positionen || []).length, 'Positionen');
                     } else {
-                        // Kein Drive-Ordner → leeres Result
                         console.warn('⚠️ Kein Drive-Ordner — keine Analyse möglich');
                         result = { positionen: [], kundendaten: {}, raeume: [], zeichnungen: [], quellenInfo: [], vertrag: {} };
                     }
@@ -16341,14 +16403,13 @@
                     setLoadProgress('Daten werden geladen...');
                     await new Promise(function(resolve) { setTimeout(resolve, 300); });
                 } else if (selectedKunde && selectedKunde._driveFolderId && !selectedKunde._fullyLoaded) {
-                    // Sicherheits-Fallback: Ordneranalyse nachladen
-                    setLoadProgress('🤖 Ordneranalyse wird nachgeladen...');
+                    // Sicherheits-Fallback: FileProcessor nachladen
+                    setLoadProgress('🤖 KI-Analyse wird nachgeladen...');
                     try {
-                        var result = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
+                        var result = await window.FileProcessor.processKundenAkte(
                             selectedKunde,
-                            function(p) { if (p && p.message) setLoadProgress(p.message); }
+                            function(msg) { setLoadProgress('🤖 ' + msg); }
                         );
-                        setOrdnerAnalyseMeta(result.meta || null);
                         if (result.positionen && result.positionen.length > 0) {
                             var kundeKey = selectedKunde._driveFolderId || selectedKunde.id;
                             LV_POSITIONEN[kundeKey] = result.positionen;
