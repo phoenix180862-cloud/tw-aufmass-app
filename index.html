@@ -6775,7 +6775,7 @@
         /* ═══════════════════════════════════════════
            AKTE GELADEN – SUCCESS PAGE
            ═══════════════════════════════════════════ */
-        function AkteGeladen({ kunde, onStartAufmass, importResult }) {
+        function AkteGeladen({ kunde, onStartAufmass, importResult, onWeiter }) {
             var ir = importResult || {};
             var pos = ir.positionen || [];
             var posCount = pos.length;
@@ -6783,12 +6783,20 @@
             var quellenInfo = ir.quellenInfo || [];
             var fehler = ir.fehler || [];
             var hasImport = !!importResult;
+            var nachtraege = ir.nachtraege || [];
+            var raeume = (kunde && kunde.raeume) ? kunde.raeume : (ir.raeume || []);
+
+            // Erkennungsmethode bestimmen
             var quelle = '';
             quellenInfo.forEach(function(q) {
                 if (q.typ === 'lv' && q.quelle) quelle = q.quelle;
             });
+            // OrdnerAnalyse: Wenn quellenInfo ordner-basiert ist
+            var isOrdnerAnalyse = quellenInfo.some(function(q) { return q.ordner; });
+            if (isOrdnerAnalyse && !quelle) quelle = 'ordneranalyse';
 
             const [showPositionen, setShowPositionen] = useState(false);
+            const [showNachtraege, setShowNachtraege] = useState(false);
 
             return (
                 <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
@@ -6796,10 +6804,10 @@
                     <div style={{textAlign:'center', marginBottom:'20px'}}>
                         <div style={{fontSize:'42px', marginBottom:'8px'}}>{fehler.length > 0 && posCount === 0 ? '⚠️' : '✅'}</div>
                         <div style={{fontSize:'18px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'4px'}}>
-                            {hasImport ? 'Kundenakte analysiert!' : 'Kundenakte geladen!'}
+                            {hasImport ? 'KI-Analyse abgeschlossen!' : 'Kundenakte geladen!'}
                         </div>
                         <div style={{fontSize:'13px', color:'var(--text-muted)', lineHeight:'1.5'}}>
-                            {kunde.name}
+                            {kunde ? kunde.name : ''}
                         </div>
                     </div>
 
@@ -6810,29 +6818,27 @@
                             <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>LV-POSITIONEN</div>
                         </div>
                         <div style={{padding:'12px', borderRadius:'12px', background:'rgba(39,174,96,0.1)', border:'1px solid rgba(39,174,96,0.2)', textAlign:'center'}}>
-                            <div style={{fontSize:'22px', fontWeight:'700', color:'#27ae60'}}>{kunde.raeume ? kunde.raeume.length : 0}</div>
+                            <div style={{fontSize:'22px', fontWeight:'700', color:'#27ae60'}}>{raeume.length}</div>
                             <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>RÄUME ERKANNT</div>
                         </div>
                         <div style={{padding:'12px', borderRadius:'12px', background:'rgba(142,68,173,0.1)', border:'1px solid rgba(142,68,173,0.2)', textAlign:'center'}}>
-                            <div style={{fontSize:'22px', fontWeight:'700', color:'#8e44ad'}}>{zeichnCount}</div>
-                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>ZEICHNUNGEN</div>
+                            <div style={{fontSize:'22px', fontWeight:'700', color:'#8e44ad'}}>{nachtraege.length}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>NACHTRÄGE</div>
                         </div>
                         <div style={{padding:'12px', borderRadius:'12px', background:'rgba(230,126,34,0.1)', border:'1px solid rgba(230,126,34,0.2)', textAlign:'center'}}>
                             <div style={{fontSize:'22px', fontWeight:'700', color:'#e67e22'}}>{quellenInfo.length}</div>
-                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>DATEIEN ANALYSIERT</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', fontWeight:'600'}}>ORDNER ANALYSIERT</div>
                         </div>
                     </div>
 
                     {/* Erkennungsmethode */}
-                    {quelle && (
-                        <div style={{padding:'10px 14px', borderRadius:'10px', background:'var(--bg-secondary)', marginBottom:'12px', display:'flex', alignItems:'center', gap:'8px', fontSize:'13px'}}>
-                            <span>{quelle === 'ki' || quelle === 'ki-text' ? '🤖' : '📡'}</span>
-                            <span style={{fontWeight:'600'}}>Erkennungsmethode:</span>
-                            <span style={{color:'var(--text-muted)'}}>
-                                {quelle === 'ki' ? 'KI-Analyse (optimal)' : quelle === 'ki-text' ? 'KI Text-Analyse' : quelle === 'regex' ? 'Regex (Offline)' : quelle}
-                            </span>
-                        </div>
-                    )}
+                    <div style={{padding:'10px 14px', borderRadius:'10px', background:'var(--bg-secondary)', marginBottom:'12px', display:'flex', alignItems:'center', gap:'8px', fontSize:'13px'}}>
+                        <span>🤖</span>
+                        <span style={{fontWeight:'600'}}>Erkennungsmethode:</span>
+                        <span style={{color:'var(--text-muted)'}}>
+                            {isOrdnerAnalyse ? 'KI-Ordneranalyse (Gemini)' : quelle === 'ki' ? 'KI-Analyse' : quelle === 'ki-text' ? 'KI Text-Analyse' : quelle === 'regex' ? 'Regex (Offline)' : quelle || 'Automatisch'}
+                        </span>
+                    </div>
 
                     {/* LV-Positionen aufklappbar */}
                     {posCount > 0 && (
@@ -6863,15 +6869,48 @@
                         </div>
                     )}
 
-                    {/* Verarbeitete Dateien */}
+                    {/* Nachträge aufklappbar */}
+                    {nachtraege.length > 0 && (
+                        <div style={{background:'var(--bg-secondary)', borderRadius:'14px', marginBottom:'12px', overflow:'hidden', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
+                            <button onClick={function(){setShowNachtraege(!showNachtraege);}} style={{
+                                width:'100%', padding:'14px 16px', border:'none', cursor:'pointer',
+                                background:'none', display:'flex', alignItems:'center', gap:'8px',
+                                fontSize:'13px', fontWeight:'700', color:'#8e44ad', textAlign:'left'
+                            }}>
+                                <span>📑</span>
+                                <span style={{flex:1}}>Erkannte Nachträge ({nachtraege.length})</span>
+                                <span style={{fontSize:'16px', transition:'transform 0.2s', transform: showNachtraege ? 'rotate(180deg)' : 'rotate(0)'}}>{showNachtraege ? '▲' : '▼'}</span>
+                            </button>
+                            {showNachtraege && (
+                                <div style={{borderTop:'1px solid var(--border-color)', maxHeight:'200px', overflow:'auto'}}>
+                                    {nachtraege.map(function(n, ni) {
+                                        var statusColor = n.status === 'beauftragt' ? '#27ae60' : n.status === 'abgelehnt' ? '#e74c3c' : '#f39c12';
+                                        return (
+                                            <div key={ni} style={{padding:'8px 16px', borderBottom:'1px solid var(--border-color)', fontSize:'12px', display:'flex', gap:'8px', alignItems:'center'}}>
+                                                <span style={{width:'8px', height:'8px', borderRadius:'50%', background:statusColor, flexShrink:0}}></span>
+                                                <span style={{fontWeight:'700', minWidth:'30px'}}>{n.nachtragNr || ('N' + (ni+1))}</span>
+                                                <span style={{flex:1, color:'var(--text-primary)'}}>{n.bezeichnung || n.leistung || '–'}</span>
+                                                {n.summe && <span style={{fontWeight:'600', color:statusColor}}>{Number(n.summe).toLocaleString('de-DE')} €</span>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Verarbeitete Ordner/Dateien */}
                     {quellenInfo.length > 0 && (
                         <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
-                            <div style={{fontSize:'12px', fontWeight:'700', marginBottom:'8px', color:'var(--text-secondary)'}}>Verarbeitete Dateien</div>
+                            <div style={{fontSize:'12px', fontWeight:'700', marginBottom:'8px', color:'var(--text-secondary)'}}>
+                                {isOrdnerAnalyse ? '📂 Analysierte Ordner' : '📄 Verarbeitete Dateien'}
+                            </div>
                             {quellenInfo.map(function(q, qi) {
                                 return (
                                     <div key={qi} style={{fontSize:'12px', color:'var(--text-muted)', padding:'3px 0', display:'flex', gap:'6px', alignItems:'center'}}>
-                                        <span>{q.typ === 'lv' ? '📄' : q.typ === 'excel' ? '📊' : '🖼️'}</span>
-                                        <span style={{flex:1}}>{q.datei}</span>
+                                        <span>{q.ordner ? '📁' : q.typ === 'lv' ? '📄' : q.typ === 'excel' ? '📊' : '🖼️'}</span>
+                                        <span style={{flex:1}}>{q.name || q.datei || ('Ordner ' + (q.ordner || ''))}</span>
+                                        {q.dokumente && <span style={{fontSize:'10px', color:'var(--accent-blue)', fontWeight:'600'}}>{q.dokumente} Dok.</span>}
                                         {q.positionen && <span style={{fontSize:'10px', color:'var(--accent-blue)', fontWeight:'600'}}>{q.positionen} Pos.</span>}
                                         {q.quelle && <span style={{fontSize:'9px', padding:'1px 5px', background:'rgba(30,136,229,0.1)', borderRadius:'4px', color:'var(--accent-blue)'}}>{q.quelle}</span>}
                                     </div>
@@ -6895,25 +6934,39 @@
                     )}
 
                     {/* Projektdaten-Zusammenfassung */}
-                    {(kunde.auftraggeber || kunde.bauleitung || kunde.architekt) && (
+                    {kunde && (kunde.auftraggeber || kunde.bauleitung || kunde.architekt) && (
                         <div style={{background:'var(--bg-secondary)', borderRadius:'14px', padding:'14px 16px', marginBottom:'16px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}}>
                             <div style={{fontSize:'12px', fontWeight:'700', marginBottom:'8px', color:'var(--text-secondary)'}}>📋 Erkannte Projektdaten</div>
                             {kunde.auftraggeber && <div style={{fontSize:'13px', padding:'3px 0'}}>👤 <strong>Auftraggeber:</strong> {kunde.auftraggeber}</div>}
                             {kunde.adresse && <div style={{fontSize:'13px', padding:'3px 0', color:'var(--text-muted)'}}>📍 {kunde.adresse}</div>}
                             {kunde.bauleitung && <div style={{fontSize:'13px', padding:'3px 0'}}>🏗️ <strong>Bauleitung:</strong> {kunde.bauleitung}</div>}
                             {kunde.architekt && <div style={{fontSize:'13px', padding:'3px 0'}}>📐 <strong>Architekt:</strong> {kunde.architekt}</div>}
+                            {kunde.baumassnahme && <div style={{fontSize:'13px', padding:'3px 0', color:'var(--text-muted)'}}>🏠 {kunde.baumassnahme}</div>}
                         </div>
                     )}
 
-                    {/* Aufmaß starten Button */}
+                    {/* PRIMARY: Weiter zur Modulauswahl */}
+                    {onWeiter && (
+                        <button onClick={onWeiter} style={{
+                            width:'100%', padding:'16px', borderRadius:'12px', border:'none', cursor:'pointer',
+                            background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
+                            color:'white', fontSize:'16px', fontWeight:'700',
+                            boxShadow:'0 4px 12px rgba(30,136,229,0.3)',
+                            display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
+                            marginBottom:'10px'
+                        }}>
+                            🚀 Weiter zur Modulauswahl
+                        </button>
+                    )}
+
+                    {/* SECONDARY: Direkt Aufmaß starten */}
                     <button onClick={onStartAufmass} style={{
-                        width:'100%', padding:'14px', borderRadius:'12px', border:'none', cursor:'pointer',
-                        background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
-                        color:'white', fontSize:'15px', fontWeight:'700',
-                        boxShadow:'0 4px 12px rgba(30,136,229,0.3)',
+                        width:'100%', padding:'12px', borderRadius:'12px', border:'1px solid rgba(30,136,229,0.3)', cursor:'pointer',
+                        background:'transparent',
+                        color:'var(--accent-blue)', fontSize:'13px', fontWeight:'600',
                         display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
                     }}>
-                        🏗️ Aufmaß starten
+                        📐 Direkt Aufmaß starten
                     </button>
                 </div>
             );
@@ -15547,6 +15600,7 @@
                     }
 
                     setLoadProgress('✅ Update-Analyse abgeschlossen! ' + (result.positionen || []).length + ' Positionen erkannt.');
+                    navigateTo('geladen'); // Ergebnis anzeigen!
 
                 } catch(err) {
                     console.error('Update-Analyse Fehler:', err);
@@ -15726,12 +15780,10 @@
 
                 // ═══ WENN "Kunde ANALYSIERT": Versuche gespeicherte Daten zu laden ═══
                 if (kundeMode === 'analysiert') {
-                    navigateTo('akte');
                     try {
                         var cached = localStorage.getItem(localKey);
                         if (cached) {
                             var cachedData = JSON.parse(cached);
-                            setLoadProgress('Gespeicherte Daten werden geladen...');
 
                             // LV-Positionen wiederherstellen
                             if (cachedData._lvPositionen && cachedData._lvPositionen.length > 0) {
@@ -15745,12 +15797,17 @@
                                 setImportResult(cachedData._importResult);
                             }
 
+                            cachedData._fullyLoaded = true;
                             setSelectedKunde(cachedData);
                             setLoadProgress('');
                             setLoading(false);
+                            navigateTo('geladen'); // Ergebnis-Seite zeigen!
                             return; // FERTIG – keine Drive-Verbindung nötig
                         } else {
-                            setLoadProgress('Keine gespeicherten Daten gefunden – lade aus Drive (ohne KI)...');
+                            setLoadProgress('Keine gespeicherten Daten gefunden.');
+                            alert('Keine lokal gespeicherten Daten für diesen Kunden. Bitte über "Kunde NEU" zuerst analysieren.');
+                            navigateTo('start');
+                            return;
                         }
                     } catch(cacheErr) {
                         console.warn('Cache-Fehler:', cacheErr);
@@ -15845,7 +15902,7 @@
 
                         setLoading(false);
                         setLoadProgress('');
-                        navigateTo('modulwahl');
+                        navigateTo('geladen'); // ← Ergebnis-Seite zeigen!
                         return;
 
                     } catch (err) {
@@ -15959,6 +16016,7 @@
                     }
 
                     setLoadProgress('✅ Analyse abgeschlossen!');
+                    navigateTo('geladen'); // Ergebnis-Seite zeigen
 
                 } catch (err) {
                     console.error('Analyse Fehler:', err);
@@ -15969,10 +16027,8 @@
 
             const handleLoadAkte = async () => {
                 // ═══ Daten wurden bereits in handleSelectKunde geladen! ═══
-                // Nach Bestätigung → ModulWahl statt direkt Aufmaß
-
-                if (isDriveMode && selectedKunde && selectedKunde._fullyLoaded) {
-                    navigateTo('modulwahl');
+                if (selectedKunde && selectedKunde._fullyLoaded) {
+                    navigateTo('geladen');
                     return;
                 }
 
@@ -15981,7 +16037,6 @@
                 if (!isDriveMode) {
                     setLoadProgress('Daten werden geladen...');
                     await new Promise(function(resolve) { setTimeout(resolve, 300); });
-                    setImportResult(null);
                 } else if (selectedKunde && selectedKunde._driveFolderId && !selectedKunde._fullyLoaded) {
                     // Sicherheits-Fallback: Ordneranalyse nachladen
                     setLoadProgress('🤖 Ordneranalyse wird nachgeladen...');
@@ -16021,7 +16076,7 @@
                     }
                 }
                 setLoading(false);
-                navigateTo('modulwahl');
+                navigateTo('geladen');
             };
 
             const handleStartAufmass = () => {
@@ -16178,7 +16233,7 @@
                             refreshKey={ordnerAnalyseMeta ? ordnerAnalyseMeta.abschlussZeitpunkt || '' : ''}
                         />;
                     case 'geladen':
-                        return <AkteGeladen kunde={selectedKunde} onStartAufmass={handleStartAufmass} importResult={importResult} />;
+                        return <AkteGeladen kunde={selectedKunde} onStartAufmass={handleStartAufmass} importResult={importResult} onWeiter={function(){ navigateTo('modulwahl'); }} />;
                     case 'raumerkennung':
                         return <Raumerkennung kunde={selectedKunde} onSelectRaum={handleSelectRaum} fertigeRaeume={fertigeRaeume} lastRaumData={lastRaumData} gesamtliste={gesamtliste} onShowGesamtliste={() => setShowGesamtliste(true)} />;
                     case 'raumblatt':
