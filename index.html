@@ -951,8 +951,8 @@
                 }
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
-                            content: 'Du bist ein erfahrener Bausachverstaendiger fuer Fliesenarbeiten (VOB/C DIN 18352). Analysiere den folgenden Text und extrahiere ALLE Positionen. Es ist KRITISCH, dass du JEDE EINZELNE Position findest — ueberspringe KEINE!\n\nAntworte NUR mit einem JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"01.001","bez":"Bodenfliesen 30x60 liefern und verlegen","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: Positionsnummer EXAKT wie im Dokument (z.B. 01.001, 1.01, 1.1.010)\n- bez: VOLLSTAENDIGE Positionsbezeichnung — NICHT abkuerzen!\n- einheit: m2, m, Stk, psch, lfm, kg, l, t (EXAKT wie im Dokument)\n- menge: Ausgeschriebene Menge als Zahl (0 wenn unklar)\n- einzelpreis: Einheitspreis (EP) als Zahl in Euro — IMMER wenn im Text vorhanden! Suche nach Euro-Betraegen neben Positionen\n- bereich: Abschnitt/Bereich (EG, OG, Allgemein, etc.)\n- kategorie: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n- tags: Suchbegriffe als Array\n- EXAKTE Reihenfolge beibehalten!\n- KEINE Position auslassen!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
-                        }], 8000);
+                            content: 'Du bist ein VOB-Experte fuer Fliesenlegerarbeiten (DIN 18352).\n\n═══ DEINE EINZIGE AUFGABE: ALLE LV-POSITIONEN EXTRAHIEREN ═══\n\nDieser Text stammt aus einem Leistungsverzeichnis (LV). Es kann 50 bis 200+ Positionen enthalten!\n\nEine LV-Position hat IMMER:\n- Positionsnummer (01.001, 1.01, Pos 3, etc.)\n- Leistungsbeschreibung\n- Menge + Einheit (m2, m, Stk, psch, lfm)\n- Optional: EP und GP\n\n⚠️ KRITISCH: Zeilen mit Raumnamen (Bad EG, Kueche) die eine Positionsnummer und Menge haben = POSITIONEN! Der Raumname gehoert ins "bereich"-Feld.\n\nGehe den GESAMTEN Text durch. Ueberspringe KEINE Position! Auch Zulagepositionen, Eventualpositionen, Bedarfspositionen muessen rein.\n\nAntworte NUR mit JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"01.001","bez":"VOLLSTAENDIGE Bezeichnung","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"Bad EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: EXAKT wie im Dokument\n- bez: VOLLSTAENDIG — NICHT abkuerzen!\n- einzelpreis: EP als Zahl — IMMER extrahieren wenn vorhanden\n- Es duerfen 200+ Positionen sein — das ist normal!\n- KEINE Position auslassen — JEDE EINZELNE zaehlt!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
+                        }], 32000);
                 if (!apiText) return null;
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
                 var parsed = JSON.parse(cleaned);
@@ -987,10 +987,10 @@
                                 },
                                 {
                                     type: 'text',
-                                    text: 'Du bist ein erfahrener Bausachverstaendiger fuer Fliesenarbeiten (VOB/C DIN 18352). Analysiere dieses Dokument VOLLSTAENDIG und GRUENDLICH. Lies JEDE Seite, JEDEN Briefkopf, JEDE Fusszeile, JEDE Tabelle.\n\nExtrahiere ALLES — es darf NICHTS verloren gehen:\n\n1. ALLE LV-POSITIONEN: Jede einzelne Position mit Positionsnummer. Lies auch Einheitspreise (EP), Gesamtpreise (GP) und Mengen aus Tabellen/Spalten ab.\n\n2. ALLE KONTAKTDATEN — das ist KRITISCH:\n   - AUFTRAGGEBER/BAUHERR: Vollstaendiger Name, Firma, komplette Adresse (Strasse+Nr, PLZ+Ort), Telefon, Fax, Mobilnummer, E-Mail\n   - BAULEITUNG: Vollstaendiger Name, Firma, komplette Adresse, Telefon, Fax, Mobil, E-Mail\n   - ARCHITEKT/PLANER: Vollstaendiger Name, Firma, komplette Adresse, Telefon, Fax, Mobil, E-Mail\n   - Suche in: Briefkoepfen, Anschreiben, Fussnoten, Stempeln, Unterschriftsfeldern, Verteilerlisten, Deckblaettern, Kopfzeilen\n\n3. ALLE RAEUME mit Bezeichnung, Geschoss und Nummer\n\n4. VERTRAGSDETAILS: Auftragsnummer, Vergabeaktenzeichen, Vertragsdatum, Auftragssumme, Ausfuehrungsfristen, Skontoregeln, Zahlungsziel, Sicherheitseinbehalt\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks):\n{"positionen":[{"pos":"01.001","bez":"Bodenfliesen 30x60 liefern und verlegen nach DIN 18352","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden","fliese","verlegen"]}],"kundendaten":{"auftraggeber":"EXAKTER Name/Firma","ag_adresse":"KOMPLETTE Adresse mit Strasse Nr, PLZ Ort","ag_telefon":"ALLE Telefonnummern","ag_fax":"Faxnummer","ag_email":"ALLE E-Mail-Adressen","adresse":"Baustellenadresse","baumassnahme":"Bezeichnung der Baumassnahme","bauleitung":"EXAKTER Name/Firma","bl_adresse":"KOMPLETTE Adresse","bl_telefon":"Telefon","bl_fax":"Fax","bl_email":"E-Mail","architekt":"EXAKTER Name/Firma","arch_adresse":"KOMPLETTE Adresse","arch_telefon":"Telefon","arch_fax":"Fax","arch_email":"E-Mail"},"raeume":["Bad EG","Kueche EG","Flur OG"],"vertrag":{"auftragsnummer":"","vergabeaktenzeichen":"","vertragsdatum":"","auftragssumme":0,"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0}}\n\nKRITISCHE REGELN:\n- JEDE Position mit Positionsnummer MUSS in die Liste — ueberspringe KEINE!\n- Positionsnummern EXAKT wie im Dokument (z.B. 01.001 oder 1.01)\n- VOLLSTAENDIGE Positionsbezeichnung — NICHT abkuerzen!\n- einzelpreis: EP als Zahl in Euro — IMMER extrahieren wenn in Tabelle vorhanden!\n- Kontaktdaten: Durchsuche das GESAMTE Dokument nach Adressen, Telefonnummern, E-Mails\n- E-Mail-Adressen erkennen: alles was das Format name@domain.de hat\n- Telefonnummern erkennen: alle Formate (0xxxx-xxxxx, +49xxx, 01xx-xxxxxxx)\n- Adressen erkennen: Strasse + Hausnummer, PLZ + Ort\n- EXAKTE Reihenfolge der Positionen beibehalten!'
+                                    text: 'Du bist ein VOB-Experte fuer Fliesenlegerarbeiten (DIN 18352).\n\n══ DEINE HAUPTAUFGABE: ALLE LV-POSITIONEN EXTRAHIEREN ══\n\nDieses Dokument ist sehr wahrscheinlich ein Leistungsverzeichnis (LV), Angebot oder Vertrag. Es kann 50 bis 200 Positionen enthalten!\n\nEine LV-Position erkennt man an:\n- Positionsnummer (01.001, 1.01, Pos 3, etc.)\n- Leistungsbeschreibung\n- Menge + Einheit (m2, m, Stk, psch, lfm)\n- Optional: EP (Einzelpreis) und GP (Gesamtpreis)\n\n⚠️ KRITISCH: Zeilen die Raumnamen enthalten (Bad EG, Kueche, Flur OG) aber eine Positionsnummer und Menge haben, sind POSITIONEN! Der Raumname gehoert ins Feld "bereich". Trage solche Zeilen NICHT als Raum ein, sondern als Position!\n\nGehe JEDE SEITE durch. Lies JEDE Tabelle. Ueberspringe KEINE Position!\nAuch Zulagepositionen, Eventualpositionen, Bedarfspositionen, Grundpositionen und Alternativpositionen muessen erfasst werden.\n\n══ NEBENAUFGABE: KONTAKTDATEN ══\nSuche in Briefkoepfen, Fusszeilen, Deckblaettern nach Auftraggeber, Bauleitung, Architekt mit Adresse, Telefon, E-Mail.\n\n══ RAEUME: NUR aus separaten Raumlisten ══\nTrage Raeume NUR ein wenn eine EIGENE Raumliste/Raumbuch im Dokument existiert. Positionsbezeichnungen mit Raumnamen (z.B. "Fliesen Bad EG verlegen") zaehlen NICHT als Raum!\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks):\n{"positionen":[{"pos":"01.001","bez":"VOLLSTAENDIGE Positionsbezeichnung hier","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"Bad EG","kategorie":"boden","tags":["boden","fliese"]}],"kundendaten":{"auftraggeber":"","ag_adresse":"","ag_telefon":"","ag_fax":"","ag_email":"","adresse":"","baumassnahme":"","bauleitung":"","bl_adresse":"","bl_telefon":"","bl_email":"","architekt":"","arch_adresse":"","arch_telefon":"","arch_email":""},"raeume":[],"vertrag":{"auftragsnummer":"","vergabeaktenzeichen":"","vertragsdatum":"","auftragssumme":0,"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0}}\n\nREGELN:\n- JEDE Position MUSS in die Liste — es duerfen 200+ sein!\n- Positionsnummern EXAKT wie im Dokument\n- VOLLSTAENDIGE Bezeichnung — NICHT abkuerzen!\n- EP und GP als Zahl extrahieren wenn vorhanden\n- Raeume-Array bleibt LEER ausser es gibt eine echte separate Raumliste\n- Kontaktdaten aus dem GESAMTEN Dokument sammeln'
                                 }
                             ]
-                        }], 8000);
+                        }], 32000);
                 if (!apiText) {
                     console.error('KI: Keine Antwort erhalten');
                     return null;
@@ -6922,67 +6922,153 @@
             };
 
             if (loading) {
-                // ── Fortschritt aus loadProgress-String parsen ──
+                // ── Fortschritt parsen ──
                 var progressPct = 0;
                 var progressPhase = '';
-                if (loadProgress) {
-                    // Ordner x/y Format erkennen
-                    var ordnerMatch = loadProgress.match(/\((\d+)\/(\d+)\)/);
-                    if (ordnerMatch) {
-                        var current = parseInt(ordnerMatch[1]);
-                        var total = parseInt(ordnerMatch[2]);
-                        progressPct = Math.round((current / total) * 85); // 85% = Ordner analysieren
-                    }
-                    // Phasen erkennen
-                    if (loadProgress.indexOf('Ordnerinhalt') >= 0 || loadProgress.indexOf('Ordnerstruktur') >= 0) { progressPct = 5; progressPhase = 'Struktur laden'; }
-                    else if (loadProgress.indexOf('Cross-Referencing') >= 0 || loadProgress.indexOf('crossref') >= 0) { progressPct = 90; progressPhase = 'Abgleich'; }
-                    else if (loadProgress.indexOf('abgeschlossen') >= 0 || loadProgress.indexOf('✅') >= 0) { progressPct = 100; progressPhase = 'Fertig!'; }
-                    else if (loadProgress.indexOf('KI analysiert') >= 0) { progressPhase = 'KI-Analyse'; }
-                    else if (loadProgress.indexOf('Lade') >= 0) { progressPhase = 'Dateien laden'; }
-                    else if (loadProgress.indexOf('gestartet') >= 0) { progressPct = 8; progressPhase = 'Startet...'; }
+                var fileMatch = loadProgress ? loadProgress.match(/(\d+)\/(\d+)/) : null;
+                if (fileMatch) {
+                    progressPct = Math.round((parseInt(fileMatch[1]) / parseInt(fileMatch[2])) * 90);
                 }
+                if (loadProgress) {
+                    if (loadProgress.indexOf('Ordnerinhalt') >= 0) { progressPct = 5; progressPhase = 'Ordner laden'; }
+                    else if (loadProgress.indexOf('Verarbeite') >= 0) progressPhase = 'Dateien scannen';
+                    else if (loadProgress.indexOf('KI-Analyse') >= 0 || loadProgress.indexOf('KI analysiert') >= 0) progressPhase = 'KI denkt nach...';
+                    else if (loadProgress.indexOf('Räume') >= 0) progressPhase = 'Räume erkennen';
+                    else if (loadProgress.indexOf('Positionen') >= 0) progressPhase = 'Positionen zählen';
+                    else if (loadProgress.indexOf('✅') >= 0 || loadProgress.indexOf('abgeschlossen') >= 0) { progressPct = 100; progressPhase = 'Fertig!'; }
+                    else if (loadProgress.indexOf('gestartet') >= 0) { progressPct = 3; progressPhase = 'Aufwärmen...'; }
+                    else if (loadProgress.indexOf('Lade') >= 0) progressPhase = 'PDF wird geladen';
+                }
+
+                // ── Wechselnde lustige Sprüche (alle 3 Sekunden) ──
+                var funMessages = [
+                    '🧱 Die KI verlegt gerade virtuelle Fliesen...',
+                    '📐 Maße werden mit Lasergenauigkeit geprüft...',
+                    '🤖 Gemini liest schneller als jeder Polier...',
+                    '☕ Zeit für einen Kaffee — die KI macht das schon!',
+                    '🔍 Jede Position wird unter die Lupe genommen...',
+                    '📋 Das LV wird Zeile für Zeile durchgekämmt...',
+                    '🏗️ Baustellendaten werden zusammengetragen...',
+                    '💡 Wussten Sie? Thomas W. verlegt schneller als jede KI!',
+                    '🎯 Positionsnummern werden wie Perlen aufgereiht...',
+                    '🧮 EP × Menge = GP... die KI rechnet mit!',
+                    '📊 Mengen, Einheiten, Preise — alles wird erfasst!',
+                    '✨ Die KI sortiert Daten wie Fliesen im Halbverband...',
+                    '🗂️ Ordner für Ordner wird durchforstet...',
+                    '🏆 Diese KI hat schon tausende LVs gelesen...',
+                    '🔮 Die KI sieht Positionen, wo andere nur Text sehen...',
+                    '🎭 Fliesenleger und KI — ein unschlagbares Team!',
+                    '🍕 Fliesen sind wie Pizza — die Größe entscheidet!',
+                    '🦾 Die KI liest PDFs schneller als Sie "Fugenkreuz" sagen...',
+                    '🧩 Jede Position ist ein Puzzleteil des Projekts...',
+                    '⚡ 200 Positionen? Kein Problem für Gemini!',
+                    '🎪 Willkommen in der magischen Welt der LV-Analyse...',
+                    '🏋️ Diese KI stemmt auch die dicksten Leistungsverzeichnisse!',
+                    '🎵 Position für Position... wie Musik in den Ohren eines Bauleiters!',
+                    '🌟 Fun Fact: Die längste Fuge der Welt ist 12 km lang!',
+                    '🧊 Kühlen Kopf bewahren — die KI schwitzt nicht!',
+                    '🎩 Abrakadabra — aus PDF wird Klartext!',
+                    '📱 TW Business Suite — wo Handwerk auf Hightech trifft!',
+                    '🚀 Bald fertig — dann können Sie loslegen!',
+                    '🎓 Diese KI hat in VOB/C promoviert (fast)...',
+                    '🦸 Fliesenleger-Superheld activated!',
+                ];
+                var msgIdx = Math.floor(Date.now() / 3000) % funMessages.length;
+
+                // ── Fliesen-Animations-Pattern ──
+                var tiles = [];
+                var tileCount = Math.min(Math.max(Math.floor(progressPct / 5), 1), 20);
+                for (var ti = 0; ti < 20; ti++) {
+                    tiles.push(ti < tileCount);
+                }
+
                 return (
-                    <div className="page-container" style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'80vh', padding:'20px'}}>
-                        <div style={{fontSize:'48px', marginBottom:'16px', animation:'spin 2s linear infinite'}}>🤖</div>
-                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'6px'}}>
-                            KI-Analyse läuft
+                    <div className="page-container" style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'85vh', padding:'20px'}}>
+
+                        {/* Animiertes Fliesen-Muster */}
+                        <div style={{display:'grid', gridTemplateColumns:'repeat(10, 22px)', gap:'3px', marginBottom:'20px'}}>
+                            {tiles.map(function(filled, idx) {
+                                return React.createElement('div', {
+                                    key: idx,
+                                    style: {
+                                        width: '22px', height: '22px', borderRadius: '3px',
+                                        background: filled
+                                            ? 'linear-gradient(135deg, #1E88E5 0%, #8e44ad 100%)'
+                                            : 'var(--bg-tertiary)',
+                                        border: '1px solid ' + (filled ? 'rgba(30,136,229,0.5)' : 'var(--border-color)'),
+                                        transition: 'all 0.5s ease',
+                                        opacity: filled ? 1 : 0.3,
+                                        animation: filled ? 'tileAppear 0.3s ease-out' : 'none',
+                                    }
+                                });
+                            })}
                         </div>
 
-                        {/* Prozent-Anzeige */}
-                        <div style={{fontSize:'32px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'12px', fontFamily:'monospace'}}>
+                        {/* Emoji-Animation — wechselt je nach Phase */}
+                        <div style={{fontSize:'42px', marginBottom:'8px', animation:'bounce 1.5s ease-in-out infinite'}}>
+                            {progressPct >= 100 ? '🎉' : progressPct > 80 ? '🏆' : progressPct > 60 ? '🤖' : progressPct > 40 ? '📋' : progressPct > 20 ? '🔍' : '🚀'}
+                        </div>
+
+                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'6px'}}>
+                            {progressPct >= 100 ? 'Analyse abgeschlossen! 🎉' : progressPct > 60 ? 'KI liest das LV...' : progressPct > 30 ? 'Dokumente werden analysiert...' : 'KI-Analyse läuft'}
+                        </div>
+
+                        {/* Große Prozent-Anzeige */}
+                        <div style={{fontSize:'38px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'12px', fontFamily:'monospace', textShadow:'0 0 20px rgba(30,136,229,0.3)'}}>
                             {progressPct > 0 ? progressPct + '%' : '...'}
                         </div>
 
-                        {/* Fortschrittsbalken (ECHT) */}
-                        <div style={{width:'85%', maxWidth:'320px', height:'8px', background:'var(--bg-tertiary)', borderRadius:'4px', overflow:'hidden', marginBottom:'14px', border:'1px solid var(--border-color)'}}>
+                        {/* Fortschrittsbalken */}
+                        <div style={{width:'85%', maxWidth:'320px', height:'10px', background:'var(--bg-tertiary)', borderRadius:'5px', overflow:'hidden', marginBottom:'14px', border:'1px solid var(--border-color)'}}>
                             <div style={{
-                                width: progressPct > 0 ? progressPct + '%' : '5%',
-                                height:'100%',
+                                width: Math.max(progressPct, 3) + '%', height:'100%',
                                 background:'linear-gradient(90deg, #1E88E5, #8e44ad, #27ae60)',
-                                borderRadius:'4px',
-                                transition:'width 0.5s ease-out'
+                                borderRadius:'5px', transition:'width 0.8s ease-out',
+                                boxShadow:'0 0 8px rgba(30,136,229,0.5)'
                             }}></div>
                         </div>
 
                         {/* Phase */}
                         {progressPhase && (
-                            <div style={{fontSize:'12px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'6px', letterSpacing:'0.5px'}}>
+                            <div style={{fontSize:'13px', fontWeight:'700', color:'var(--accent-blue)', marginBottom:'8px'}}>
                                 {progressPhase}
                             </div>
                         )}
 
                         {/* Detail-Nachricht */}
-                        <div style={{fontSize:'12px', color:'var(--text-muted)', textAlign:'center', maxWidth:'300px', lineHeight:'1.5', minHeight:'36px'}}>
-                            {loadProgress ? loadProgress.replace(/^🤖\s*/, '') : 'Dokumente werden gelesen und analysiert...'}
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', textAlign:'center', maxWidth:'300px', lineHeight:'1.5', minHeight:'20px'}}>
+                            {loadProgress ? loadProgress.replace(/^🤖\s*/, '') : ''}
                         </div>
 
-                        {/* Hinweis */}
-                        <div style={{marginTop:'16px', fontSize:'10px', color:'var(--text-muted)', textAlign:'center', opacity:0.6}}>
-                            Bitte nicht schließen — die KI analysiert alle Ordner
+                        {/* Lustiger wechselnder Spruch */}
+                        <div style={{marginTop:'20px', padding:'12px 20px', background:'rgba(30,136,229,0.06)', borderRadius:'12px', border:'1px solid rgba(30,136,229,0.12)', maxWidth:'320px'}}>
+                            <div style={{fontSize:'13px', color:'var(--accent-blue)', textAlign:'center', fontStyle:'italic', lineHeight:'1.5', transition:'opacity 0.3s'}}>
+                                {funMessages[msgIdx]}
+                            </div>
+                        </div>
+
+                        {/* Bitte-nicht-schließen */}
+                        <div style={{marginTop:'12px', fontSize:'10px', color:'var(--text-muted)', opacity:0.5}}>
+                            Bitte nicht schließen — Thomas' KI arbeitet hart! 💪
+                        </div>
+
+                        {/* Mini-Baustellen-Laufband */}
+                        <div style={{marginTop:'16px', width:'100%', maxWidth:'320px', overflow:'hidden', height:'24px', position:'relative'}}>
+                            <div style={{
+                                display:'flex', gap:'16px', fontSize:'18px',
+                                animation:'scrollBanner 8s linear infinite', whiteSpace:'nowrap',
+                                position:'absolute', left:'0'
+                            }}>
+                                <span>🧱</span><span>🧱</span><span>🏗️</span><span>🧱</span><span>📐</span><span>🧱</span><span>🧱</span><span>🤖</span><span>🧱</span><span>🧱</span><span>☕</span><span>🧱</span><span>🧱</span><span>📋</span><span>🧱</span><span>🧱</span><span>💎</span><span>🧱</span>
+                                <span>🧱</span><span>🧱</span><span>🏗️</span><span>🧱</span><span>📐</span><span>🧱</span><span>🧱</span><span>🤖</span><span>🧱</span><span>🧱</span><span>☕</span><span>🧱</span><span>🧱</span><span>📋</span><span>🧱</span><span>🧱</span><span>💎</span><span>🧱</span>
+                            </div>
                         </div>
 
                         <style>{`
-                            @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+                            @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+                            @keyframes tileAppear { 0%{transform:scale(0) rotate(45deg);opacity:0} 100%{transform:scale(1) rotate(0);opacity:1} }
+                            @keyframes scrollBanner { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+                            @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
                         `}</style>
                     </div>
                 );
@@ -16194,7 +16280,7 @@
                     }
                 }
 
-                // ═══ AUS DRIVE LADEN: Ordnerstruktur laden → BEWÄHRTER FileProcessor mit KI ═══
+                // ═══ AUS DRIVE LADEN: Ordnerstruktur laden → Ordner-Auswahl zeigen ═══
                 if (isDriveMode && kunde.id && !kunde.files) {
                     setLoading(true);
                     setLoadProgress('📂 Ordnerinhalt wird geladen...');
@@ -16211,70 +16297,11 @@
                             _driveFolderId: kunde.id,
                         };
                         setSelectedKunde(enriched);
-
-                        // ═══ BEWÄHRTER PFAD: FileProcessor mit KI (Gemini 2.5 Flash) ═══
-                        window._kiDisabled = false;
-                        setLoadProgress('🤖 KI-Analyse wird gestartet...');
-                        console.log('🤖 FileProcessor-Analyse für', enriched.name);
-
-                        try {
-                            var result = await window.FileProcessor.processKundenAkte(
-                                enriched,
-                                function(msg) { setLoadProgress('🤖 ' + msg); }
-                            );
-
-                            console.log('✅ FileProcessor abgeschlossen:', (result.positionen || []).length, 'Positionen');
-
-                            // Positionen in LV_POSITIONEN injizieren
-                            if (result.positionen && result.positionen.length > 0) {
-                                var kundeKey = enriched._driveFolderId || enriched.id || 'drive_import';
-                                LV_POSITIONEN[kundeKey] = result.positionen;
-                            }
-
-                            // Kundendaten mergen
-                            var kd = result.kundendaten || {};
-                            var vt = result.vertrag || kd.vertrag || {};
-                            var fullyLoaded = Object.assign({}, enriched, {
-                                auftraggeber: kd.auftraggeber || enriched.auftraggeber || enriched.name,
-                                adresse: kd.adresse || kd.baumassnahme || enriched.adresse || '',
-                                baumassnahme: kd.baumassnahme || enriched.baumassnahme || '',
-                                bauleitung: kd.bauleitung || enriched.bauleitung || '',
-                                bl_adresse: kd.bl_adresse || '', bl_telefon: kd.bl_telefon || '', bl_email: kd.bl_email || '',
-                                architekt: kd.architekt || enriched.architekt || '',
-                                arch_adresse: kd.arch_adresse || '', arch_telefon: kd.arch_telefon || '', arch_email: kd.arch_email || '',
-                                ag_adresse: kd.ag_adresse || '', ag_telefon: kd.ag_telefon || '', ag_email: kd.ag_email || '',
-                                vertrag: vt,
-                                raeume: (result.raeume || []).map(function(r, idx) {
-                                    if (typeof r === 'string') return { id: 'fp_' + idx, nr: String(idx+1), bez: r, geschoss: '', fliesenhoehe: 0, raumhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] };
-                                    return Object.assign({ id: 'fp_' + idx }, r, { nr: r.nr || String(idx+1) });
-                                }),
-                                zeichnungen: result.zeichnungen || [],
-                                _importResult: result,
-                                _lvPositionenKey: enriched._driveFolderId || enriched.id,
-                                _fullyLoaded: true,
-                            });
-                            setSelectedKunde(fullyLoaded);
-                            setImportResult(result);
-
-                            // Lokal speichern für "Kunde ANALYSIERT"
-                            try {
-                                var saveKey = 'aufmass_kunde_' + (enriched._driveFolderId || enriched.id || enriched.name || 'unknown');
-                                var toSave = Object.assign({}, fullyLoaded);
-                                delete toSave.folders; delete toSave.files;
-                                toSave._lvPositionen = result.positionen || [];
-                                toSave._gespeichertAm = new Date().toLocaleString('de-DE');
-                                localStorage.setItem(saveKey, JSON.stringify(toSave));
-                            } catch(saveErr) { console.warn('Speichern fehlgeschlagen:', saveErr.message); }
-
-                        } catch(fpErr) {
-                            console.error('❌ FileProcessor fehlgeschlagen:', fpErr.message);
-                            setLoadProgress('⚠️ Analyse fehlgeschlagen: ' + fpErr.message);
-                            setSelectedKunde(enriched);
-                        }
-
                         setLoading(false);
                         setLoadProgress('');
-                        navigateTo('geladen');
+
+                        // → Ordner-Auswahl zeigen (User wählt welche Ordner analysiert werden)
+                        navigateTo('analyseConfig');
                         return;
 
                     } catch (err) {
@@ -16304,10 +16331,11 @@
 
                     if (kunde._driveFolderId) {
                         // ═══ BEWÄHRTER PFAD: FileProcessor mit KI ═══
-                        console.log('🤖 Starte FileProcessor für', kunde.name);
+                        console.log('🤖 Starte FileProcessor für', kunde.name, 'Config:', config);
                         result = await window.FileProcessor.processKundenAkte(
                             kunde,
-                            function(msg) { setLoadProgress('🤖 ' + msg); }
+                            function(msg) { setLoadProgress('🤖 ' + msg); },
+                            config
                         );
                         console.log('✅ FileProcessor abgeschlossen:', (result.positionen || []).length, 'Positionen');
                     } else {
@@ -16575,9 +16603,21 @@
                             loadProgress={loadProgress}
                         />;
                     case 'analyseConfig':
-                        // AnalyseConfig entfernt — OrdnerAnalyse startet jetzt automatisch
-                        // Fallback: direkt zur ModulWahl
-                        return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} ordnerAnalyseMeta={ordnerAnalyseMeta} />;
+                        return <AnalyseKonfiguration
+                            kunde={selectedKunde}
+                            onStart={function(config) {
+                                console.log('🔵 Analyse-Button geklickt, Config:', config);
+                                try {
+                                    setAnalyseConfig(config);
+                                    navigateTo('akte');
+                                    handleLoadAkteWithConfig(config);
+                                } catch(startErr) {
+                                    console.error('❌ Analyse-Start Fehler:', startErr);
+                                    alert('Fehler beim Start der Analyse:\n' + startErr.message);
+                                }
+                            }}
+                            onBack={function(){ navigateTo('auswahl'); }}
+                        />;
                     case 'modulwahl':
                         return <ModulWahl kunde={selectedKunde} onSelectModul={handleSelectModul} ordnerAnalyseMeta={ordnerAnalyseMeta} />;
                     case 'ordnerAnalyse':
