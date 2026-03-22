@@ -113,14 +113,15 @@
     // ═══════════════════════════════════════════════════════
     const ORDNER_ANALYSE_CONFIG = {
         ORDNER: {
-            '01': { name: 'Baustellenauswertung', icon: '📋', color: '#3498db', keywords: ['baustellenauswertung', 'notebooklm', 'zusammenfassung'] },
-            '02': { name: 'Angebote / LV / Verträge', icon: '📑', color: '#e74c3c', kritisch: true, keywords: ['angebot', 'lv', 'leistungsverzeichnis', 'vertrag', 'nachtrag', 'nachtrag'] },
-            '03': { name: 'Zeichnungen', icon: '📐', color: '#2ecc71', keywords: ['zeichnung', 'plan', 'grundriss', 'schnitt', 'raumbuch'] },
-            '04': { name: 'Stundennachweis', icon: '⏱️', color: '#f39c12', keywords: ['stunden', 'stundennachweis', 'stundenzettel', 'rapportzettel'] },
-            '05': { name: 'Schriftverkehr', icon: '✉️', color: '#9b59b6', keywords: ['schriftverkehr', 'mail', 'protokoll', 'bauzeitenplan', 'brief'] },
-            '06': { name: 'Rechnung / Kontozahlung', icon: '💰', color: '#1abc9c', keywords: ['rechnung', 'kontozahlung', 'abschlag', 'schlussrechnung', 'ausgangsbuch'] },
-            '07': { name: 'Lieferanten', icon: '🏗️', color: '#e67e22', keywords: ['lieferant', 'material', 'fliesen', 'angebot lieferant'] },
-            '08': { name: 'Aufmaß', icon: '📏', color: '#34495e', keywords: ['aufmaß', 'aufmass', 'abrechnung', 'mengenermittlung'] }
+            '01': { name: 'Vertrag / Baustellenauswertung', icon: '📋', color: '#3498db', keywords: ['vertrag', 'baustellenauswertung', 'notebooklm', 'zusammenfassung', 'projekt', 'allgemein', 'übersicht', 'uebersicht', 'auftrag', 'beauftragung', 'auftragsvergabe', 'vergabe', 'contract'] },
+            '02': { name: 'LV / Angebote / Nachträge', icon: '📑', color: '#e74c3c', kritisch: true, keywords: ['lv', 'leistungsverzeichnis', 'angebot', 'nachtrag', 'nachträge', 'nachtraege', 'verträge', 'vertrae', 'position', 'vob', 'leistung', 'massiv', 'titel', 'gewerk', 'los'] },
+            '03': { name: 'Pläne / Zeichnungen', icon: '📐', color: '#2ecc71', keywords: ['plan', 'plaene', 'pläne', 'zeichnung', 'grundriss', 'schnitt', 'raumbuch', 'skizze', 'cad', 'dwg', 'entwurf', 'detail', 'ansicht'] },
+            '04': { name: 'Nachträge / Stundennachweis', icon: '⏱️', color: '#f39c12', keywords: ['stunden', 'stundennachweis', 'stundenzettel', 'rapportzettel', 'rapport', 'arbeitszeit', 'regiebericht', 'regie', 'tagelohn', 'regiearbeiten'] },
+            '05': { name: 'Schriftverkehr', icon: '✉️', color: '#9b59b6', keywords: ['schriftverkehr', 'mail', 'protokoll', 'bauzeitenplan', 'brief', 'korrespondenz', 'e-mail', 'email', 'kommunikation', 'besprechung', 'begehung', 'abnahme'] },
+            '06': { name: 'Aufmaß / Abrechnung', icon: '📏', color: '#34495e', keywords: ['aufmaß', 'aufmass', 'aufmasse', 'abrechnung', 'mengenermittlung', 'masse', 'messung', 'ermittlung', 'aufmaesse'] },
+            '07': { name: 'Rechnungen / Kontozahlung', icon: '💰', color: '#1abc9c', keywords: ['rechnung', 'kontozahlung', 'abschlag', 'schlussrechnung', 'ausgangsbuch', 'zahlung', 'invoice', 'gutschrift', 'mahnung', 'konto'] },
+            '08': { name: 'Lieferanten / Material', icon: '🏗️', color: '#e67e22', keywords: ['lieferant', 'material', 'fliese', 'fliesen', 'keramik', 'belag', 'mosaik', 'naturstein', 'zubehoer', 'zubehör', 'bestellung'] },
+            '99': { name: 'Sonstiger Ordner', icon: '📂', color: '#7f8c8d', keywords: [] }
         },
         THRESHOLDS: {
             '01': { pages: 30, docs: 5 },
@@ -128,9 +129,10 @@
             '03': { pages: 20, docs: 8 },
             '04': { pages: 15, docs: 20 },
             '05': { pages: 30, docs: 15 },
-            '06': { pages: 20, docs: 10 },
-            '07': { pages: 15, docs: 10 },
-            '08': { pages: 30, docs: 10 }
+            '06': { pages: 30, docs: 10 },
+            '07': { pages: 20, docs: 10 },
+            '08': { pages: 15, docs: 10 },
+            '99': { pages: 30, docs: 10 }
         },
         QUALITY_THRESHOLD: 70,
         MAX_PARALLEL: 3,
@@ -1677,7 +1679,9 @@
 
         '07': 'Du bist ein Experte für Fliesen-Materialwirtschaft.\nAnalysiere alle Lieferantenangebote und -rechnungen.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "07_Lieferanten",\n  "lieferanten": [{ "firmenname":"", "ansprechpartner":"", "telefon":"", "email":"" }],\n  "fliesen": [{ "bezeichnung":"", "format":"", "menge":0, "einheit":"m²", "epPreis":0, "gesamtPreis":0 }],\n  "zubehoer": [{ "bezeichnung":"", "kategorie":"", "menge":0, "einheit":"", "epPreis":0, "gesamtPreis":0 }],\n  "kalkulationsVorbereitung": { "materialKostenGesamt":0, "nachLVPosition":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleAngebotsPositionen":true, "fehlendeDaten":[] }\n}',
 
-        '08': 'Du bist ein VOB-Experte für Aufmaß nach DIN 18352.\nAnalysiere alle Aufmaß-Dokumente.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "08_Aufmass",\n  "aufmassPositionen": [{ "posNr":"", "leistung":"", "einheit":"", "aufmassZeilen":[{ "raumNr":"", "berechnung":"", "ergebnis":0 }], "mengeGesamt":0, "lvMenge":null, "differenzZuLV":null }],\n  "zusammenfassung": { "anzahlPositionen":0, "gesamtBodenflaeche_m2":0, "gesamtWandflaeche_m2":0, "abweichungenZuLV":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleLVPositionenAbgerechnet":true, "fehlendeLVPositionen":[], "fehlendeDaten":[] }\n}'
+        '08': 'Du bist ein VOB-Experte für Aufmaß nach DIN 18352.\nAnalysiere alle Aufmaß-Dokumente.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "08_Aufmass",\n  "aufmassPositionen": [{ "posNr":"", "leistung":"", "einheit":"", "aufmassZeilen":[{ "raumNr":"", "berechnung":"", "ergebnis":0 }], "mengeGesamt":0, "lvMenge":null, "differenzZuLV":null }],\n  "zusammenfassung": { "anzahlPositionen":0, "gesamtBodenflaeche_m2":0, "gesamtWandflaeche_m2":0, "abweichungenZuLV":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleLVPositionenAbgerechnet":true, "fehlendeLVPositionen":[], "fehlendeDaten":[] }\n}',
+
+        '99': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere ALLE Dokumente in diesem Ordner vollständig.\nExtrahiere ALLES was du findest — es darf NICHTS verloren gehen!\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "Sonstiger_Ordner",\n  "lvPositionen": [{ "posNr":"", "menge":0, "einheit":"", "leistung":"", "epPreis":null, "gesamtPreis":null }],\n  "personen": {\n    "bauherr": { "name":"", "anschrift":"", "telefon":"", "email":"" },\n    "bauleitung": { "name":"", "firma":"", "telefon":"", "email":"" },\n    "architekt": { "name":"", "buero":"", "telefon":"", "email":"" }\n  },\n  "nachtraege": [{ "nachtragNr":"", "bezeichnung":"", "summNetto":null, "status":"offen" }],\n  "projektDaten": { "bauvorhaben":"", "baustelleAdresse":"", "auftragssumme":null },\n  "vertrag": { "auftraggeber":"", "vertragsart":"", "auftragssumme_netto":null, "zahlungsbedingungen":"" },\n  "raeume": [{ "raumNr":"", "raumBezeichnung":"", "geschoss":"" }],\n  "rechnungen": [{ "rechnungsNr":"", "nettoBetrag":0, "datum":"" }],\n  "sonstigeDaten": "Freitext mit allen weiteren relevanten Informationen",\n  "warnhinweise": [],\n  "dokumentTyp": "LV|Vertrag|Nachtrag|Plan|Schriftverkehr|Aufmass|Rechnung|Sonstiges"\n}\n\nKRITISCH: Extrahiere ALLE Positionen, ALLE Kontaktdaten, ALLE Beträge!'
     };
 
     // ═══════════════════════════════════════════════════════
@@ -1713,14 +1717,14 @@
 
             // 3. Zusätzliche flexible Patterns
             var flexMap = {
-                '01': ['baustellenausw', 'baustelle', 'notebooklm', 'auswertung', 'zusammenfass'],
-                '02': ['angebot', 'leistungs', 'lv', 'vertrag', 'nachtrag', 'vertrae', 'nachtra'],
-                '03': ['zeichnung', 'plan', 'grundriss', 'schnitt', 'raumbuch', 'plae'],
-                '04': ['stunden', 'rapportzettel', 'stundenzettel', 'arbeitszeit'],
-                '05': ['schrift', 'mail', 'protokoll', 'bauzeit', 'brief', 'korrespondenz', 'email'],
-                '06': ['rechnung', 'konto', 'zahlung', 'abschlag', 'schlussrechnung'],
-                '07': ['lieferant', 'material', 'fliese', 'zubehoer', 'zubehör'],
-                '08': ['aufma', 'abrechnung', 'mengenermittlung', 'masse']
+                '01': ['baustellenausw', 'baustelle', 'notebooklm', 'auswertung', 'zusammenfass', 'projekt', 'übersicht', 'uebersicht', 'allgemein', 'dokument'],
+                '02': ['angebot', 'leistungs', 'lv', 'vertrag', 'nachtrag', 'vertrae', 'nachtra', 'auftrag', 'vergabe', 'vob', 'position', 'bestellung'],
+                '03': ['zeichnung', 'plan', 'grundriss', 'schnitt', 'raumbuch', 'plae', 'cad', 'dwg', 'skizze', 'entwurf'],
+                '04': ['stunden', 'rapportzettel', 'stundenzettel', 'arbeitszeit', 'rapport', 'zeit', 'nachweis'],
+                '05': ['schrift', 'mail', 'protokoll', 'bauzeit', 'brief', 'korrespondenz', 'email', 'e-mail', 'kommunikation'],
+                '06': ['rechnung', 'konto', 'zahlung', 'abschlag', 'schlussrechnung', 'invoice', 'gutschrift', 'mahnung'],
+                '07': ['lieferant', 'material', 'fliese', 'zubehoer', 'zubehör', 'belag', 'keramik', 'mosaik', 'naturstein'],
+                '08': ['aufma', 'abrechnung', 'mengenermittlung', 'masse', 'messung', 'ermittlung']
             };
             for (var flexNr in flexMap) {
                 var flexKw = flexMap[flexNr];
@@ -1755,17 +1759,19 @@
 
         // ── Einzelnen Ordner analysieren ──
         analyzeOrdner: async function(kundenId, ordnerNr, dokumente, onProgress) {
-            var prompt = ORDNER_PROMPTS[ordnerNr];
+            var prompt = ORDNER_PROMPTS[ordnerNr] || ORDNER_PROMPTS['99'];
             if (!prompt) return { status: 'error', fehler: ['Kein Prompt für Ordner ' + ordnerNr] };
 
             var startTime = Date.now();
-            var ordnerName = ORDNER_ANALYSE_CONFIG.ORDNER[ordnerNr].name;
+            var ordnerCfg = ORDNER_ANALYSE_CONFIG.ORDNER[ordnerNr] || ORDNER_ANALYSE_CONFIG.ORDNER['99'] || { name: 'Ordner ' + ordnerNr };
+            var ordnerName = ordnerCfg.name;
             console.log('📂 analyzeOrdner', ordnerNr, ordnerName, '— Dokumente:', dokumente.length, dokumente.map(function(d){return d.name + '(' + d.type + ')';}).join(', '));
             if (onProgress) onProgress('Analysiere ' + ordnerName + ' (' + dokumente.length + ' Dokumente)...');
 
             try {
                 // Dokument-Texte sammeln
                 var allTexts = [];
+                var pdfBase64List = []; // Für gescannte PDFs → Vision-Fallback
                 for (var i = 0; i < dokumente.length; i++) {
                     var doc = dokumente[i];
                     try {
@@ -1777,16 +1783,28 @@
                         var isXlsx = doc.type === 'xlsx';
 
                         if (isPdf && doc.id) {
-                            // ── PDF: Herunterladen + pdf.js Text-Extraktion ──
+                            // ── PDF: Herunterladen + Text-Extraktion, bei Fehlen → Vision-Fallback ──
                             console.log('  📄 Lade PDF:', doc.name);
                             if (onProgress) onProgress(ordnerName + ': Lade ' + doc.name + '...');
                             var blob = await window.GoogleDriveService.downloadFile(doc.id);
-                            var text = await window.FileProcessor.extractPdfText(blob);
-                            if (text && text.trim().length > 50) {
+                            var text = '';
+                            try { text = await window.FileProcessor.extractPdfText(blob); } catch(e) { text = ''; }
+                            if (text && text.trim().length > 100) {
                                 allTexts.push('--- Datei: ' + doc.name + ' ---\n' + text.substring(0, 15000));
-                                console.log('  ✅', doc.name, '→', text.length, 'Zeichen extrahiert');
+                                console.log('  ✅', doc.name, '→', text.length, 'Zeichen (Text-PDF)');
                             } else {
-                                console.log('  ⚠️', doc.name, '→ Kein/wenig Text extrahiert (' + (text || '').length + ' Zeichen)');
+                                // Vision-Fallback: PDF als Base64 für Gemini
+                                console.log('  🔍', doc.name, '→ Kein Text (' + (text||'').length + ' Z.), nutze Vision');
+                                try {
+                                    var base64 = await window.FileProcessor.pdfToBase64(blob);
+                                    if (base64 && base64.length > 100) {
+                                        if (!pdfBase64List) pdfBase64List = [];
+                                        if (pdfBase64List.length < 4) {
+                                            pdfBase64List.push({ name: doc.name, base64: base64 });
+                                            console.log('  📸', doc.name, '→ Vision-Fallback (' + Math.round(base64.length/1024) + ' KB)');
+                                        }
+                                    }
+                                } catch(b64Err) { console.warn('  ❌ Base64:', doc.name, b64Err.message); }
                             }
                         } else if (isGDoc && doc.id) {
                             // ── Google Doc: Als Text exportieren ──
@@ -1860,23 +1878,41 @@
                     }
                 }
 
-                console.log('📂 Ordner', ordnerNr, ':', allTexts.length, 'Texte extrahiert von', dokumente.length, 'Dokumenten');
+                console.log('📂 Ordner', ordnerNr, ':', allTexts.length, 'Texte +', pdfBase64List.length, 'Vision-PDFs von', dokumente.length, 'Dokumenten');
 
-                if (allTexts.length === 0) {
+                if (allTexts.length === 0 && pdfBase64List.length === 0) {
                     return {
                         status: 'completed', ordnerNr: ordnerNr, ordnerName: ordnerName,
                         ergebnis: {}, dokumenteAnalysiert: 0, analyseDauer: (Date.now() - startTime) / 1000,
-                        warnhinweise: ['Keine analysierbaren Dokumente im Ordner gefunden. (' + dokumente.length + ' Dateien vorhanden, aber kein Text extrahierbar)']
+                        warnhinweise: ['Keine analysierbaren Dokumente im Ordner gefunden. (' + dokumente.length + ' Dateien vorhanden)']
                     };
                 }
 
-                var fullText = allTexts.join('\n\n');
-                if (onProgress) onProgress(ordnerName + ': KI analysiert ' + allTexts.length + ' Dokumente...');
-                console.log('🤖 Sende an Gemini:', ordnerName, '—', fullText.length, 'Zeichen');
+                if (onProgress) onProgress(ordnerName + ': KI analysiert ' + (allTexts.length + pdfBase64List.length) + ' Quellen...');
+                var apiResult;
 
-                var apiResult = await window.callGeminiAPI([
-                    { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
-                ], 8000);
+                if (pdfBase64List.length > 0) {
+                    // ═══ VISION-MODUS: Gescannte PDFs als inline_data an Gemini ═══
+                    console.log('🤖 Vision-Modus:', pdfBase64List.length, 'PDFs +', allTexts.length, 'Texte');
+                    var visionParts = [];
+                    for (var pbi = 0; pbi < pdfBase64List.length; pbi++) {
+                        visionParts.push({ inline_data: { mime_type: 'application/pdf', data: pdfBase64List[pbi].base64 } });
+                    }
+                    var visionPrompt = prompt;
+                    if (allTexts.length > 0) {
+                        visionPrompt += '\n\n--- ZUSÄTZLICH EXTRAHIERTE TEXTE ---\n\n' + allTexts.join('\n\n');
+                    }
+                    visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' PDF-Dokumente VOLLSTÄNDIG!';
+                    visionParts.push({ text: visionPrompt });
+                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 8000);
+                } else {
+                    // ═══ TEXT-MODUS: Nur extrahierten Text senden ═══
+                    var fullText = allTexts.join('\n\n');
+                    console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen');
+                    apiResult = await window.callGeminiAPI([
+                        { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
+                    ], 8000);
+                }
 
                 if (!apiResult) throw new Error('Keine KI-Antwort — API Key gesetzt?');
 
@@ -2020,22 +2056,34 @@
                     console.log('📄 ' + contents.files.length + ' Root-Dateien:', contents.files.map(function(f) { return f.name; }).join(', '));
                 }
 
-                // 2. Ordner → Typ zuordnen
+                // 2. Ordner → Typ zuordnen — ALLE Ordner werden analysiert!
                 var ordnerMap = {};
+                var unmappedCounter = 0;
                 console.log('\n🔍 Ordner-Zuordnung:');
                 folders.forEach(function(folder) {
                     var typ = self.mapDriveFolderToOrdner(folder.name);
                     if (typ) {
                         ordnerMap[typ] = { folder: folder, files: folder.files || [] };
+                    } else {
+                        // ═══ NEU: Nicht-zugeordnete Ordner als '99_X' analysieren (NICHTS ignorieren!) ═══
+                        unmappedCounter++;
+                        var unmappedKey = '99_' + unmappedCounter;
+                        ordnerMap[unmappedKey] = { folder: folder, files: folder.files || [], customName: folder.name };
+                        console.log('  📂 Ordner "' + folder.name + '" → GENERISCH (' + unmappedKey + ') — wird trotzdem analysiert!');
                     }
                 });
 
+                // ═══ NEU: Root-Dateien auch analysieren ═══
+                if (contents.files && contents.files.length > 0) {
+                    ordnerMap['00_root'] = { folder: { name: 'Root-Dateien' }, files: contents.files, customName: 'Dateien im Hauptordner' };
+                    console.log('  📄 ' + contents.files.length + ' Root-Dateien werden auch analysiert');
+                }
+
                 var mappedCount = Object.keys(ordnerMap).length;
-                console.log('\n📊 Ergebnis: ' + mappedCount + '/' + folders.length + ' Ordner zugeordnet');
+                console.log('\n📊 Ergebnis: ' + mappedCount + ' Ordner werden analysiert (davon ' + unmappedCounter + ' ohne Typ-Zuordnung)');
                 if (mappedCount === 0) {
-                    console.warn('⚠️ KEIN ORDNER KONNTE ZUGEORDNET WERDEN!');
-                    console.log('Tipp: Ordner müssen Nummern (1-8) oder Schlüsselwörter im Namen haben.');
-                    if (onProgress) onProgress({ phase: 'done', message: '⚠️ Keine Ordner erkannt. Ordner müssen Nummern (1-8) oder Schlüsselwörter enthalten: baustellenauswertung, angebot/lv, zeichnung, stunden, schriftverkehr, rechnung, lieferant, aufmaß' });
+                    console.warn('⚠️ KEINE ORDNER UND KEINE DATEIEN GEFUNDEN!');
+                    if (onProgress) onProgress({ phase: 'done', message: '⚠️ Keine Ordner und keine Dateien im Google Drive Kundenordner gefunden.' });
                     // Trotzdem Meta speichern
                     await window.OrdnerAnalyseDB.saveMeta(kundenId, {
                         kundeName: kundeName, driveFolderId: driveFolderId, status: 'completed',
@@ -2063,15 +2111,25 @@
                 for (var idx = 0; idx < ordnerNummern.length; idx++) {
                     var nr = ordnerNummern[idx];
                     var ordnerInfo = ordnerMap[nr];
+                    // Ordnername bestimmen: Konfiguriert oder Custom-Name
+                    var baseNr = nr.split('_')[0]; // '99_1' → '99', '02' → '02', '00_root' → '00'
+                    var displayName = ordnerInfo.customName || (ORDNER_ANALYSE_CONFIG.ORDNER[nr] ? ORDNER_ANALYSE_CONFIG.ORDNER[nr].name : (ORDNER_ANALYSE_CONFIG.ORDNER[baseNr] ? ORDNER_ANALYSE_CONFIG.ORDNER[baseNr].name : ordnerInfo.folder.name));
                     if (onProgress) onProgress({
                         phase: 'analyse',
-                        message: 'Ordner ' + nr + ': ' + ORDNER_ANALYSE_CONFIG.ORDNER[nr].name + ' (' + (idx + 1) + '/' + ordnerNummern.length + ')',
+                        message: displayName + ' (' + (idx + 1) + '/' + ordnerNummern.length + ')',
                         current: idx + 1,
                         total: ordnerNummern.length
                     });
-                    analyseErgebnisse[nr] = await self.analyzeOrdner(kundenId, nr, ordnerInfo.files, function(msg) {
+                    // Prompt-Auswahl: spezifisch oder generisch ('99')
+                    var promptNr = ORDNER_PROMPTS[nr] ? nr : (ORDNER_PROMPTS[baseNr] ? baseNr : '99');
+                    analyseErgebnisse[nr] = await self.analyzeOrdner(kundenId, promptNr, ordnerInfo.files, function(msg) {
                         if (onProgress) onProgress({ phase: 'analyse', message: msg, current: idx + 1, total: ordnerNummern.length });
                     });
+                    // Ordner-Info im Ergebnis anreichern
+                    if (analyseErgebnisse[nr]) {
+                        analyseErgebnisse[nr].ordnerNr = nr;
+                        analyseErgebnisse[nr].ordnerName = displayName;
+                    }
                 }
 
                 // 5. Cross-Referencing
@@ -2197,6 +2255,40 @@
                         if (k.rolle === 'Bauleitung' && k.email) kundendaten.bl_email = kundendaten.bl_email || k.email;
                         if (k.rolle === 'Architekt' && k.email) kundendaten.arch_email = kundendaten.arch_email || k.email;
                     });
+                }
+
+                // ═══ GENERISCH (99): Räume als flaches Array ═══
+                if (e.raeume && Array.isArray(e.raeume) && e.raeume.length > 0) {
+                    e.raeume.forEach(function(r) {
+                        if (typeof r === 'string') {
+                            raeume.push({ nr: '', bez: r, geschoss: '', raumhoehe: 0, fliesenhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
+                        } else if (r.raumBezeichnung || r.raumNr) {
+                            raeume.push({ nr: r.raumNr || '', bez: r.raumBezeichnung || '', geschoss: r.geschoss || '', raumhoehe: 0, fliesenhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
+                        }
+                    });
+                }
+
+                // ═══ GENERISCH: Rechnungen sammeln ═══
+                if (e.rechnungen && e.rechnungen.length > 0) {
+                    if (!quellenInfo._rechnungen) quellenInfo._rechnungen = [];
+                    quellenInfo._rechnungen = quellenInfo._rechnungen.concat(e.rechnungen);
+                }
+
+                // ═══ GENERISCH: Aufmaß-Positionen als LV-Positionen ═══
+                if (e.aufmassPositionen && e.aufmassPositionen.length > 0) {
+                    e.aufmassPositionen.forEach(function(p) {
+                        positionen.push({
+                            pos: p.posNr || '', bez: p.leistung || '',
+                            einheit: p.einheit || '', menge: p.mengeGesamt || 0,
+                            einzelpreis: 0, kategorie: '',
+                            bereich: '', tags: [], quelle: 'aufmass_' + nr
+                        });
+                    });
+                }
+
+                // ═══ GENERISCH: Stunden-Zusammenfassung ═══
+                if (e.stundenZusammenfassung) {
+                    kundendaten._stundenGesamt = (kundendaten._stundenGesamt || 0) + (e.stundenZusammenfassung.gesamtStunden || 0);
                 }
             }
 
@@ -13494,8 +13586,9 @@
                         </div>
                     )}
 
-                    {/* Ordner-Karten */}
+                    {/* Ordner-Karten — ALLE analysierten Ordner anzeigen */}
                     <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+                        {/* Erst konfigurierte Ordner (01-08) */}
                         {['01','02','03','04','05','06','07','08'].map(function(nr) {
                             var ordnerCfg = cfg[nr];
                             var analyse = analysen.find(function(a) { return a.ordnerNr === nr; });
@@ -13503,7 +13596,6 @@
                             var statusIcon = status === 'completed' ? '✅' : status === 'error' ? '❌' : status === 'running' ? '⏳' : '⬜';
                             var docsCount = analyse ? (analyse.dokumenteAnalysiert || 0) : 0;
 
-                            // Zusammenfassung aus Ergebnis
                             var summary = '';
                             if (analyse && analyse.ergebnis) {
                                 var e = analyse.ergebnis;
@@ -13518,22 +13610,10 @@
                             }
 
                             return (
-                                <button key={nr} onClick={function() {
-                                    if (analyse) {
-                                        onOpenDetail(nr);
-                                    } else {
-                                        // Nicht analysiert → direkt Einzelordner-Analyse anbieten
-                                        if (onReanalyzeOrdner && confirm('Ordner "' + ordnerCfg.name + '" wurde noch nicht analysiert.\n\nJetzt einzeln analysieren?')) {
-                                            onReanalyzeOrdner(nr);
-                                        }
-                                    }
-                                }}
-                                    style={{
-                                        width:'100%', padding:'12px 14px', borderRadius:'12px', border:'1px solid var(--border-subtle)',
+                                <button key={nr} onClick={function() { if (analyse) onOpenDetail(nr); else if (onReanalyzeOrdner) onReanalyzeOrdner(nr); }}
+                                    style={{width:'100%', padding:'12px 14px', borderRadius:'12px', border:'1px solid var(--border-subtle)',
                                         background:'var(--bg-secondary)', display:'flex', alignItems:'center', gap:'12px',
-                                        cursor: 'pointer', opacity: 1, textAlign:'left',
-                                        WebkitTapHighlightColor:'transparent', touchAction:'manipulation'
-                                    }}>
+                                        cursor:'pointer', opacity: 1, textAlign:'left', WebkitTapHighlightColor:'transparent', touchAction:'manipulation'}}>
                                     <span style={{fontSize:'24px'}}>{ordnerCfg.icon}</span>
                                     <div style={{flex:1, minWidth:0}}>
                                         <div style={{fontSize:'13px', fontWeight:'700', color: ordnerCfg.color}}>
@@ -13542,6 +13622,35 @@
                                         </div>
                                         <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>
                                             {status === 'completed' ? (docsCount + ' Dok. · ' + (summary || 'Analysiert')) : status === 'error' ? 'Fehler bei Analyse' : 'Nicht analysiert'}
+                                        </div>
+                                    </div>
+                                    <span style={{fontSize:'16px'}}>{statusIcon}</span>
+                                </button>
+                            );
+                        })}
+
+                        {/* Zusätzliche (generische) Ordner die nicht den Standard-Typen zugeordnet werden konnten */}
+                        {analysen.filter(function(a) { return a.ordnerNr && (a.ordnerNr.indexOf('99') === 0 || a.ordnerNr.indexOf('00') === 0); }).map(function(analyse) {
+                            var status = analyse.status || 'pending';
+                            var statusIcon = status === 'completed' ? '✅' : status === 'error' ? '❌' : '⏳';
+                            var docsCount = analyse.dokumenteAnalysiert || 0;
+                            var summary = '';
+                            if (analyse.ergebnis) {
+                                var e = analyse.ergebnis;
+                                if (e.lvPositionen && e.lvPositionen.length > 0) summary += e.lvPositionen.length + ' Pos.';
+                                if (e.personen) summary += (summary ? ' · ' : '') + 'Kontakte';
+                                if (e.raeume && e.raeume.length > 0) summary += (summary ? ' · ' : '') + e.raeume.length + ' Räume';
+                            }
+                            return (
+                                <button key={analyse.ordnerNr} onClick={function() { onOpenDetail(analyse.ordnerNr); }}
+                                    style={{width:'100%', padding:'12px 14px', borderRadius:'12px', border:'1px solid rgba(127,140,141,0.3)',
+                                        background:'var(--bg-secondary)', display:'flex', alignItems:'center', gap:'12px',
+                                        cursor:'pointer', textAlign:'left', WebkitTapHighlightColor:'transparent', touchAction:'manipulation'}}>
+                                    <span style={{fontSize:'24px'}}>📂</span>
+                                    <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'13px', fontWeight:'700', color:'#7f8c8d'}}>{analyse.ordnerName || ('Ordner ' + analyse.ordnerNr)}</div>
+                                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>
+                                            {status === 'completed' ? (docsCount + ' Dok. · ' + (summary || 'Analysiert')) : 'Fehler'}
                                         </div>
                                     </div>
                                     <span style={{fontSize:'16px'}}>{statusIcon}</span>
