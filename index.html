@@ -7271,6 +7271,79 @@
             const [includeRootFiles, setIncludeRootFiles] = useState(true);
             const [kiModelPref, setKiModelPref] = useState(localStorage.getItem('gemini_model_pref') || 'pro');
             const [syncStatus, setSyncStatus] = useState('');
+            const [expandedFolders, setExpandedFolders] = useState({});
+            const [previewFile, setPreviewFile] = useState(null);
+            const [previewLoading, setPreviewLoading] = useState(false);
+            const [previewUrl, setPreviewUrl] = useState(null);
+
+            // Ordner aufklappen/zuklappen
+            var toggleExpand = function(folderName, e) {
+                if (e) e.stopPropagation();
+                setExpandedFolders(function(prev) {
+                    var n = Object.assign({}, prev);
+                    n[folderName] = !n[folderName];
+                    return n;
+                });
+            };
+
+            // Datei öffnen/Vorschau
+            var handleOpenFile = async function(file, e) {
+                if (e) e.stopPropagation();
+                if (!file || !file.id) {
+                    alert('Datei-ID nicht vorhanden. Bitte erst Daten laden.');
+                    return;
+                }
+                try {
+                    setPreviewLoading(true);
+                    setPreviewFile(file);
+
+                    // Google Drive Vorschau-URL generieren
+                    var fileType = (file.name || '').toLowerCase();
+                    if (fileType.match(/\.(pdf)$/)) {
+                        // PDF: direkt im Browser öffnen via Google Drive
+                        var url = 'https://drive.google.com/file/d/' + file.id + '/preview';
+                        setPreviewUrl(url);
+                    } else if (fileType.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
+                        // Bild: Thumbnail von Drive laden
+                        var url = 'https://drive.google.com/thumbnail?id=' + file.id + '&sz=w800';
+                        setPreviewUrl(url);
+                    } else if (fileType.match(/\.(xlsx|xls|csv|docx|doc)$/)) {
+                        // Office-Dateien: Google Viewer
+                        var url = 'https://docs.google.com/viewer?url=https://drive.google.com/uc?id=' + file.id + '&embedded=true';
+                        setPreviewUrl(url);
+                    } else {
+                        // Sonstige: Download-Link
+                        window.open('https://drive.google.com/file/d/' + file.id + '/view', '_blank');
+                        setPreviewFile(null);
+                    }
+                } catch(err) {
+                    console.error('Datei-Vorschau Fehler:', err);
+                    alert('Fehler beim Öffnen: ' + err.message);
+                    setPreviewFile(null);
+                }
+                setPreviewLoading(false);
+            };
+
+            // Datei-Icon basierend auf Dateiname
+            var getFileIcon = function(name) {
+                var n = (name || '').toLowerCase();
+                if (n.match(/\.pdf$/)) return '📕';
+                if (n.match(/\.(xlsx|xls|csv)$/)) return '📊';
+                if (n.match(/\.(docx|doc)$/)) return '📝';
+                if (n.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) return '🖼️';
+                if (n.match(/\.(dwg|dxf)$/)) return '📐';
+                if (n.match(/\.(zip|rar|7z)$/)) return '📦';
+                if (n.match(/\.(msg|eml)$/)) return '✉️';
+                return '📄';
+            };
+
+            // Dateigröße formatieren
+            var formatSize = function(bytes) {
+                if (!bytes) return '';
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+                return (bytes/(1024*1024)).toFixed(1) + ' MB';
+            };
 
             // Ordner aus dem Kunden-Objekt
             var folders = (kunde.folders || []);
@@ -7441,47 +7514,142 @@
                             {folders.map(function(folder) {
                                 var fileCount = (folder.files || []).length;
                                 var isSelected = !!selectedFolders[folder.name];
+                                var isExpanded = !!expandedFolders[folder.name];
+                                var folderFiles = folder.files || [];
                                 return (
-                                    <div key={folder.name} onClick={function(){ toggleFolder(folder.name); }}
-                                        style={{display:'flex', alignItems:'center', gap:'8px', padding:'8px', marginBottom:'3px',
-                                            borderRadius:'8px', cursor:'pointer',
+                                    <div key={folder.name} style={{marginBottom:'3px'}}>
+                                        {/* Ordner-Zeile */}
+                                        <div style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px',
+                                            borderRadius: isExpanded ? '8px 8px 0 0' : '8px', cursor:'pointer',
                                             background: isSelected ? 'rgba(39,174,96,0.08)' : 'transparent',
                                             border: isSelected ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
+                                            borderBottom: isExpanded ? '1px solid var(--border-color)' : (isSelected ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent'),
                                             transition:'all 0.2s'}}>
-                                        <span style={{fontSize:'16px', width:'20px', textAlign:'center'}}>
-                                            {isSelected ? '✅' : '⬜'}
-                                        </span>
-                                        <span style={{fontSize:'16px'}}>{getOrdnerIcon(folder.name)}</span>
-                                        <div style={{flex:1, minWidth:0}}>
-                                            <div style={{fontSize:'12px', fontWeight:'600', color: isSelected ? '#27ae60' : 'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{folder.name}</div>
-                                            <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{fileCount} Dateien</div>
+                                            {/* Checkbox — toggelt Auswahl */}
+                                            <span onClick={function(e){ e.stopPropagation(); toggleFolder(folder.name); }}
+                                                style={{fontSize:'16px', width:'20px', textAlign:'center', cursor:'pointer'}}>
+                                                {isSelected ? '✅' : '⬜'}
+                                            </span>
+                                            {/* Aufklapp-Pfeil + Ordner-Info — toggelt Expand */}
+                                            <div onClick={function(){ toggleExpand(folder.name); }}
+                                                style={{flex:1, display:'flex', alignItems:'center', gap:'6px', minWidth:0, cursor:'pointer'}}>
+                                                <span style={{fontSize:'12px', color:'var(--text-muted)', transition:'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display:'inline-block', width:'14px', textAlign:'center'}}>▶</span>
+                                                <span style={{fontSize:'16px'}}>{getOrdnerIcon(folder.name)}</span>
+                                                <div style={{flex:1, minWidth:0}}>
+                                                    <div style={{fontSize:'12px', fontWeight:'600', color: isSelected ? '#27ae60' : 'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{folder.name}</div>
+                                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{fileCount} Dateien</div>
+                                                </div>
+                                            </div>
                                         </div>
+
+                                        {/* Dateiliste (aufgeklappt) */}
+                                        {isExpanded && folderFiles.length > 0 && (
+                                            <div style={{
+                                                background: isSelected ? 'rgba(39,174,96,0.03)' : 'var(--bg-tertiary)',
+                                                borderRadius:'0 0 8px 8px',
+                                                border: isSelected ? '1px solid rgba(39,174,96,0.3)' : '1px solid var(--border-color)',
+                                                borderTop:'none',
+                                                padding:'4px 0',
+                                                maxHeight:'280px', overflowY:'auto'
+                                            }}>
+                                                {folderFiles.map(function(file, fi) {
+                                                    return (
+                                                        <div key={fi} style={{
+                                                            display:'flex', alignItems:'center', gap:'6px',
+                                                            padding:'6px 10px 6px 36px',
+                                                            fontSize:'11px', color:'var(--text-secondary)',
+                                                            borderBottom: fi < folderFiles.length - 1 ? '1px solid rgba(128,128,128,0.08)' : 'none',
+                                                            cursor:'pointer',
+                                                            transition:'background 0.15s'
+                                                        }}
+                                                        onMouseEnter={function(e){ e.currentTarget.style.background='rgba(30,136,229,0.06)'; }}
+                                                        onMouseLeave={function(e){ e.currentTarget.style.background='transparent'; }}
+                                                        onClick={function(e){ handleOpenFile(file, e); }}>
+                                                            <span style={{fontSize:'13px', flexShrink:0}}>{getFileIcon(file.name)}</span>
+                                                            <div style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:'500'}}>
+                                                                {file.name}
+                                                            </div>
+                                                            {file.size && (
+                                                                <span style={{fontSize:'9px', color:'var(--text-muted)', flexShrink:0}}>{formatSize(file.size)}</span>
+                                                            )}
+                                                            <span style={{fontSize:'9px', color:'var(--accent-blue)', flexShrink:0, fontWeight:'700', opacity:0.7}}>Öffnen</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                        {isExpanded && folderFiles.length === 0 && (
+                                            <div style={{
+                                                background:'var(--bg-tertiary)', borderRadius:'0 0 8px 8px',
+                                                border:'1px solid var(--border-color)', borderTop:'none',
+                                                padding:'12px 16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center', fontStyle:'italic'
+                                            }}>
+                                                Keine Dateien in diesem Ordner
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
 
                             {/* Root-Dateien */}
                             {rootFiles.length > 0 && (
-                                <div onClick={function(){ setIncludeRootFiles(!includeRootFiles); }}
-                                    style={{display:'flex', alignItems:'center', gap:'8px', padding:'8px', marginTop:'4px',
-                                        borderRadius:'8px', cursor:'pointer',
-                                        background: includeRootFiles ? 'rgba(39,174,96,0.08)' : 'transparent',
-                                        border: includeRootFiles ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
-                                        borderTop:'1px solid var(--border-color)'}}>
-                                    <span style={{fontSize:'16px', width:'20px', textAlign:'center'}}>
-                                        {includeRootFiles ? '✅' : '⬜'}
-                                    </span>
-                                    <span style={{fontSize:'16px'}}>📄</span>
-                                    <div style={{flex:1}}>
-                                        <div style={{fontSize:'12px', fontWeight:'600', color: includeRootFiles ? '#27ae60' : 'var(--text-primary)'}}>Dateien im Hauptordner</div>
-                                        <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{rootFiles.length} Dateien</div>
+                                <div style={{marginTop:'4px'}}>
+                                    <div onClick={function(){ setIncludeRootFiles(!includeRootFiles); }}
+                                        style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px',
+                                            borderRadius: expandedFolders['__root__'] ? '8px 8px 0 0' : '8px', cursor:'pointer',
+                                            background: includeRootFiles ? 'rgba(39,174,96,0.08)' : 'transparent',
+                                            border: includeRootFiles ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
+                                            borderTop:'1px solid var(--border-color)'}}>
+                                        <span style={{fontSize:'16px', width:'20px', textAlign:'center'}}>
+                                            {includeRootFiles ? '✅' : '⬜'}
+                                        </span>
+                                        <div onClick={function(e){ e.stopPropagation(); toggleExpand('__root__'); }}
+                                            style={{flex:1, display:'flex', alignItems:'center', gap:'6px', cursor:'pointer'}}>
+                                            <span style={{fontSize:'12px', color:'var(--text-muted)', transition:'transform 0.2s', transform: expandedFolders['__root__'] ? 'rotate(90deg)' : 'rotate(0deg)', display:'inline-block', width:'14px', textAlign:'center'}}>▶</span>
+                                            <span style={{fontSize:'16px'}}>📄</span>
+                                            <div style={{flex:1}}>
+                                                <div style={{fontSize:'12px', fontWeight:'600', color: includeRootFiles ? '#27ae60' : 'var(--text-primary)'}}>Dateien im Hauptordner</div>
+                                                <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{rootFiles.length} Dateien</div>
+                                            </div>
+                                        </div>
                                     </div>
+                                    {expandedFolders['__root__'] && (
+                                        <div style={{
+                                            background:'var(--bg-tertiary)', borderRadius:'0 0 8px 8px',
+                                            border:'1px solid var(--border-color)', borderTop:'none',
+                                            padding:'4px 0', maxHeight:'200px', overflowY:'auto'
+                                        }}>
+                                            {rootFiles.map(function(file, fi) {
+                                                return (
+                                                    <div key={fi} style={{
+                                                        display:'flex', alignItems:'center', gap:'6px',
+                                                        padding:'6px 10px 6px 36px',
+                                                        fontSize:'11px', color:'var(--text-secondary)',
+                                                        borderBottom: fi < rootFiles.length - 1 ? '1px solid rgba(128,128,128,0.08)' : 'none',
+                                                        cursor:'pointer', transition:'background 0.15s'
+                                                    }}
+                                                    onMouseEnter={function(e){ e.currentTarget.style.background='rgba(30,136,229,0.06)'; }}
+                                                    onMouseLeave={function(e){ e.currentTarget.style.background='transparent'; }}
+                                                    onClick={function(e){ handleOpenFile(file, e); }}>
+                                                        <span style={{fontSize:'13px', flexShrink:0}}>{getFileIcon(file.name)}</span>
+                                                        <div style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:'500'}}>
+                                                            {file.name}
+                                                        </div>
+                                                        {file.size && (
+                                                            <span style={{fontSize:'9px', color:'var(--text-muted)', flexShrink:0}}>{formatSize(file.size)}</span>
+                                                        )}
+                                                        <span style={{fontSize:'9px', color:'var(--accent-blue)', flexShrink:0, fontWeight:'700', opacity:0.7}}>Öffnen</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* Info */}
                             <div style={{marginTop:'8px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
-                                {selectedCount > 0 ? selectedCount + ' Ordner ausgewählt (' + selectedFiles + ' Dateien)' : 'Ordner auswählen oder "Alle" klicken'}
+                                {selectedCount > 0 ? selectedCount + ' Ordner ausgewählt (' + selectedFiles + ' Dateien)' : 'Ordner auswählen oder auf ▶ tippen zum Aufklappen'}
                             </div>
                         </div>
 
@@ -7627,7 +7795,7 @@
                             </div>
 
                             {importResult._nurDownload ? (
-                                /* ── NUR DOWNLOAD: Einfache Zusammenfassung ── */
+                                /* ── NUR DOWNLOAD: Zusammenfassung + Dateiliste ── */
                                 <div>
                                     <div style={{background:'rgba(39,174,96,0.1)', borderRadius:'8px', padding:'14px', textAlign:'center', marginBottom:'8px'}}>
                                         <div style={{fontSize:'28px', fontWeight:'700', color:'#27ae60'}}>{importResult._geladeneDateien || 0}</div>
@@ -7636,7 +7804,31 @@
                                             <div style={{fontSize:'11px', color:'#e74c3c', marginTop:'4px'}}>{importResult._fehler} Fehler</div>
                                         )}
                                     </div>
-                                    <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
+                                    {/* Dateiliste nach Ordner gruppiert */}
+                                    {importResult.quellenInfo && importResult.quellenInfo.length > 0 && (
+                                        <div style={{marginTop:'8px'}}>
+                                            <div onClick={function(){ toggleExpand('__download_result__'); }}
+                                                style={{display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', padding:'6px 0'}}>
+                                                <span style={{fontSize:'11px', color:'var(--text-muted)', transition:'transform 0.2s', transform: expandedFolders['__download_result__'] ? 'rotate(90deg)' : 'rotate(0deg)', display:'inline-block'}}>▶</span>
+                                                <span style={{fontSize:'11px', fontWeight:'600', color:'var(--text-secondary)'}}>📋 Dateiliste anzeigen ({importResult.quellenInfo.length} Dateien)</span>
+                                            </div>
+                                            {expandedFolders['__download_result__'] && (
+                                                <div style={{background:'var(--bg-tertiary)', borderRadius:'8px', border:'1px solid var(--border-color)', padding:'6px 0', maxHeight:'250px', overflowY:'auto', marginTop:'4px'}}>
+                                                    {importResult.quellenInfo.map(function(q, qi) {
+                                                        return (
+                                                            <div key={qi} style={{display:'flex', alignItems:'center', gap:'6px', padding:'5px 10px', fontSize:'11px',
+                                                                borderBottom: qi < importResult.quellenInfo.length - 1 ? '1px solid rgba(128,128,128,0.06)' : 'none'}}>
+                                                                <span>{q.typ === 'fehler' ? '❌' : '✅'}</span>
+                                                                <span style={{flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: q.typ === 'fehler' ? '#e74c3c' : 'var(--text-secondary)'}}>{q.datei}</span>
+                                                                <span style={{fontSize:'9px', color:'var(--text-muted)', flexShrink:0}}>{q.ordner}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'center', marginTop:'8px'}}>
                                         Daten lokal gespeichert. Jetzt KI-Analyse starten oder manuell weiterarbeiten.
                                     </div>
                                 </div>
@@ -7703,6 +7895,55 @@
                             ← Zurück zur Kundenauswahl
                         </button>
                     </div>
+
+                    {/* ═══ DATEI-VORSCHAU MODAL ═══ */}
+                    {previewFile && previewUrl && (
+                        <div className="modal-overlay" style={{zIndex:6000, background:'rgba(10,15,25,0.95)', display:'flex', alignItems:'center', justifyContent:'center'}}
+                            onClick={function(){ setPreviewFile(null); setPreviewUrl(null); }}>
+                            <div style={{width:'95%', maxWidth:'900px', height:'90vh', background:'var(--bg-primary)', borderRadius:'16px', overflow:'hidden', display:'flex', flexDirection:'column'}}
+                                onClick={function(e){ e.stopPropagation(); }}>
+                                {/* Modal Header */}
+                                <div style={{padding:'12px 16px', borderBottom:'1px solid var(--border-color)', display:'flex', alignItems:'center', gap:'10px', flexShrink:0}}>
+                                    <span style={{fontSize:'20px'}}>{getFileIcon(previewFile.name)}</span>
+                                    <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'14px', fontWeight:'700', color:'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{previewFile.name}</div>
+                                        <div style={{fontSize:'10px', color:'var(--text-muted)'}}>
+                                            {previewFile.folderName || ''}{previewFile.size ? ' · ' + formatSize(previewFile.size) : ''}
+                                        </div>
+                                    </div>
+                                    <button onClick={function(){ window.open('https://drive.google.com/file/d/' + previewFile.id + '/view', '_blank'); }}
+                                        style={{padding:'6px 12px', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-secondary)', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'var(--accent-blue)', flexShrink:0}}>
+                                        ↗ In Drive öffnen
+                                    </button>
+                                    <button onClick={function(){ setPreviewFile(null); setPreviewUrl(null); }}
+                                        style={{background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'var(--text-muted)', flexShrink:0, padding:'4px 8px'}}>✕</button>
+                                </div>
+                                {/* Iframe-Vorschau */}
+                                <div style={{flex:1, position:'relative'}}>
+                                    {previewLoading && (
+                                        <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-primary)', zIndex:1}}>
+                                            <div style={{textAlign:'center'}}>
+                                                <div style={{fontSize:'32px', marginBottom:'8px'}}>⏳</div>
+                                                <div style={{fontSize:'13px', color:'var(--text-muted)'}}>Datei wird geladen...</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {(previewFile.name || '').toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp|webp)$/) ? (
+                                        <div style={{height:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', overflow:'auto'}}>
+                                            <img src={previewUrl} style={{maxWidth:'100%', maxHeight:'100%', objectFit:'contain', borderRadius:'8px'}}
+                                                onError={function(e){ e.target.style.display='none'; }}
+                                                alt={previewFile.name} />
+                                        </div>
+                                    ) : (
+                                        <iframe src={previewUrl} style={{width:'100%', height:'100%', border:'none'}}
+                                            onLoad={function(){ setPreviewLoading(false); }}
+                                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                                            title={'Vorschau: ' + previewFile.name} />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
