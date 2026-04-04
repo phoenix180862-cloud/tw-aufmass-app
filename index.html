@@ -2510,18 +2510,22 @@
         }
 
         :root {
-            --bg-primary: #1a2332;
-            --bg-secondary: #243044;
+            --bg-primary: #0f1923;
+            --bg-secondary: #1a2a3c;
+            --bg-tertiary: #223448;
             --bg-card: #2a3a50;
             --bg-hover: #324560;
             --accent-red: #c41e1e;
             --accent-red-light: #e63535;
+            --accent-blue: #4da6ff;
             --accent-orange: #e67e22;
             --accent-orange-light: #f39c12;
+            --text-primary: #e8ecf1;
+            --text-secondary: #b0c0d4;
             --text-white: #f0f2f5;
             --text-light: #b8c4d4;
-            --text-muted: #7a8a9e;
-            --border-color: #3a4d66;
+            --text-muted: #8a9ab4;
+            --border-color: #2e4562;
             --success: #27ae60;
             --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
             --shadow-md: 0 4px 20px rgba(0,0,0,0.3);
@@ -7275,6 +7279,9 @@
             const [previewFile, setPreviewFile] = useState(null);
             const [previewLoading, setPreviewLoading] = useState(false);
             const [previewUrl, setPreviewUrl] = useState(null);
+            const [vorabAkteMode, setVorabAkteMode] = useState(false);
+            const [vorabAkteFile, setVorabAkteFile] = useState(null);
+            const [vorabAkteLoading, setVorabAkteLoading] = useState(false);
 
             // Ordner aufklappen/zuklappen
             var toggleExpand = function(folderName, e) {
@@ -7492,11 +7499,11 @@
                 <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
                     {/* Header */}
                     <div style={{textAlign:'center', marginBottom:'16px'}}>
-                        <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'4px'}}>
+                        <div style={{fontSize:'11px', color:'var(--accent-blue)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'4px', fontWeight:'600'}}>
                             Analyseseite
                         </div>
-                        <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)'}}>{kunde.name}</div>
-                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'4px'}}>{totalFiles} Dateien in {folders.length} Ordnern</div>
+                        <div style={{fontSize:'17px', fontWeight:'700', color:'#ffffff'}}>{kunde.name}</div>
+                        <div style={{fontSize:'12px', color:'var(--text-secondary)', marginTop:'4px'}}>{totalFiles} Dateien in {folders.length} Ordnern</div>
                     </div>
 
                     {/* ═══ ORDNER-AUSWAHL + AKTIONS-BUTTONS ═══ */}
@@ -7505,8 +7512,8 @@
                         {/* Linke Spalte: Ordner-Liste */}
                         <div style={{flex:'1 1 280px', background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', border:'1px solid var(--border-color)'}}>
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                                <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-primary)'}}>📂 Ordner auswählen</div>
-                                <button onClick={allSelected ? deselectAll : selectAll} style={{fontSize:'11px', color:'var(--accent-blue)', background:'none', border:'none', cursor:'pointer', fontWeight:'700'}}>
+                                <div style={{fontSize:'13px', fontWeight:'700', color:'#ffffff'}}>📂 Ordner auswählen</div>
+                                <button onClick={allSelected ? deselectAll : selectAll} style={{fontSize:'11px', color:'#4da6ff', background:'none', border:'none', cursor:'pointer', fontWeight:'700'}}>
                                     {allSelected ? '✕ Keine' : '☑ Alle'}
                                 </button>
                             </div>
@@ -7536,8 +7543,8 @@
                                                 <span style={{fontSize:'12px', color:'var(--text-muted)', transition:'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display:'inline-block', width:'14px', textAlign:'center'}}>▶</span>
                                                 <span style={{fontSize:'16px'}}>{getOrdnerIcon(folder.name)}</span>
                                                 <div style={{flex:1, minWidth:0}}>
-                                                    <div style={{fontSize:'12px', fontWeight:'600', color: isSelected ? '#27ae60' : 'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{folder.name}</div>
-                                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{fileCount} Dateien</div>
+                                                    <div style={{fontSize:'12px', fontWeight:'600', color: isSelected ? '#4ade80' : '#d8e2ee', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{folder.name}</div>
+                                                    <div style={{fontSize:'10px', color:'var(--text-secondary)'}}>{fileCount} Dateien</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -7557,22 +7564,33 @@
                                                         <div key={fi} style={{
                                                             display:'flex', alignItems:'center', gap:'6px',
                                                             padding:'6px 10px 6px 36px',
-                                                            fontSize:'11px', color:'var(--text-secondary)',
+                                                            fontSize:'11px', color:'#c8d6e5',
                                                             borderBottom: fi < folderFiles.length - 1 ? '1px solid rgba(128,128,128,0.08)' : 'none',
                                                             cursor:'pointer',
                                                             transition:'background 0.15s'
                                                         }}
-                                                        onMouseEnter={function(e){ e.currentTarget.style.background='rgba(30,136,229,0.06)'; }}
+                                                        onMouseEnter={function(e){ e.currentTarget.style.background= vorabAkteMode ? 'rgba(233,30,99,0.1)' : 'rgba(30,136,229,0.06)'; }}
                                                         onMouseLeave={function(e){ e.currentTarget.style.background='transparent'; }}
-                                                        onClick={function(e){ handleOpenFile(file, e); }}>
+                                                        onClick={function(e){
+                                                            if (vorabAkteMode) {
+                                                                e.stopPropagation();
+                                                                setVorabAkteFile(Object.assign({}, file, { _folderName: folder.name }));
+                                                            } else {
+                                                                handleOpenFile(file, e);
+                                                            }
+                                                        }}>
                                                             <span style={{fontSize:'13px', flexShrink:0}}>{getFileIcon(file.name)}</span>
-                                                            <div style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:'500'}}>
+                                                            <div style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:'500',
+                                                                color: vorabAkteFile && vorabAkteFile.id === file.id ? '#E91E63' : 'inherit'}}>
                                                                 {file.name}
                                                             </div>
                                                             {file.size && (
                                                                 <span style={{fontSize:'9px', color:'var(--text-muted)', flexShrink:0}}>{formatSize(file.size)}</span>
                                                             )}
-                                                            <span style={{fontSize:'9px', color:'var(--accent-blue)', flexShrink:0, fontWeight:'700', opacity:0.7}}>Öffnen</span>
+                                                            <span style={{fontSize:'9px', flexShrink:0, fontWeight:'700', opacity:0.7,
+                                                                color: vorabAkteMode ? '#E91E63' : 'var(--accent-blue)'}}>
+                                                                {vorabAkteMode ? (vorabAkteFile && vorabAkteFile.id === file.id ? '✓ Gewählt' : 'Wählen') : 'Öffnen'}
+                                                            </span>
                                                         </div>
                                                     );
                                                 })}
@@ -7624,21 +7642,32 @@
                                                     <div key={fi} style={{
                                                         display:'flex', alignItems:'center', gap:'6px',
                                                         padding:'6px 10px 6px 36px',
-                                                        fontSize:'11px', color:'var(--text-secondary)',
+                                                        fontSize:'11px', color:'#c8d6e5',
                                                         borderBottom: fi < rootFiles.length - 1 ? '1px solid rgba(128,128,128,0.08)' : 'none',
                                                         cursor:'pointer', transition:'background 0.15s'
                                                     }}
-                                                    onMouseEnter={function(e){ e.currentTarget.style.background='rgba(30,136,229,0.06)'; }}
+                                                    onMouseEnter={function(e){ e.currentTarget.style.background= vorabAkteMode ? 'rgba(233,30,99,0.1)' : 'rgba(30,136,229,0.06)'; }}
                                                     onMouseLeave={function(e){ e.currentTarget.style.background='transparent'; }}
-                                                    onClick={function(e){ handleOpenFile(file, e); }}>
+                                                    onClick={function(e){
+                                                        if (vorabAkteMode) {
+                                                            e.stopPropagation();
+                                                            setVorabAkteFile(Object.assign({}, file, { _folderName: 'Hauptordner' }));
+                                                        } else {
+                                                            handleOpenFile(file, e);
+                                                        }
+                                                    }}>
                                                         <span style={{fontSize:'13px', flexShrink:0}}>{getFileIcon(file.name)}</span>
-                                                        <div style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:'500'}}>
+                                                        <div style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:'500',
+                                                            color: vorabAkteFile && vorabAkteFile.id === file.id ? '#E91E63' : 'inherit'}}>
                                                             {file.name}
                                                         </div>
                                                         {file.size && (
                                                             <span style={{fontSize:'9px', color:'var(--text-muted)', flexShrink:0}}>{formatSize(file.size)}</span>
                                                         )}
-                                                        <span style={{fontSize:'9px', color:'var(--accent-blue)', flexShrink:0, fontWeight:'700', opacity:0.7}}>Öffnen</span>
+                                                        <span style={{fontSize:'9px', flexShrink:0, fontWeight:'700', opacity:0.7,
+                                                            color: vorabAkteMode ? '#E91E63' : 'var(--accent-blue)'}}>
+                                                            {vorabAkteMode ? (vorabAkteFile && vorabAkteFile.id === file.id ? '✓ Gewählt' : 'Wählen') : 'Öffnen'}
+                                                        </span>
                                                     </div>
                                                 );
                                             })}
@@ -7682,7 +7711,7 @@
 
                             {/* KI-Modell Auswahl */}
                             <div style={{background:'var(--bg-secondary)', borderRadius:'10px', padding:'10px', border:'1px solid var(--border-color)'}}>
-                                <div style={{fontSize:'11px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'6px'}}>🧠 KI-Modell</div>
+                                <div style={{fontSize:'11px', fontWeight:'700', color:'#d0daea', marginBottom:'6px'}}>🧠 KI-Modell</div>
                                 <div style={{display:'flex', gap:'4px'}}>
                                     {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
                                         var m = GEMINI_CONFIG.MODELS[key];
@@ -7709,39 +7738,112 @@
                     </div>
 
                     {/* ═══ BAUSTELLENAUSWERTUNG / VORAB-AKTE ═══ */}
-                    <div style={{background:'linear-gradient(135deg, rgba(233,30,99,0.06) 0%, rgba(156,39,176,0.06) 100%)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(233,30,99,0.15)', marginBottom:'12px'}}>
-                        <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'6px'}}>
+                    <div style={{background:'linear-gradient(135deg, rgba(233,30,99,0.08) 0%, rgba(156,39,176,0.08) 100%)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(233,30,99,0.2)', marginBottom:'12px'}}>
+                        <div style={{fontSize:'13px', fontWeight:'700', color:'#ffffff', marginBottom:'6px'}}>
                             📊 Baustellenauswertung / Vorab-Akte
                         </div>
-                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'10px', lineHeight:'1.5'}}>
-                            Voranalysierte Listen aus dem Ordner "01 Vertrag / Baustellenauswertung" laden.
-                            Positionen, Preise und Kontaktdaten werden direkt in die Module übertragen.
+                        <div style={{fontSize:'11px', color:'var(--text-secondary)', marginBottom:'10px', lineHeight:'1.5'}}>
+                            {vorabAkteMode
+                                ? 'Ordner aufklappen und eine Datei antippen, die als Vorab-Akte geladen werden soll.'
+                                : 'Voranalysierte Akte aus einem beliebigen Ordner laden. Positionen, Preise und Kontaktdaten werden direkt in die Module übertragen.'}
                         </div>
-                        <button onClick={function() {
-                            // Lade Daten aus Ordner 01 (Baustellenauswertung)
-                            var ordner01 = folders.find(function(f) { return f.name.match(/01|vertrag|auswertung/i); });
-                            if (ordner01) {
-                                onStart({ mode: 'ordner', selectedFolders: [ordner01.name], includeRootFiles: false, vorabAkte: true });
-                            } else {
-                                alert('Ordner "01 Vertrag / Baustellenauswertung" nicht gefunden.\nBitte Daten erst aus Google Drive laden.');
-                            }
-                        }} style={{
-                            padding:'10px 20px', borderRadius:'10px', border:'none', cursor:'pointer',
-                            background:'linear-gradient(135deg, #E91E63 0%, #9C27B0 100%)',
-                            color:'white', fontSize:'12px', fontWeight:'700',
-                            boxShadow:'0 3px 8px rgba(233,30,99,0.25)'}}>
-                            📋 Vorab-Akte laden und in Module übertragen
-                        </button>
+
+                        {!vorabAkteMode ? (
+                            /* ── Button: Vorab-Akte-Modus aktivieren — Ordner aufklappen ── */
+                            <button onClick={function() {
+                                if (folders.length === 0) {
+                                    alert('Keine Ordner vorhanden. Bitte erst Kundendaten über \"Kunde NEU\" laden.');
+                                    return;
+                                }
+                                // Alle Ordner aufklappen
+                                var expanded = {};
+                                folders.forEach(function(f) { expanded[f.name] = true; });
+                                setExpandedFolders(expanded);
+                                setVorabAkteMode(true);
+                                setVorabAkteFile(null);
+                            }} style={{
+                                padding:'12px 20px', borderRadius:'10px', border:'none', cursor:'pointer',
+                                background:'linear-gradient(135deg, #E91E63 0%, #9C27B0 100%)',
+                                color:'white', fontSize:'13px', fontWeight:'700',
+                                boxShadow:'0 3px 10px rgba(233,30,99,0.3)'}}>
+                                📋 Vorab-Akte laden und in Module übertragen
+                            </button>
+                        ) : (
+                            /* ── Vorab-Akte Auswahl-Modus aktiv ── */
+                            <div>
+                                {vorabAkteFile ? (
+                                    /* Datei ausgewählt — Bestätigung */
+                                    <div style={{background:'rgba(39,174,96,0.1)', borderRadius:'10px', padding:'12px', border:'1px solid rgba(39,174,96,0.3)', marginBottom:'10px'}}>
+                                        <div style={{fontSize:'12px', fontWeight:'700', color:'#27ae60', marginBottom:'6px'}}>✅ Ausgewählte Datei:</div>
+                                        <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                                            <span style={{fontSize:'18px'}}>{getFileIcon(vorabAkteFile.name)}</span>
+                                            <div style={{flex:1, minWidth:0}}>
+                                                <div style={{fontSize:'12px', fontWeight:'600', color:'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{vorabAkteFile.name}</div>
+                                                <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{vorabAkteFile._folderName || ''}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{background:'rgba(30,136,229,0.08)', borderRadius:'10px', padding:'10px', border:'1px solid rgba(30,136,229,0.2)', marginBottom:'10px'}}>
+                                        <div style={{fontSize:'12px', color:'var(--accent-blue)', fontWeight:'600', textAlign:'center'}}>
+                                            👆 Bitte Datei aus den aufgeklappten Ordnern oben wählen
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{display:'flex', gap:'8px'}}>
+                                    {vorabAkteFile && (
+                                        <button onClick={async function() {
+                                            setVorabAkteLoading(true);
+                                            try {
+                                                // Datei von Drive herunterladen und als Vorab-Akte verarbeiten
+                                                var file = vorabAkteFile;
+                                                var folderName = file._folderName || '';
+                                                // Finde den passenden Ordnernamen
+                                                var matchFolder = folders.find(function(f) { return f.name === folderName; });
+                                                if (matchFolder) {
+                                                    onStart({ mode: 'ordner', selectedFolders: [matchFolder.name], includeRootFiles: false, vorabAkte: true, vorabAkteFileId: file.id, vorabAkteFileName: file.name });
+                                                } else {
+                                                    // Kein Ordner gefunden — Einzeldatei-Modus
+                                                    onStart({ mode: 'einzeldatei', vorabAkte: true, vorabAkteFileId: file.id, vorabAkteFileName: file.name });
+                                                }
+                                                setVorabAkteMode(false);
+                                                setVorabAkteFile(null);
+                                            } catch(err) {
+                                                alert('Fehler: ' + err.message);
+                                            }
+                                            setVorabAkteLoading(false);
+                                        }} style={{
+                                            flex:1, padding:'12px', borderRadius:'10px', border:'none', cursor:'pointer',
+                                            background:'linear-gradient(135deg, #27ae60 0%, #1E8449 100%)',
+                                            color:'white', fontSize:'13px', fontWeight:'700',
+                                            opacity: vorabAkteLoading ? 0.6 : 1,
+                                            boxShadow:'0 3px 10px rgba(39,174,96,0.3)'}}>
+                                            {vorabAkteLoading ? '⏳ Wird geladen...' : '🚀 Akte laden & übertragen'}
+                                        </button>
+                                    )}
+                                    <button onClick={function() {
+                                        setVorabAkteMode(false);
+                                        setVorabAkteFile(null);
+                                    }} style={{
+                                        padding:'12px 16px', borderRadius:'10px', border:'1px solid rgba(231,76,60,0.3)',
+                                        cursor:'pointer', background:'rgba(231,76,60,0.06)',
+                                        color:'#ff6b6b', fontSize:'12px', fontWeight:'700'}}>
+                                        ✕ Abbrechen
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* ═══ OFFLINE → ONLINE SYNC ═══ */}
-                    <div style={{background:'rgba(243,156,18,0.06)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(243,156,18,0.15)', marginBottom:'14px'}}>
+                    <div style={{background:'rgba(243,156,18,0.08)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(243,156,18,0.2)', marginBottom:'14px'}}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                             <div>
-                                <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-primary)'}}>
+                                <div style={{fontSize:'13px', fontWeight:'700', color:'#ffffff'}}>
                                     🔄 Offline → Online Sync
                                 </div>
-                                <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>
+                                <div style={{fontSize:'11px', color:'var(--text-secondary)', marginTop:'4px'}}>
                                     Auf der Baustelle erfasste Daten zurück nach Google Drive laden
                                 </div>
                             </div>
@@ -7776,7 +7878,7 @@
                                     </button>
                                 )}
                             </div>
-                            <div style={{fontSize:'12px', color:'var(--text-secondary)', lineHeight:'1.6'}}>
+                            <div style={{fontSize:'12px', color:'#c8d6e5', lineHeight:'1.6'}}>
                                 {loadProgress || 'Bitte warten...'}
                             </div>
                             {loading && (
