@@ -1942,24 +1942,56 @@
                                 }
                             } catch(xlErr) { console.warn('  ⚠️ Excel-Extraktion:', doc.name, xlErr.message); }
                         } else if (isDoc && doc.id) {
-                            // ── Word: Versuche Herunterladen + einfache Text-Extraktion ──
+                            // ── Word: Herunterladen + an Gemini als Dokument senden (native docx-Erkennung) ──
                             console.log('  📝 Lade Word:', doc.name);
+                            if (onProgress) onProgress(ordnerName + ': Lade ' + doc.name + '...');
                             try {
                                 var wordBlob = await window.GoogleDriveService.downloadFile(doc.id);
-                                // Einfache Extraktion: .docx ist ZIP → XML-Text rausziehen
-                                var wordArray = await wordBlob.arrayBuffer();
-                                var wordView = new Uint8Array(wordArray);
-                                // Prüfe ob es ein ZIP ist (docx = ZIP)
-                                if (wordView[0] === 0x50 && wordView[1] === 0x4B) {
-                                    // Einfacher Text-Extraktor für .docx: XML-Tags entfernen
-                                    var rawText = new TextDecoder('utf-8', { fatal: false }).decode(wordView);
-                                    var textContent = rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-                                    // Nur sichtbare Wörter behalten
-                                    var cleanWords = textContent.split(' ').filter(function(w) { return w.length > 1 && /[a-zA-ZäöüÄÖÜß0-9]/.test(w); });
-                                    if (cleanWords.length > 20) {
-                                        allTexts.push('--- Datei: ' + doc.name + ' ---\n' + cleanWords.join(' ').substring(0, 10000));
-                                        console.log('  ✅', doc.name, '→', cleanWords.length, 'Wörter extrahiert (einfach)');
+                                // Methode 1: Versuche Google Drive Export als Text (funktioniert bei Google Docs)
+                                var wordTextOk = false;
+                                try {
+                                    var wordExport = await window.GoogleDriveService.exportAsText(doc.id);
+                                    if (wordExport && wordExport.trim().length > 50) {
+                                        allTexts.push('--- Datei: ' + doc.name + ' ---\n' + wordExport.substring(0, 15000));
+                                        console.log('  ✅', doc.name, '→', wordExport.length, 'Zeichen (Drive Export)');
+                                        wordTextOk = true;
                                     }
+                                } catch(expErr) { console.log('  ℹ️ Drive Export nicht möglich für', doc.name, '(normaler Upload, kein Google Doc)'); }
+
+                                if (!wordTextOk) {
+                                    // Methode 2: Einfache Text-Extraktion aus docx-ZIP
+                                    var wordArray = await wordBlob.arrayBuffer();
+                                    var wordView = new Uint8Array(wordArray);
+                                    if (wordView[0] === 0x50 && wordView[1] === 0x4B) {
+                                        var rawText = new TextDecoder('utf-8', { fatal: false }).decode(wordView);
+                                        // Suche nach document.xml Inhalt (w:t Tags = Word Text)
+                                        var wtMatches = rawText.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+                                        if (wtMatches && wtMatches.length > 5) {
+                                            var extractedWords = wtMatches.map(function(m) { return m.replace(/<[^>]+>/g, ''); }).join(' ');
+                                            if (extractedWords.length > 50) {
+                                                allTexts.push('--- Datei: ' + doc.name + ' ---\n' + extractedWords.substring(0, 15000));
+                                                console.log('  ✅', doc.name, '→', extractedWords.length, 'Zeichen (w:t Extraktion)');
+                                                wordTextOk = true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (!wordTextOk) {
+                                    // Methode 3: Fallback — Word als Base64 an Gemini senden (Gemini kann docx nativ lesen)
+                                    console.log('  🔍', doc.name, '→ Text-Extraktion fehlgeschlagen, nutze Gemini-Vision für Word');
+                                    try {
+                                        var wordBase64 = await new Promise(function(resolve, reject) {
+                                            var reader = new FileReader();
+                                            reader.onload = function() { resolve(reader.result.split(',')[1]); };
+                                            reader.onerror = function() { reject(new Error('FileReader Fehler')); };
+                                            reader.readAsDataURL(wordBlob);
+                                        });
+                                        if (wordBase64 && wordBase64.length > 100 && pdfBase64List.length < 6) {
+                                            pdfBase64List.push({ name: doc.name, base64: wordBase64, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                                            console.log('  📸', doc.name, '→ Gemini-Inline (' + Math.round(wordBase64.length/1024) + ' KB)');
+                                        }
+                                    } catch(b64Err) { console.warn('  ❌ Word Base64:', doc.name, b64Err.message); }
                                 }
                             } catch(wordErr) { console.warn('  ⚠️ Word-Extraktion:', doc.name, wordErr.message); }
                         } else if (doc.text) {
@@ -1984,17 +2016,18 @@
                 var apiResult;
 
                 if (pdfBase64List.length > 0) {
-                    // ═══ VISION-MODUS: Gescannte PDFs als inline_data an Gemini ═══
-                    console.log('🤖 Vision-Modus:', pdfBase64List.length, 'PDFs +', allTexts.length, 'Texte');
+                    // ═══ VISION-MODUS: PDFs + Word-Dokumente als inline_data an Gemini ═══
+                    console.log('🤖 Vision-Modus:', pdfBase64List.length, 'Dokumente +', allTexts.length, 'Texte');
                     var visionParts = [];
                     for (var pbi = 0; pbi < pdfBase64List.length; pbi++) {
-                        visionParts.push({ inline_data: { mime_type: 'application/pdf', data: pdfBase64List[pbi].base64 } });
+                        var docMime = pdfBase64List[pbi].mimeType || 'application/pdf';
+                        visionParts.push({ inline_data: { mime_type: docMime, data: pdfBase64List[pbi].base64 } });
                     }
                     var visionPrompt = prompt;
                     if (allTexts.length > 0) {
                         visionPrompt += '\n\n--- ZUSÄTZLICH EXTRAHIERTE TEXTE ---\n\n' + allTexts.join('\n\n');
                     }
-                    visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' PDF-Dokumente VOLLSTÄNDIG!';
+                    visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' Dokumente VOLLSTÄNDIG!';
                     visionParts.push({ text: visionPrompt });
                     apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 8000);
                 } else {
@@ -7306,20 +7339,16 @@
 
                     // Google Drive Vorschau-URL generieren
                     var fileType = (file.name || '').toLowerCase();
-                    if (fileType.match(/\.(pdf)$/)) {
-                        // PDF: direkt im Browser öffnen via Google Drive
-                        var url = 'https://drive.google.com/file/d/' + file.id + '/preview';
-                        setPreviewUrl(url);
-                    } else if (fileType.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
+                    if (fileType.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
                         // Bild: Thumbnail von Drive laden
                         var url = 'https://drive.google.com/thumbnail?id=' + file.id + '&sz=w800';
                         setPreviewUrl(url);
-                    } else if (fileType.match(/\.(xlsx|xls|csv|docx|doc)$/)) {
-                        // Office-Dateien: Google Viewer
-                        var url = 'https://docs.google.com/viewer?url=https://drive.google.com/uc?id=' + file.id + '&embedded=true';
+                    } else if (fileType.match(/\.(pdf|docx|doc|xlsx|xls|csv|pptx|ppt|txt)$/)) {
+                        // PDF, Office, Text: Google Drive native Vorschau (funktioniert zuverlässig für alle Typen)
+                        var url = 'https://drive.google.com/file/d/' + file.id + '/preview';
                         setPreviewUrl(url);
                     } else {
-                        // Sonstige: Download-Link
+                        // Sonstige: Direkt in Google Drive öffnen (neuer Tab)
                         window.open('https://drive.google.com/file/d/' + file.id + '/view', '_blank');
                         setPreviewFile(null);
                     }
