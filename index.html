@@ -6562,7 +6562,7 @@
                                     </button>
                                 </div>
                                 {geminiStatus === 'ok' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>🟢 Verbindung erfolgreich! Modell: {GEMINI_CONFIG.MODEL}</div>}
-                                {geminiStatus === 'error' && <div style={{marginTop:'6px', fontSize:'11px', color:'#e74c3c', fontWeight:'600'}}>🔴 Verbindung fehlgeschlagen. Prüfe: Konsole (F12) für Details.<br/>Tipp: Öffne die App über einen lokalen Webserver oder HTTPS.</div>}
+                                {geminiStatus === 'error' && <div style={{marginTop:'6px', fontSize:'11px', color:'#e74c3c', fontWeight:'600'}}>🔴 Verbindung fehlgeschlagen. Mögliche Ursachen:<br/>• API-Key ungültig oder Tages-Quota aufgebraucht<br/>• Keine Internetverbindung<br/>Prüfe Konsole (F12) für Details.</div>}
                                 {geminiStatus === 'saved' && <div style={{marginTop:'6px', fontSize:'11px', color:'#27ae60', fontWeight:'600'}}>💾 Gespeichert! Drücke "Verbindung testen" zum Prüfen.</div>}
                                 <div style={{marginTop:'8px', fontSize:'10px', color:'var(--text-muted)', lineHeight:'1.5'}}>
                                     <strong>Key holen:</strong> <a href="https://aistudio.google.com/apikey" target="_blank" style={{color:'var(--accent-blue)'}}>aistudio.google.com/apikey</a><br/>
@@ -7252,13 +7252,10 @@
         /* ═══════════════════════════════════════════
            ANALYSE-KONFIGURATION — Ordner-Auswahl
            ═══════════════════════════════════════════ */
-        function AnalyseKonfiguration({ kunde, onStart, onBack }) {
+        function AnalyseKonfiguration({ kunde, onStart, onDatenLaden, onOrdnerAnalyse, onBack }) {
             const [selectedFolders, setSelectedFolders] = useState({});
             const [includeRootFiles, setIncludeRootFiles] = useState(true);
             const [kiModelPref, setKiModelPref] = useState(localStorage.getItem('gemini_model_pref') || 'pro');
-            const [loadingData, setLoadingData] = useState(false);
-            const [loadProgress, setLoadProgress] = useState('');
-            const [dataLoaded, setDataLoaded] = useState(false);
             const [syncStatus, setSyncStatus] = useState('');
 
             // Ordner aus dem Kunden-Objekt
@@ -7310,25 +7307,36 @@
                 return '📁';
             };
 
-            // ── Daten aus ausgewählten Ordnern laden ──
-            var handleDatenLaden = async function() {
+            // ── Daten aus ausgewählten Ordnern laden (ruft echte Drive-Lade-Logik auf) ──
+            var handleDatenLaden = function() {
+                window._kiDisabled = true; // KI deaktivieren — nur Daten laden, keine KI-Analyse
                 if (selectedCount === 0 && !includeRootFiles) {
-                    alert('Bitte mindestens einen Ordner auswählen!');
-                    return;
+                    // Alle Ordner laden
+                    if (onDatenLaden) {
+                        onDatenLaden({ mode: 'komplett', selectedFolders: null, includeRootFiles: true });
+                    } else {
+                        onStart({ mode: 'komplett', selectedFolders: null, includeRootFiles: true });
+                    }
+                } else {
+                    var sel = [];
+                    Object.keys(selectedFolders).forEach(function(k) {
+                        if (selectedFolders[k]) sel.push(k);
+                    });
+                    if (sel.length === 0 && !includeRootFiles) {
+                        alert('Bitte mindestens einen Ordner auswählen!');
+                        return;
+                    }
+                    if (onDatenLaden) {
+                        onDatenLaden({ mode: 'ordner', selectedFolders: sel, includeRootFiles: includeRootFiles });
+                    } else {
+                        onStart({ mode: 'ordner', selectedFolders: sel, includeRootFiles: includeRootFiles });
+                    }
                 }
-                setLoadingData(true);
-                setLoadProgress('Lade Daten aus ' + (selectedCount || 'allen') + ' Ordnern...');
-                // Simuliert den Datenlade-Prozess — die eigentliche Arbeit macht processKundenAkte
-                setTimeout(function() {
-                    setLoadProgress('Daten erfolgreich geladen ✓');
-                    setDataLoaded(true);
-                    setLoadingData(false);
-                }, 500);
             };
 
-            // ── KI-Analyse starten ──
+            // ── KI-Analyse starten (ruft echte Analyse-Logik auf) ──
             var handleAnalyse = function() {
-                window._kiDisabled = false;
+                window._kiDisabled = false; // KI aktivieren!
                 if (selectedCount === 0 && !includeRootFiles) {
                     // Alle Ordner analysieren
                     onStart({ mode: 'komplett', selectedFolders: null, includeRootFiles: true });
@@ -7345,22 +7353,51 @@
                 }
             };
 
-            // ── Offline → Online Sync ──
+            // ── Offline → Online Sync (lokale Daten → Google Drive) ──
             var handleSync = async function() {
                 setSyncStatus('Synchronisiere...');
                 try {
-                    // Prüfe ob lokale Daten vorhanden sind
-                    var localKey = 'aufmass_kunde_' + (kunde.name || '').replace(/[^a-zA-Z0-9]/g, '_');
+                    if (!window.GoogleDriveService.isConnected()) {
+                        setSyncStatus('⚠ Keine Google Drive Verbindung. Bitte erst verbinden.');
+                        return;
+                    }
+                    if (!kunde._driveFolderId) {
+                        setSyncStatus('⚠ Kein Drive-Ordner für diesen Kunden.');
+                        return;
+                    }
+
+                    // Lokale Kundendaten finden
+                    var localKey = 'aufmass_kunde_' + (kunde._driveFolderId || kunde.id || kunde.name || '').replace(/[^a-zA-Z0-9]/g, '_');
                     var localData = localStorage.getItem(localKey);
+
+                    if (!localData) {
+                        // Auch nach alternativem Key suchen
+                        var keys = Object.keys(localStorage).filter(function(k) { return k.indexOf('aufmass_kunde_') === 0; });
+                        for (var ki = 0; ki < keys.length; ki++) {
+                            try {
+                                var d = JSON.parse(localStorage.getItem(keys[ki]));
+                                if (d && d.name === kunde.name) { localData = localStorage.getItem(keys[ki]); break; }
+                            } catch(e) {}
+                        }
+                    }
+
                     if (localData) {
-                        setSyncStatus('Lokale Daten gefunden — Upload läuft...');
-                        // TODO: Upload-Logik zu Google Drive implementieren
-                        setTimeout(function() { setSyncStatus('Sync abgeschlossen ✓'); }, 1500);
+                        setSyncStatus('📤 Lade lokale Daten hoch...');
+                        var parsed = JSON.parse(localData);
+
+                        // JSON-Backup nach Drive hochladen
+                        var syncOrdnerId = await window.GoogleDriveService.findOrCreateFolder(kunde._driveFolderId, '06_Aufmass');
+                        var datumStr = new Date().toISOString().split('T')[0];
+                        var jsonBlob = new Blob([JSON.stringify(parsed, null, 2)], {type: 'application/json'});
+                        await window.GoogleDriveService.uploadFile(syncOrdnerId, 'Offline_Sync_' + datumStr + '.json', 'application/json', jsonBlob);
+
+                        setSyncStatus('✅ Sync abgeschlossen — Daten in Drive hochgeladen!');
                     } else {
-                        setSyncStatus('Keine lokalen Offline-Daten vorhanden.');
+                        setSyncStatus('ℹ Keine lokalen Offline-Daten für diesen Kunden vorhanden.');
                     }
                 } catch(e) {
-                    setSyncStatus('Sync-Fehler: ' + e.message);
+                    setSyncStatus('❌ Sync-Fehler: ' + e.message);
+                    console.error('Sync-Fehler:', e);
                 }
             };
 
@@ -7438,22 +7475,16 @@
                         <div style={{flex:'1 1 220px', display:'flex', flexDirection:'column', gap:'10px'}}>
 
                             {/* Button 1: Daten laden + synchronisieren */}
-                            <button onClick={handleDatenLaden} disabled={loadingData}
-                                style={{padding:'16px', borderRadius:'12px', border:'none', cursor: loadingData ? 'wait' : 'pointer',
+                            <button onClick={handleDatenLaden}
+                                style={{padding:'16px', borderRadius:'12px', border:'none', cursor:'pointer',
                                     background:'linear-gradient(135deg, #27ae60 0%, #1E8449 100%)',
                                     color:'white', fontSize:'14px', fontWeight:'700', textAlign:'center',
-                                    boxShadow:'0 4px 12px rgba(39,174,96,0.3)',
-                                    opacity: loadingData ? 0.7 : 1}}>
-                                {loadingData ? '⏳ Lade...' : '📥 Daten aus Ordnern laden + synchronisieren'}
+                                    boxShadow:'0 4px 12px rgba(39,174,96,0.3)'}}>
+                                📥 Daten aus Ordnern laden + synchronisieren
                                 <div style={{fontSize:'10px', fontWeight:'400', marginTop:'4px', opacity:0.8}}>
-                                    {selectedCount > 0 ? 'Nur ausgewählte Ordner' : 'Alle Ordner'}
+                                    {selectedCount > 0 ? 'Nur ausgewählte Ordner (' + selectedCount + ')' : 'Alle Ordner'}
                                 </div>
                             </button>
-                            {loadProgress && (
-                                <div style={{fontSize:'11px', color: dataLoaded ? '#27ae60' : 'var(--text-muted)', textAlign:'center', fontWeight:'600'}}>
-                                    {loadProgress}
-                                </div>
-                            )}
 
                             {/* Button 2: Akte wählen und KI-Analyse starten */}
                             <button onClick={handleAnalyse}
@@ -18156,6 +18187,20 @@
                                     console.error('❌ Analyse-Start Fehler:', startErr);
                                     alert('Fehler beim Start der Analyse:\n' + startErr.message);
                                 }
+                            }}
+                            onDatenLaden={function(config) {
+                                console.log('📥 Daten laden geklickt, Config:', config);
+                                try {
+                                    setAnalyseConfig(config);
+                                    navigateTo('akte');
+                                    handleLoadAkteWithConfig(config);
+                                } catch(startErr) {
+                                    console.error('❌ Daten-Laden Fehler:', startErr);
+                                    alert('Fehler beim Laden:\n' + startErr.message);
+                                }
+                            }}
+                            onOrdnerAnalyse={function() {
+                                handleStartOrdnerAnalyse();
                             }}
                             onBack={function(){ navigateTo('auswahl'); }}
                         />;
