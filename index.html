@@ -18383,20 +18383,58 @@
                     return;
                 }
 
-                console.log('🤖 handleLoadAkteWithConfig gestartet — FileProcessor', { hasDriveId: !!kunde._driveFolderId });
+                console.log('🤖 handleLoadAkteWithConfig gestartet', { hasDriveId: !!kunde._driveFolderId, kiDisabled: window._kiDisabled, config: config });
                 setLoading(true);
-                // NICHT mehr navigateTo('akte') — bleiben auf analyseConfig!
                 setLoadProgress('🤖 Daten werden aus Google Drive geladen...');
 
                 try {
                     var result;
 
-                    if (kunde._driveFolderId) {
-                        // ═══ BEWÄHRTER PFAD: FileProcessor mit KI ═══
-                        console.log('🤖 Starte FileProcessor für', kunde.name, 'Config:', config);
+                    if (kunde._driveFolderId && !window._kiDisabled) {
+                        // ═══ KI-PFAD: OrdnerAnalyseEngine mit Gemini (ordner-spezifische Prompts) ═══
+                        console.log('🤖 Starte OrdnerAnalyseEngine für', kunde.name, 'Config:', config);
+                        setLoadProgress('🤖 KI-Ordneranalyse wird gestartet...');
+
+                        // Ordner-Filter anwenden: nur ausgewählte Ordner an Engine übergeben
+                        var kundeForAnalysis = Object.assign({}, kunde);
+                        if (config.mode === 'ordner' && config.selectedFolders && config.selectedFolders.length > 0) {
+                            kundeForAnalysis.folders = (kunde.folders || []).filter(function(f) {
+                                return config.selectedFolders.indexOf(f.name) >= 0;
+                            });
+                            console.log('🔍 Gefilterte Ordner:', kundeForAnalysis.folders.map(function(f) { return f.name; }));
+                        }
+                        if (!config.includeRootFiles) {
+                            kundeForAnalysis.files = [];
+                        }
+
+                        var analyseResult = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
+                            kundeForAnalysis,
+                            function(p) {
+                                if (p && p.message) setLoadProgress('🤖 ' + p.message);
+                                else if (typeof p === 'string') setLoadProgress('🤖 ' + p);
+                            }
+                        );
+                        setOrdnerAnalyseMeta(analyseResult.meta || null);
+
+                        // Ergebnis in FileProcessor-kompatibles Format konvertieren
+                        result = {
+                            positionen: analyseResult.positionen || [],
+                            kundendaten: analyseResult.kundendaten || {},
+                            raeume: analyseResult.raeume || [],
+                            zeichnungen: analyseResult.zeichnungen || [],
+                            quellenInfo: analyseResult.quelldokumente || [],
+                            vertrag: analyseResult.vertrag || {},
+                            quelle: 'ordneranalyse',
+                            _ordnerAnalysen: analyseResult._ordnerAnalysen || {},
+                        };
+                        console.log('✅ OrdnerAnalyse abgeschlossen:', (result.positionen || []).length, 'Positionen,', Object.keys(analyseResult._ordnerAnalysen || {}).length, 'Ordner analysiert');
+
+                    } else if (kunde._driveFolderId) {
+                        // ═══ FALLBACK: FileProcessor ohne KI (nur Regex/Offline) ═══
+                        console.log('📥 Starte FileProcessor (ohne KI) für', kunde.name);
                         result = await window.FileProcessor.processKundenAkte(
                             kunde,
-                            function(msg) { setLoadProgress('🤖 ' + msg); },
+                            function(msg) { setLoadProgress('📥 ' + msg); },
                             config
                         );
                         console.log('✅ FileProcessor abgeschlossen:', (result.positionen || []).length, 'Positionen');
