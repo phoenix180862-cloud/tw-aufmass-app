@@ -952,37 +952,28 @@
             try {
                 var regexHint = '';
                 if (existingRegexResult && existingRegexResult.length > 0) {
-                    regexHint = '\n\nEin Regex-Parser hat bereits ' + existingRegexResult.length + ' Positionen gefunden. Bitte alle Positionen vollstaendig extrahieren und validieren.';
+                    regexHint = '\nEin Vorparser fand ' + existingRegexResult.length + ' Positionen. Bitte validieren und vervollstaendigen.';
                 }
 
-                var kiPrompt = 'Du bist ein hochspezialisierter Bauexperte fuer Fliesenlegerarbeiten nach VOB/DIN 18352.\n' +
-                    'Analysiere den folgenden Text aus einem LV-PDF mit ABSOLUTER PRAEZISION.\n\n' +
-                    '=== KRITISCHE REGELN ===\n' +
-                    '1. POSITIONEN vs. RAEUME — ZWEI VERSCHIEDENE DINGE:\n' +
-                    '   - Eine POSITION = Leistung mit Positionsnummer + Menge + Einheit\n' +
-                    '   - Ein RAUM = physischer Ort (Bad, Kueche, Flur etc.)\n' +
-                    '   - OBERTITEL/ABSCHNITTE (ohne Menge/Einheit) sind KEINE Positionen!\n' +
-                    '   - Zwischensummen und Summenzeilen sind KEINE Positionen!\n' +
-                    '   - Zulagepositionen, Eventualpositionen, Bedarfspositionen SIND Positionen!\n\n' +
-                    '2. 100% VOLLSTAENDIGKEIT — Ueberspringe KEINE Position! Es koennen 200+ sein.\n\n' +
-                    '3. EINZELPREISE (EP): Als Zahl extrahieren wenn vorhanden, sonst 0.\n\n' +
-                    'Antworte NUR mit JSON (KEIN Markdown, KEINE Backticks):\n' +
-                    '{"positionen":[{"pos":"1.01","bez":"Bodenfliesen 30x60 liefern u. verlegen","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden","fliese"]}],' +
-                    '"raeume":[]}\n\n' +
-                    'Kategorien: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n' +
-                    'Einheiten: m2, m, Stk, psch, lfm, kg, l, t (bei unklar: "?")\n' +
-                    'Positionsnummern EXAKT wie im Dokument! Reihenfolge beibehalten!' +
-                    regexHint + '\n\n=== DOKUMENT-TEXT ===\n' + text;
+                var kiPrompt = 'Extrahiere ALLE LV-Positionen aus diesem Text (Fliesenlegerarbeiten, VOB).\n' +
+                    'Eine Position hat: Positionsnummer + Bezeichnung + Menge + Einheit.\n' +
+                    'Obertitel ohne Menge (z.B. "01 Fliesenarbeiten") sind KEINE Positionen → ins "bereich"-Feld.\n' +
+                    'Es koennen 200+ Positionen sein. Einzelpreise (EP) als Zahl extrahieren wenn vorhanden.\n' +
+                    regexHint +
+                    '\n\nAntwort als JSON:\n' +
+                    '{"positionen":[{"pos":"1.01","bez":"Bezeichnung","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden"]}]}\n' +
+                    'Kategorien: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n\n' +
+                    'TEXT:\n' + text;
 
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
                             content: kiPrompt
-                        }], 32000);
+                        }], 65536, { jsonMode: true, model: GEMINI_CONFIG.MODELS['pro'].id });
                 if (!apiText) return null;
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
                 var parsed = JSON.parse(cleaned);
 
-                // Neues Format: Objekt mit positionen + raeume
+                // Objekt oder Array akzeptieren
                 var positionen = [];
                 if (parsed.positionen && Array.isArray(parsed.positionen)) {
                     positionen = parsed.positionen;
@@ -991,22 +982,12 @@
                 }
 
                 if (positionen.length > 0) {
-                    var mappedResult = {
-                        positionen: positionen.map(function(p) {
-                            return { pos: String(p.pos||''), bez: String(p.bez||''), einheit: String(p.einheit||'?'),
-                                menge: Number(p.menge)||0, einzelpreis: Number(p.einzelpreis)||0,
-                                bereich: String(p.bereich||'Allgemein'),
-                                kategorie: String(p.kategorie||'allgemein'), tags: Array.isArray(p.tags)?p.tags:[], quelle: 'ki-text' };
-                        }),
-                        raeume: []
-                    };
-                    if (parsed.raeume && Array.isArray(parsed.raeume)) {
-                        mappedResult.raeume = parsed.raeume.map(function(r) {
-                            if (typeof r === 'string') return { bez: r, nr: '', geschoss: '', quelle: 'ki-text' };
-                            return { bez: String(r.bez||'Raum'), nr: String(r.nr||''), geschoss: String(r.geschoss||''), quelle: 'ki-text' };
-                        });
-                    }
-                    return mappedResult;
+                    return positionen.map(function(p) {
+                        return { pos: String(p.pos||''), bez: String(p.bez||''), einheit: String(p.einheit||'?'),
+                            menge: Number(p.menge)||0, einzelpreis: Number(p.einzelpreis)||0,
+                            bereich: String(p.bereich||'Allgemein'),
+                            kategorie: String(p.kategorie||'allgemein'), tags: Array.isArray(p.tags)?p.tags:[], quelle: 'ki' };
+                    });
                 }
                 return null;
             } catch (err) {
@@ -1022,72 +1003,35 @@
             try {
                 var base64 = await this.pdfToBase64(blob);
 
-                var kiPrompt = 'Du bist ein hochspezialisierter Bauexperte fuer Fliesenlegerarbeiten nach VOB/DIN 18352.\n' +
-                    'Du analysierst Leistungsverzeichnisse (LV), Vertraege und Baudokumente mit ABSOLUTER PRAEZISION.\n\n' +
-                    '=== DEINE AUFGABE ===\n' +
-                    'Analysiere das beigefuegte Dokument VOLLSTAENDIG — von der ersten bis zur letzten Seite.\n' +
-                    'Extrahiere ALLE nachfolgend beschriebenen Daten. Ueberspringe NICHTS.\n\n' +
-                    '=== KRITISCHE REGELN ===\n\n' +
-                    '1. POSITIONEN vs. RAEUME — DAS SIND ZWEI VERSCHIEDENE DINGE:\n' +
-                    '   - Eine POSITION ist eine Leistung/Arbeit mit Positionsnummer + Menge + Einheit, z.B.:\n' +
-                    '     "01.02.010 Bodenfliesen 60x120 liefern und verlegen — 145,00 m2"\n' +
-                    '   - Ein RAUM ist ein physischer Ort im Gebaeude, z.B.: "Bad EG", "Kueche OG", "Flur"\n' +
-                    '   - Raeume koennen als BEREICHE/ABSCHNITTE im LV vorkommen (z.B. "Abschnitt: Erdgeschoss")\n' +
-                    '   - VERWECHSLE NIEMALS einen Raum mit einer Position!\n' +
-                    '   - Eine Position GEHOERT zu einem Bereich/Raum, aber IST KEIN Raum.\n' +
-                    '   - Trage Raeume NUR ein wenn eine EIGENE Raumliste/Raumbuch im Dokument existiert.\n\n' +
-                    '2. POSITIONSNUMMERN — So erkennst du sie:\n' +
-                    '   - Typische Formate: "1.01", "01.02.010", "1.2.3", "01.001", "A.1.01"\n' +
-                    '   - Positionsnummern stehen IMMER am Zeilenanfang vor der Bezeichnung\n' +
-                    '   - Danach folgt: Bezeichnung, dann Menge, dann Einheit, optional EP und GP\n' +
-                    '   - OBERTITEL/ABSCHNITTE (z.B. "01 Fliesenarbeiten") sind KEINE Positionen — sie haben keine Menge!\n' +
-                    '   - Zwischensummen, Summenzeilen, Seitenumbrueche sind KEINE Positionen!\n' +
-                    '   - Zulagepositionen, Eventualpositionen, Bedarfspositionen, Alternativpositionen SIND Positionen!\n\n' +
-                    '3. VOLLSTAENDIGKEIT — 100% aller Positionen muessen erfasst werden:\n' +
-                    '   - Gehe JEDE SEITE durch, lies JEDE TABELLE\n' +
-                    '   - Es koennen 50 bis 200+ Positionen sein — das ist normal!\n' +
-                    '   - Zaehle die Positionen waehrend du sie extrahierst\n' +
-                    '   - Wenn du unsicher bist ob etwas eine Position ist → nimm sie auf\n\n' +
-                    '4. EINZELPREISE (EP) und GESAMTPREISE (GP):\n' +
-                    '   - EP und GP als ZAHL extrahieren wenn im Dokument vorhanden\n' +
-                    '   - Steht oft in Spalten rechts neben der Menge\n' +
-                    '   - null wenn nicht vorhanden\n\n' +
-                    '5. BETEILIGTE / ADRESSEN — Extrahiere ALLE Kontaktdaten:\n' +
-                    '   - AUFTRAGGEBER (Bauherr): Firma/Name, Anschrift, Telefon, Fax, E-Mail, Ansprechpartner\n' +
-                    '   - VERTRETER DES AUFTRAGGEBERS: Wenn ein Vertreter/Bevollmaechtigter genannt wird\n' +
-                    '   - ARCHITEKT / PLANER: Bueroname, Anschrift, Telefon, Fax, E-Mail, Ansprechpartner\n' +
-                    '   - BAULEITUNG: Name/Firma, Anschrift, Telefon, Mobil, E-Mail (oft separat vom Architekten!)\n' +
-                    '   - AUFTRAGNEHMER: Falls im Dokument genannt\n' +
-                    '   - Suche in Briefkoepfen, Deckblaettern, Fusszeilen, Kopfzeilen, Anhaengen!\n\n' +
-                    '=== ANTWORTFORMAT ===\n' +
-                    'Antworte AUSSCHLIESSLICH mit JSON. KEIN Markdown, KEINE Backticks, KEIN Text.\n\n' +
-                    '{"positionen":[{"pos":"01.02.010","bez":"Bodenfliesen Feinsteinzeug 60x120 cm liefern und verlegen",' +
-                    '"langtext":"Vollstaendiger Langtext falls vorhanden",' +
-                    '"einheit":"m2","menge":145.00,"einzelpreis":32.50,"gesamtpreis":4712.50,' +
-                    '"bereich":"EG","kategorie":"boden","besonderheiten":"Grossformat","tags":["boden","feinsteinzeug"]}],' +
-                    '"beteiligte":{"auftraggeber":{"firma":"","name":"","strasse":"","plz":"","ort":"","telefon":"","fax":"","email":""},' +
-                    '"vertreter_auftraggeber":{"firma":"","name":"","strasse":"","plz":"","ort":"","telefon":"","email":""},' +
-                    '"architekt_planer":{"firma":"","name":"","strasse":"","plz":"","ort":"","telefon":"","fax":"","email":""},' +
-                    '"bauleitung":{"firma":"","name":"","strasse":"","plz":"","ort":"","telefon":"","mobil":"","email":""},' +
-                    '"auftragnehmer":{"firma":"","name":"","strasse":"","plz":"","ort":"","telefon":"","email":""}},' +
-                    '"bauvorhaben":{"bezeichnung":"","adresse":"","bauherr":"","vergabenummer":"","leistungsbereich":"","datum":""},' +
+                // ── Gemini-optimierter Prompt: Kurz, Schritt-basiert, positiv ──
+                var kiPrompt = 'Analysiere dieses Bauwesen-Dokument (Fliesenlegerarbeiten, VOB).\n\n' +
+                    'SCHRITT 1 — POSITIONEN:\n' +
+                    'Extrahiere JEDE LV-Position. Eine Position hat immer: Positionsnummer + Bezeichnung + Menge + Einheit.\n' +
+                    'Beispiel: Pos 01.02.010 | Bodenfliesen 60x120 verlegen | 145,00 | m2 | EP: 32,50\n' +
+                    'Obertitel/Abschnitte wie "01 Fliesenarbeiten" oder "Bad EG" haben KEINE Menge → ins "bereich"-Feld der Positionen eintragen, NICHT als Position.\n' +
+                    'Auch Zulagepositionen, Eventualpositionen, Bedarfspositionen erfassen. Es koennen 200+ sein.\n\n' +
+                    'SCHRITT 2 — KONTAKTDATEN:\n' +
+                    'Aus Briefkopf, Deckblatt, Fusszeilen extrahieren:\n' +
+                    'Auftraggeber, Vertreter, Architekt/Planer, Bauleitung — jeweils mit Firma, Name, Strasse, PLZ, Ort, Tel, Fax, Mobil, E-Mail.\n\n' +
+                    'SCHRITT 3 — VERTRAGSDATEN:\n' +
+                    'Auftragssumme, Skonto, Zahlungsziel, Sicherheitseinbehalt falls vorhanden.\n\n' +
+                    'Antworte als JSON:\n' +
+                    '{"positionen":[{"pos":"01.001","bez":"Vollstaendige Bezeichnung","einheit":"m2","menge":145.00,"einzelpreis":32.50,"gesamtpreis":4712.50,"bereich":"EG","kategorie":"boden","tags":["boden"]}],' +
+                    '"kundendaten":{"auftraggeber":"","ag_ansprech":"","ag_strasse":"","ag_plz":"","ag_ort":"","ag_telefon":"","ag_fax":"","ag_email":"",' +
+                    '"ag_vertreter":"","ag_vertreter_name":"","ag_vertreter_telefon":"","ag_vertreter_email":"",' +
+                    '"architekt":"","arch_ansprech":"","arch_strasse":"","arch_plz":"","arch_ort":"","arch_telefon":"","arch_fax":"","arch_email":"",' +
+                    '"bauleitung":"","bl_name":"","bl_strasse":"","bl_plz":"","bl_ort":"","bl_telefon":"","bl_mobil":"","bl_email":"",' +
+                    '"baumassnahme":"","adresse":"","vergabenummer":""},' +
                     '"raeume":[],' +
-                    '"vertrag":{"auftragsnummer":"","vergabeaktenzeichen":"","vertragsdatum":"","auftragssumme":0,' +
-                    '"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0,' +
-                    '"vertragsstrafen":"","zahlungsbedingungen":"","besondereVereinbarungen":[]},' +
-                    '"nachtraege":[],"fristen":[],"warnhinweise":[],"relevanteNormen":[]}\n\n' +
-                    '=== KATEGORIEN ===\n' +
-                    'boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n\n' +
-                    '=== EINHEITEN ===\n' +
-                    'm2, m, Stk, psch, lfm, kg, l, t — Bei unklarer Einheit: "?"\n\n' +
-                    '=== QUALITAETSPRUEFUNG VOR ANTWORT ===\n' +
-                    'Pruefe: Jede Position erfasst? Obertitel NICHT als Position? Raeume getrennt? Alle Beteiligten? Positionsnummern exakt? Mengen als Zahlen? Valides JSON?';
+                    '"vertrag":{"auftragsnummer":"","vertragsdatum":"","auftragssumme":0,"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0}}\n\n' +
+                    'Kategorien: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n' +
+                    'Raeume-Array bleibt leer (nur bei separatem Raumbuch befuellen). Positionsnummern EXAKT wie im Dokument.';
 
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
                             content: [
                                 {
-                                    type: 'document',
+                                    type: 'image',
                                     source: { type: 'base64', media_type: 'application/pdf', data: base64 }
                                 },
                                 {
@@ -1095,7 +1039,7 @@
                                     text: kiPrompt
                                 }
                             ]
-                        }], 32000);
+                        }], 65536, { jsonMode: true, model: GEMINI_CONFIG.MODELS['pro'].id });
                 if (!apiText) {
                     console.error('KI: Keine Antwort erhalten');
                     return null;
@@ -1103,86 +1047,7 @@
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
                 try {
                     var parsed = JSON.parse(cleaned);
-
-                    // ── Beteiligte in flaches kundendaten-Objekt mappen ──
-                    if (parsed.beteiligte) {
-                        var b = parsed.beteiligte;
-                        parsed.kundendaten = parsed.kundendaten || {};
-                        // Auftraggeber
-                        if (b.auftraggeber) {
-                            if (b.auftraggeber.firma) parsed.kundendaten.auftraggeber = b.auftraggeber.firma;
-                            if (b.auftraggeber.name) parsed.kundendaten.ag_ansprech = b.auftraggeber.name;
-                            if (b.auftraggeber.strasse) parsed.kundendaten.ag_strasse = b.auftraggeber.strasse;
-                            if (b.auftraggeber.plz) parsed.kundendaten.ag_plz = b.auftraggeber.plz;
-                            if (b.auftraggeber.ort) parsed.kundendaten.ag_ort = b.auftraggeber.ort;
-                            if (b.auftraggeber.telefon) parsed.kundendaten.ag_telefon = b.auftraggeber.telefon;
-                            if (b.auftraggeber.fax) parsed.kundendaten.ag_fax = b.auftraggeber.fax;
-                            if (b.auftraggeber.email) parsed.kundendaten.ag_email = b.auftraggeber.email;
-                            // Zusammengesetzte Adresse fuer Rueckwaertskompatibilitaet
-                            var agAdr = [b.auftraggeber.strasse, b.auftraggeber.plz, b.auftraggeber.ort].filter(Boolean).join(', ');
-                            if (agAdr) parsed.kundendaten.ag_adresse = agAdr;
-                        }
-                        // Vertreter Auftraggeber
-                        if (b.vertreter_auftraggeber) {
-                            if (b.vertreter_auftraggeber.firma) parsed.kundendaten.ag_vertreter = b.vertreter_auftraggeber.firma;
-                            if (b.vertreter_auftraggeber.name) parsed.kundendaten.ag_vertreter_name = b.vertreter_auftraggeber.name;
-                            if (b.vertreter_auftraggeber.strasse) parsed.kundendaten.ag_vertreter_strasse = b.vertreter_auftraggeber.strasse;
-                            if (b.vertreter_auftraggeber.plz) parsed.kundendaten.ag_vertreter_plz = b.vertreter_auftraggeber.plz;
-                            if (b.vertreter_auftraggeber.ort) parsed.kundendaten.ag_vertreter_ort = b.vertreter_auftraggeber.ort;
-                            if (b.vertreter_auftraggeber.telefon) parsed.kundendaten.ag_vertreter_telefon = b.vertreter_auftraggeber.telefon;
-                            if (b.vertreter_auftraggeber.email) parsed.kundendaten.ag_vertreter_email = b.vertreter_auftraggeber.email;
-                        }
-                        // Architekt / Planer
-                        if (b.architekt_planer) {
-                            if (b.architekt_planer.firma) parsed.kundendaten.architekt = b.architekt_planer.firma;
-                            if (b.architekt_planer.name) parsed.kundendaten.arch_ansprech = b.architekt_planer.name;
-                            if (b.architekt_planer.strasse) parsed.kundendaten.arch_strasse = b.architekt_planer.strasse;
-                            if (b.architekt_planer.plz) parsed.kundendaten.arch_plz = b.architekt_planer.plz;
-                            if (b.architekt_planer.ort) parsed.kundendaten.arch_ort = b.architekt_planer.ort;
-                            if (b.architekt_planer.telefon) parsed.kundendaten.arch_telefon = b.architekt_planer.telefon;
-                            if (b.architekt_planer.fax) parsed.kundendaten.arch_fax = b.architekt_planer.fax;
-                            if (b.architekt_planer.email) parsed.kundendaten.arch_email = b.architekt_planer.email;
-                            var archAdr = [b.architekt_planer.strasse, b.architekt_planer.plz, b.architekt_planer.ort].filter(Boolean).join(', ');
-                            if (archAdr) parsed.kundendaten.arch_adresse = archAdr;
-                        }
-                        // Bauleitung
-                        if (b.bauleitung) {
-                            if (b.bauleitung.firma) parsed.kundendaten.bauleitung = b.bauleitung.firma;
-                            if (b.bauleitung.name) parsed.kundendaten.bl_name = b.bauleitung.name;
-                            if (b.bauleitung.strasse) parsed.kundendaten.bl_strasse = b.bauleitung.strasse;
-                            if (b.bauleitung.plz) parsed.kundendaten.bl_plz = b.bauleitung.plz;
-                            if (b.bauleitung.ort) parsed.kundendaten.bl_ort = b.bauleitung.ort;
-                            if (b.bauleitung.telefon) parsed.kundendaten.bl_telefon = b.bauleitung.telefon;
-                            if (b.bauleitung.mobil) parsed.kundendaten.bl_mobil = b.bauleitung.mobil;
-                            if (b.bauleitung.email) parsed.kundendaten.bl_email = b.bauleitung.email;
-                            var blAdr = [b.bauleitung.strasse, b.bauleitung.plz, b.bauleitung.ort].filter(Boolean).join(', ');
-                            if (blAdr) parsed.kundendaten.bl_adresse = blAdr;
-                        }
-                        // Auftragnehmer
-                        if (b.auftragnehmer) {
-                            if (b.auftragnehmer.firma) parsed.kundendaten.an_firma = b.auftragnehmer.firma;
-                            if (b.auftragnehmer.name) parsed.kundendaten.an_name = b.auftragnehmer.name;
-                        }
-                        // Bauvorhaben
-                        if (parsed.bauvorhaben) {
-                            if (parsed.bauvorhaben.bezeichnung) parsed.kundendaten.baumassnahme = parsed.bauvorhaben.bezeichnung;
-                            if (parsed.bauvorhaben.adresse) parsed.kundendaten.adresse = parsed.bauvorhaben.adresse;
-                            if (parsed.bauvorhaben.vergabenummer) parsed.kundendaten.vergabenummer = parsed.bauvorhaben.vergabenummer;
-                        }
-                    }
-
-                    // ── Raeume normalisieren ──
-                    if (parsed.raeume && parsed.raeume.length > 0) {
-                        parsed.raeume = parsed.raeume.map(function(r) {
-                            if (typeof r === 'string') return { bez: r, nr: '', geschoss: '', quelle: 'ki' };
-                            return { bez: String(r.bez || 'Raum'), nr: String(r.nr || ''), geschoss: String(r.geschoss || ''), quelle: 'ki' };
-                        });
-                    }
-
-                    console.log('KI PDF-Ergebnis V2:', (parsed.positionen||[]).length, 'Positionen,',
-                        Object.keys(parsed.kundendaten||{}).length, 'Kundendaten-Felder,',
-                        (parsed.raeume||[]).length, 'Räume,',
-                        Object.keys(parsed.beteiligte||{}).length, 'Beteiligte-Gruppen');
+                    console.log('KI PDF-Ergebnis V3 (Gemini Pro + JSON-Mode):', (parsed.positionen||[]).length, 'Positionen,', Object.keys(parsed.kundendaten||{}).length, 'Kundendaten-Felder,', (parsed.raeume||[]).length, 'Räume');
                     return parsed;
                 } catch (jsonErr) {
                     console.error('KI JSON-Parse Fehler. Antwort:', cleaned.substring(0, 500));
@@ -1302,12 +1167,9 @@
                     var text = await this.extractPdfText(pdfBlob);
                     if (text && text.trim().length > 50) {
                         var aiTextResult = await this.parseLvAI(text, []);
-                        if (aiTextResult && aiTextResult.positionen && aiTextResult.positionen.length > 0) {
-                            result.positionen = aiTextResult.positionen;
+                        if (aiTextResult && aiTextResult.length > 0) {
+                            result.positionen = aiTextResult;
                             result.quelle = 'ki-text';
-                            if (aiTextResult.raeume && aiTextResult.raeume.length > 0) {
-                                result.raeume = aiTextResult.raeume;
-                            }
                             if (onProgress) onProgress('KI-Text: ' + result.positionen.length + ' Positionen erkannt ✓');
                             return result;
                         }
