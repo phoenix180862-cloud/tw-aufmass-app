@@ -7796,16 +7796,19 @@
                                         <button onClick={async function() {
                                             setVorabAkteLoading(true);
                                             try {
-                                                // Datei von Drive herunterladen und als Vorab-Akte verarbeiten
+                                                // WICHTIG: KI explizit deaktivieren — nur Daten laden!
+                                                window._kiDisabled = true;
                                                 var file = vorabAkteFile;
                                                 var folderName = file._folderName || '';
-                                                // Finde den passenden Ordnernamen
                                                 var matchFolder = folders.find(function(f) { return f.name === folderName; });
-                                                if (matchFolder) {
-                                                    onStart({ mode: 'ordner', selectedFolders: [matchFolder.name], includeRootFiles: false, vorabAkte: true, vorabAkteFileId: file.id, vorabAkteFileName: file.name });
+                                                if (matchFolder && onDatenLaden) {
+                                                    // Nur den Ordner laden in dem die Datei liegt — OHNE KI
+                                                    onDatenLaden({ mode: 'ordner', selectedFolders: [matchFolder.name], includeRootFiles: false, vorabAkte: true, vorabAkteFileId: file.id, vorabAkteFileName: file.name });
+                                                } else if (onDatenLaden) {
+                                                    // Alle Ordner laden — OHNE KI
+                                                    onDatenLaden({ mode: 'komplett', selectedFolders: null, includeRootFiles: false, vorabAkte: true, vorabAkteFileId: file.id, vorabAkteFileName: file.name });
                                                 } else {
-                                                    // Kein Ordner gefunden — Einzeldatei-Modus
-                                                    onStart({ mode: 'einzeldatei', vorabAkte: true, vorabAkteFileId: file.id, vorabAkteFileName: file.name });
+                                                    alert('Daten-Laden Funktion nicht verfügbar.');
                                                 }
                                                 setVorabAkteMode(false);
                                                 setVorabAkteFile(null);
