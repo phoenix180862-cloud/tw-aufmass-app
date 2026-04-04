@@ -6483,18 +6483,27 @@
             var testGeminiKey = async function() {
                 if (!geminiKey) return;
                 setGeminiStatus('testing');
-                // Probiere mehrere Modelle durch (neuestes zuerst)
-                var modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+                // Alle konfigurierten Modelle durchprobieren (Pro zuerst, dann Flash)
+                var modelsToTry = [
+                    'gemini-2.5-pro',
+                    'gemini-2.5-flash',
+                    'gemini-2.5-pro-preview-06-05',
+                    'gemini-2.0-flash',
+                    'gemini-1.5-pro',
+                    'gemini-1.5-flash'
+                ];
+                var lastErr = '';
                 for (var mi = 0; mi < modelsToTry.length; mi++) {
                     try {
                         var testModel = modelsToTry[mi];
+                        console.log('Teste Modell:', testModel);
                         var res = await fetch(
                             GEMINI_CONFIG.BASE_URL + '/models/' + testModel + ':generateContent?key=' + geminiKey,
                             {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    contents: [{ parts: [{ text: 'Sage nur: OK' }] }]
+                                    contents: [{ parts: [{ text: 'Antworte mit: OK' }] }]
                                 })
                             }
                         );
@@ -6509,11 +6518,14 @@
                             return;
                         }
                         var errBody = await res.json().catch(function(){ return {}; });
-                        console.warn('Modell ' + testModel + ' Fehler ' + res.status + ':', errBody.error ? errBody.error.message : '');
+                        lastErr = errBody.error ? errBody.error.message : ('HTTP ' + res.status);
+                        console.warn('Modell ' + testModel + ' Fehler ' + res.status + ':', lastErr);
                     } catch(e) {
+                        lastErr = e.message;
                         console.warn('Modell ' + testModel + ' Netzwerkfehler:', e.message);
                     }
                 }
+                console.error('Alle Modelle fehlgeschlagen. Letzter Fehler:', lastErr);
                 setGeminiStatus('error');
             };
 
