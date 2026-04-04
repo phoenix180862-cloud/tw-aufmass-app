@@ -7622,31 +7622,52 @@
                     {/* ═══ ERGEBNIS-ZUSAMMENFASSUNG ═══ */}
                     {importResult && !loading && (
                         <div style={{background:'rgba(39,174,96,0.06)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(39,174,96,0.2)', marginBottom:'12px'}}>
-                            <div style={{fontSize:'13px', fontWeight:'700', color:'#27ae60', marginBottom:'10px'}}>📊 Analyse-Ergebnis</div>
-                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
-                                <div style={{background:'rgba(30,136,229,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
-                                    <div style={{fontSize:'20px', fontWeight:'700', color:'var(--accent-blue)'}}>{(importResult.positionen || []).length}</div>
-                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>LV-Positionen</div>
-                                </div>
-                                <div style={{background:'rgba(39,174,96,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
-                                    <div style={{fontSize:'20px', fontWeight:'700', color:'#27ae60'}}>{(importResult.raeume || []).length}</div>
-                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Räume erkannt</div>
-                                </div>
-                                <div style={{background:'rgba(142,68,173,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
-                                    <div style={{fontSize:'20px', fontWeight:'700', color:'#8e44ad'}}>{(importResult.zeichnungen || []).length}</div>
-                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Zeichnungen</div>
-                                </div>
-                                <div style={{background:'rgba(243,156,18,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
-                                    <div style={{fontSize:'20px', fontWeight:'700', color:'#f39c12'}}>{importResult.quelle || 'Auto'}</div>
-                                    <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Erkennungsmethode</div>
-                                </div>
+                            <div style={{fontSize:'13px', fontWeight:'700', color:'#27ae60', marginBottom:'10px'}}>
+                                {importResult._nurDownload ? '📥 Download-Ergebnis' : '📊 Analyse-Ergebnis'}
                             </div>
-                            {/* Kundendaten-Preview */}
-                            {importResult.kundendaten && importResult.kundendaten.auftraggeber && (
-                                <div style={{marginTop:'10px', fontSize:'11px', color:'var(--text-secondary)', lineHeight:'1.6'}}>
-                                    <strong>Auftraggeber:</strong> {importResult.kundendaten.auftraggeber}<br/>
-                                    {importResult.kundendaten.bauleitung && <span><strong>Bauleitung:</strong> {importResult.kundendaten.bauleitung}<br/></span>}
-                                    {importResult.kundendaten.architekt && <span><strong>Architekt:</strong> {importResult.kundendaten.architekt}<br/></span>}
+
+                            {importResult._nurDownload ? (
+                                /* ── NUR DOWNLOAD: Einfache Zusammenfassung ── */
+                                <div>
+                                    <div style={{background:'rgba(39,174,96,0.1)', borderRadius:'8px', padding:'14px', textAlign:'center', marginBottom:'8px'}}>
+                                        <div style={{fontSize:'28px', fontWeight:'700', color:'#27ae60'}}>{importResult._geladeneDateien || 0}</div>
+                                        <div style={{fontSize:'12px', color:'var(--text-muted)'}}>Dateien heruntergeladen</div>
+                                        {importResult._fehler > 0 && (
+                                            <div style={{fontSize:'11px', color:'#e74c3c', marginTop:'4px'}}>{importResult._fehler} Fehler</div>
+                                        )}
+                                    </div>
+                                    <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
+                                        Daten lokal gespeichert. Jetzt KI-Analyse starten oder manuell weiterarbeiten.
+                                    </div>
+                                </div>
+                            ) : (
+                                /* ── ANALYSE-ERGEBNIS: Vollständige Zusammenfassung ── */
+                                <div>
+                                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
+                                        <div style={{background:'rgba(30,136,229,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
+                                            <div style={{fontSize:'20px', fontWeight:'700', color:'var(--accent-blue)'}}>{(importResult.positionen || []).length}</div>
+                                            <div style={{fontSize:'10px', color:'var(--text-muted)'}}>LV-Positionen</div>
+                                        </div>
+                                        <div style={{background:'rgba(39,174,96,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
+                                            <div style={{fontSize:'20px', fontWeight:'700', color:'#27ae60'}}>{(importResult.raeume || []).length}</div>
+                                            <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Räume erkannt</div>
+                                        </div>
+                                        <div style={{background:'rgba(142,68,173,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
+                                            <div style={{fontSize:'20px', fontWeight:'700', color:'#8e44ad'}}>{(importResult.zeichnungen || []).length}</div>
+                                            <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Zeichnungen</div>
+                                        </div>
+                                        <div style={{background:'rgba(243,156,18,0.08)', borderRadius:'8px', padding:'10px', textAlign:'center'}}>
+                                            <div style={{fontSize:'20px', fontWeight:'700', color:'#f39c12'}}>{importResult.quelle || 'Auto'}</div>
+                                            <div style={{fontSize:'10px', color:'var(--text-muted)'}}>Erkennungsmethode</div>
+                                        </div>
+                                    </div>
+                                    {importResult.kundendaten && importResult.kundendaten.auftraggeber && (
+                                        <div style={{marginTop:'10px', fontSize:'11px', color:'var(--text-secondary)', lineHeight:'1.6'}}>
+                                            <strong>Auftraggeber:</strong> {importResult.kundendaten.auftraggeber}<br/>
+                                            {importResult.kundendaten.bauleitung && <span><strong>Bauleitung:</strong> {importResult.kundendaten.bauleitung}<br/></span>}
+                                            {importResult.kundendaten.architekt && <span><strong>Architekt:</strong> {importResult.kundendaten.architekt}<br/></span>}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -18289,18 +18310,91 @@
                                     alert('Fehler beim Start der Analyse:\n' + startErr.message);
                                 }
                             }}
-                            onDatenLaden={function(config) {
-                                console.log('📥 Daten laden geklickt, Config:', config);
+                            onDatenLaden={async function(config) {
+                                console.log('📥 NUR Daten laden (keine Analyse!), Config:', config);
+                                setImportResult(null);
+                                setLoading(true);
+                                setLoadProgress('📂 Verbinde mit Google Drive...');
+
                                 try {
-                                    window._kiDisabled = true; // KI AUS — nur Daten laden!
-                                    window._analyseAbbrechen = false;
-                                    setImportResult(null); // Reset Ergebnis
-                                    setAnalyseConfig(config);
-                                    handleLoadAkteWithConfig(config);
-                                } catch(startErr) {
-                                    console.error('❌ Daten-Laden Fehler:', startErr);
-                                    alert('Fehler beim Laden:\n' + startErr.message);
+                                    var kunde = selectedKunde;
+                                    if (!kunde || !kunde._driveFolderId) {
+                                        alert('Kein Google Drive Ordner vorhanden.');
+                                        setLoading(false);
+                                        return;
+                                    }
+
+                                    // Ordner filtern
+                                    var folders = kunde.folders || [];
+                                    var sel = config.selectedFolders;
+                                    if (config.mode === 'ordner' && sel && sel.length > 0) {
+                                        folders = folders.filter(function(f) { return sel.indexOf(f.name) >= 0; });
+                                    }
+
+                                    var totalDateien = folders.reduce(function(s, f) { return s + (f.files || []).length; }, 0);
+                                    var geladen = 0;
+                                    var geladeneDateien = [];
+
+                                    setLoadProgress('📥 ' + totalDateien + ' Dateien in ' + folders.length + ' Ordnern werden heruntergeladen...');
+
+                                    for (var fi = 0; fi < folders.length; fi++) {
+                                        var folder = folders[fi];
+                                        var files = folder.files || [];
+                                        for (var di = 0; di < files.length; di++) {
+                                            var file = files[di];
+                                            geladen++;
+                                            setLoadProgress('📥 ' + geladen + '/' + totalDateien + ': ' + file.name);
+
+                                            try {
+                                                // Datei herunterladen
+                                                var blob = await window.GoogleDriveService.downloadFile(file.id);
+                                                geladeneDateien.push({
+                                                    name: file.name,
+                                                    type: file.type,
+                                                    folder: folder.name,
+                                                    size: blob.size,
+                                                    blob: blob
+                                                });
+                                            } catch(dlErr) {
+                                                console.warn('Download-Fehler:', file.name, dlErr.message);
+                                                geladeneDateien.push({ name: file.name, folder: folder.name, error: dlErr.message });
+                                            }
+                                        }
+                                    }
+
+                                    // Lokal speichern (Metadaten)
+                                    var localKey = 'aufmass_kunde_' + (kunde._driveFolderId || kunde.id || 'unknown');
+                                    try {
+                                        var existingData = {};
+                                        try { existingData = JSON.parse(localStorage.getItem(localKey) || '{}'); } catch(e) {}
+                                        existingData.name = kunde.name;
+                                        existingData._datenGeladen = true;
+                                        existingData._datenGeladenAm = new Date().toLocaleString('de-DE');
+                                        existingData._geladeneOrdner = folders.map(function(f) { return f.name; });
+                                        existingData._geladeneDateien = geladen;
+                                        localStorage.setItem(localKey, JSON.stringify(existingData));
+                                    } catch(e) { console.warn('Speichern:', e); }
+
+                                    var fehler = geladeneDateien.filter(function(d) { return d.error; }).length;
+                                    setLoadProgress('✅ ' + (geladen - fehler) + ' von ' + totalDateien + ' Dateien erfolgreich heruntergeladen!' + (fehler > 0 ? ' (' + fehler + ' Fehler)' : ''));
+
+                                    // Ergebnis setzen (nur Download-Info, keine Analyse)
+                                    setImportResult({
+                                        positionen: [],
+                                        raeume: [],
+                                        zeichnungen: [],
+                                        quelle: 'nur-download',
+                                        quellenInfo: geladeneDateien.map(function(d) { return { datei: d.name, ordner: d.folder, typ: d.error ? 'fehler' : 'geladen' }; }),
+                                        _nurDownload: true,
+                                        _geladeneDateien: geladen,
+                                        _fehler: fehler
+                                    });
+
+                                } catch(err) {
+                                    console.error('Daten-Laden Fehler:', err);
+                                    setLoadProgress('❌ Fehler: ' + err.message);
                                 }
+                                setLoading(false);
                             }}
                             onAbbrechen={function() {
                                 console.log('⛔ Analyse-Abbruch angefordert');
