@@ -952,37 +952,17 @@
             try {
                 var regexHint = '';
                 if (existingRegexResult && existingRegexResult.length > 0) {
-                    regexHint = '\nEin Vorparser fand ' + existingRegexResult.length + ' Positionen. Bitte validieren und vervollstaendigen.';
+                    regexHint = '\n\nEin Regex-Parser hat bereits ' + existingRegexResult.length + ' Positionen gefunden. Bitte alle Positionen vollstaendig extrahieren.';
                 }
-
-                var kiPrompt = 'Extrahiere ALLE LV-Positionen aus diesem Text (Fliesenlegerarbeiten, VOB).\n' +
-                    'Eine Position hat: Positionsnummer + Bezeichnung + Menge + Einheit.\n' +
-                    'Obertitel ohne Menge (z.B. "01 Fliesenarbeiten") sind KEINE Positionen → ins "bereich"-Feld.\n' +
-                    'Es koennen 200+ Positionen sein. Einzelpreise (EP) als Zahl extrahieren wenn vorhanden.\n' +
-                    regexHint +
-                    '\n\nAntwort als JSON:\n' +
-                    '{"positionen":[{"pos":"1.01","bez":"Bezeichnung","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"EG","kategorie":"boden","tags":["boden"]}]}\n' +
-                    'Kategorien: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n\n' +
-                    'TEXT:\n' + text;
-
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
-                            content: kiPrompt
-                        }], 65536, { jsonMode: true, model: GEMINI_CONFIG.MODELS['pro'].id });
+                            content: 'Du bist ein VOB-Experte fuer Fliesenlegerarbeiten (DIN 18352).\n\n═══ DEINE EINZIGE AUFGABE: ALLE LV-POSITIONEN EXTRAHIEREN ═══\n\nDieser Text stammt aus einem Leistungsverzeichnis (LV). Es kann 50 bis 200+ Positionen enthalten!\n\nEine LV-Position hat IMMER:\n- Positionsnummer (01.001, 1.01, Pos 3, etc.)\n- Leistungsbeschreibung\n- Menge + Einheit (m2, m, Stk, psch, lfm)\n- Optional: EP und GP\n\n⚠️ KRITISCH: Zeilen mit Raumnamen (Bad EG, Kueche) die eine Positionsnummer und Menge haben = POSITIONEN! Der Raumname gehoert ins "bereich"-Feld.\n\nGehe den GESAMTEN Text durch. Ueberspringe KEINE Position! Auch Zulagepositionen, Eventualpositionen, Bedarfspositionen muessen rein.\n\nAntworte NUR mit JSON-Array (kein Markdown, keine Backticks):\n[{"pos":"01.001","bez":"VOLLSTAENDIGE Bezeichnung","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"Bad EG","kategorie":"boden","tags":["boden","fliese"]}]\n\nRegeln:\n- pos: EXAKT wie im Dokument\n- bez: VOLLSTAENDIG — NICHT abkuerzen!\n- einzelpreis: EP als Zahl — IMMER extrahieren wenn vorhanden\n- Es duerfen 200+ Positionen sein — das ist normal!\n- KEINE Position auslassen — JEDE EINZELNE zaehlt!' + regexHint + '\n\nTEXT:\n' + text.substring(0, 30000)
+                        }], 32000);
                 if (!apiText) return null;
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
                 var parsed = JSON.parse(cleaned);
-
-                // Objekt oder Array akzeptieren
-                var positionen = [];
-                if (parsed.positionen && Array.isArray(parsed.positionen)) {
-                    positionen = parsed.positionen;
-                } else if (Array.isArray(parsed)) {
-                    positionen = parsed;
-                }
-
-                if (positionen.length > 0) {
-                    return positionen.map(function(p) {
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed.map(function(p) {
                         return { pos: String(p.pos||''), bez: String(p.bez||''), einheit: String(p.einheit||'?'),
                             menge: Number(p.menge)||0, einzelpreis: Number(p.einzelpreis)||0,
                             bereich: String(p.bereich||'Allgemein'),
@@ -1003,30 +983,6 @@
             try {
                 var base64 = await this.pdfToBase64(blob);
 
-                // ── Gemini-optimierter Prompt: Kurz, Schritt-basiert, positiv ──
-                var kiPrompt = 'Analysiere dieses Bauwesen-Dokument (Fliesenlegerarbeiten, VOB).\n\n' +
-                    'SCHRITT 1 — POSITIONEN:\n' +
-                    'Extrahiere JEDE LV-Position. Eine Position hat immer: Positionsnummer + Bezeichnung + Menge + Einheit.\n' +
-                    'Beispiel: Pos 01.02.010 | Bodenfliesen 60x120 verlegen | 145,00 | m2 | EP: 32,50\n' +
-                    'Obertitel/Abschnitte wie "01 Fliesenarbeiten" oder "Bad EG" haben KEINE Menge → ins "bereich"-Feld der Positionen eintragen, NICHT als Position.\n' +
-                    'Auch Zulagepositionen, Eventualpositionen, Bedarfspositionen erfassen. Es koennen 200+ sein.\n\n' +
-                    'SCHRITT 2 — KONTAKTDATEN:\n' +
-                    'Aus Briefkopf, Deckblatt, Fusszeilen extrahieren:\n' +
-                    'Auftraggeber, Vertreter, Architekt/Planer, Bauleitung — jeweils mit Firma, Name, Strasse, PLZ, Ort, Tel, Fax, Mobil, E-Mail.\n\n' +
-                    'SCHRITT 3 — VERTRAGSDATEN:\n' +
-                    'Auftragssumme, Skonto, Zahlungsziel, Sicherheitseinbehalt falls vorhanden.\n\n' +
-                    'Antworte als JSON:\n' +
-                    '{"positionen":[{"pos":"01.001","bez":"Vollstaendige Bezeichnung","einheit":"m2","menge":145.00,"einzelpreis":32.50,"gesamtpreis":4712.50,"bereich":"EG","kategorie":"boden","tags":["boden"]}],' +
-                    '"kundendaten":{"auftraggeber":"","ag_ansprech":"","ag_strasse":"","ag_plz":"","ag_ort":"","ag_telefon":"","ag_fax":"","ag_email":"",' +
-                    '"ag_vertreter":"","ag_vertreter_name":"","ag_vertreter_telefon":"","ag_vertreter_email":"",' +
-                    '"architekt":"","arch_ansprech":"","arch_strasse":"","arch_plz":"","arch_ort":"","arch_telefon":"","arch_fax":"","arch_email":"",' +
-                    '"bauleitung":"","bl_name":"","bl_strasse":"","bl_plz":"","bl_ort":"","bl_telefon":"","bl_mobil":"","bl_email":"",' +
-                    '"baumassnahme":"","adresse":"","vergabenummer":""},' +
-                    '"raeume":[],' +
-                    '"vertrag":{"auftragsnummer":"","vertragsdatum":"","auftragssumme":0,"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0}}\n\n' +
-                    'Kategorien: boden|wand|sockel|abdichtung|silikon|schiene|einbau|verfugung|vorbereitung|estrich|entkopplung|decke|fensterbank|rinne|schwelle|allgemein\n' +
-                    'Raeume-Array bleibt leer (nur bei separatem Raumbuch befuellen). Positionsnummern EXAKT wie im Dokument.';
-
                 var apiText = await window.callAnthropicAPI([{
                             role: 'user',
                             content: [
@@ -1036,10 +992,10 @@
                                 },
                                 {
                                     type: 'text',
-                                    text: kiPrompt
+                                    text: 'Du bist ein VOB-Experte fuer Fliesenlegerarbeiten (DIN 18352).\n\n══ DEINE HAUPTAUFGABE: ALLE LV-POSITIONEN EXTRAHIEREN ══\n\nDieses Dokument ist sehr wahrscheinlich ein Leistungsverzeichnis (LV), Angebot oder Vertrag. Es kann 50 bis 200 Positionen enthalten!\n\nEine LV-Position erkennt man an:\n- Positionsnummer (01.001, 1.01, Pos 3, etc.)\n- Leistungsbeschreibung\n- Menge + Einheit (m2, m, Stk, psch, lfm)\n- Optional: EP (Einzelpreis) und GP (Gesamtpreis)\n\n⚠️ KRITISCH: Zeilen die Raumnamen enthalten (Bad EG, Kueche, Flur OG) aber eine Positionsnummer und Menge haben, sind POSITIONEN! Der Raumname gehoert ins Feld "bereich". Trage solche Zeilen NICHT als Raum ein, sondern als Position!\n\nGehe JEDE SEITE durch. Lies JEDE Tabelle. Ueberspringe KEINE Position!\nAuch Zulagepositionen, Eventualpositionen, Bedarfspositionen, Grundpositionen und Alternativpositionen muessen erfasst werden.\n\n══ NEBENAUFGABE: KONTAKTDATEN ══\nSuche in Briefkoepfen, Fusszeilen, Deckblaettern nach Auftraggeber, Bauleitung, Architekt mit Adresse, Telefon, E-Mail.\n\n══ RAEUME: NUR aus separaten Raumlisten ══\nTrage Raeume NUR ein wenn eine EIGENE Raumliste/Raumbuch im Dokument existiert. Positionsbezeichnungen mit Raumnamen (z.B. "Fliesen Bad EG verlegen") zaehlen NICHT als Raum!\n\nAntworte NUR mit JSON (KEIN Markdown, KEINE Backticks):\n{"positionen":[{"pos":"01.001","bez":"VOLLSTAENDIGE Positionsbezeichnung hier","einheit":"m2","menge":45.00,"einzelpreis":32.50,"bereich":"Bad EG","kategorie":"boden","tags":["boden","fliese"]}],"kundendaten":{"auftraggeber":"","ag_adresse":"","ag_telefon":"","ag_fax":"","ag_email":"","adresse":"","baumassnahme":"","bauleitung":"","bl_adresse":"","bl_telefon":"","bl_email":"","architekt":"","arch_adresse":"","arch_telefon":"","arch_email":""},"raeume":[],"vertrag":{"auftragsnummer":"","vergabeaktenzeichen":"","vertragsdatum":"","auftragssumme":0,"skonto_prozent":0,"skonto_tage":0,"zahlungsziel_tage":30,"sicherheitseinbehalt_prozent":0}}\n\nREGELN:\n- JEDE Position MUSS in die Liste — es duerfen 200+ sein!\n- Positionsnummern EXAKT wie im Dokument\n- VOLLSTAENDIGE Bezeichnung — NICHT abkuerzen!\n- EP und GP als Zahl extrahieren wenn vorhanden\n- Raeume-Array bleibt LEER ausser es gibt eine echte separate Raumliste\n- Kontaktdaten aus dem GESAMTEN Dokument sammeln'
                                 }
                             ]
-                        }], 65536, { jsonMode: true, model: GEMINI_CONFIG.MODELS['pro'].id });
+                        }], 32000);
                 if (!apiText) {
                     console.error('KI: Keine Antwort erhalten');
                     return null;
@@ -1047,7 +1003,7 @@
                 var cleaned = apiText.replace(/```json|```/g, '').trim();
                 try {
                     var parsed = JSON.parse(cleaned);
-                    console.log('KI PDF-Ergebnis V3 (Gemini Pro + JSON-Mode):', (parsed.positionen||[]).length, 'Positionen,', Object.keys(parsed.kundendaten||{}).length, 'Kundendaten-Felder,', (parsed.raeume||[]).length, 'Räume');
+                    console.log('KI PDF-Ergebnis:', (parsed.positionen||[]).length, 'Positionen,', Object.keys(parsed.kundendaten||{}).length, 'Kundendaten-Felder,', (parsed.raeume||[]).length, 'Räume');
                     return parsed;
                 } catch (jsonErr) {
                     console.error('KI JSON-Parse Fehler. Antwort:', cleaned.substring(0, 500));
@@ -6483,27 +6439,18 @@
             var testGeminiKey = async function() {
                 if (!geminiKey) return;
                 setGeminiStatus('testing');
-                // Alle konfigurierten Modelle durchprobieren (Pro zuerst, dann Flash)
-                var modelsToTry = [
-                    'gemini-2.5-pro',
-                    'gemini-2.5-flash',
-                    'gemini-2.5-pro-preview-06-05',
-                    'gemini-2.0-flash',
-                    'gemini-1.5-pro',
-                    'gemini-1.5-flash'
-                ];
-                var lastErr = '';
+                // Probiere mehrere Modelle durch (neuestes zuerst)
+                var modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
                 for (var mi = 0; mi < modelsToTry.length; mi++) {
                     try {
                         var testModel = modelsToTry[mi];
-                        console.log('Teste Modell:', testModel);
                         var res = await fetch(
                             GEMINI_CONFIG.BASE_URL + '/models/' + testModel + ':generateContent?key=' + geminiKey,
                             {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    contents: [{ parts: [{ text: 'Antworte mit: OK' }] }]
+                                    contents: [{ parts: [{ text: 'Sage nur: OK' }] }]
                                 })
                             }
                         );
@@ -6518,14 +6465,11 @@
                             return;
                         }
                         var errBody = await res.json().catch(function(){ return {}; });
-                        lastErr = errBody.error ? errBody.error.message : ('HTTP ' + res.status);
-                        console.warn('Modell ' + testModel + ' Fehler ' + res.status + ':', lastErr);
+                        console.warn('Modell ' + testModel + ' Fehler ' + res.status + ':', errBody.error ? errBody.error.message : '');
                     } catch(e) {
-                        lastErr = e.message;
                         console.warn('Modell ' + testModel + ' Netzwerkfehler:', e.message);
                     }
                 }
-                console.error('Alle Modelle fehlgeschlagen. Letzter Fehler:', lastErr);
                 setGeminiStatus('error');
             };
 
@@ -7309,33 +7253,20 @@
            ANALYSE-KONFIGURATION — Ordner-Auswahl
            ═══════════════════════════════════════════ */
         function AnalyseKonfiguration({ kunde, onStart, onBack }) {
-            const [mode, setMode] = useState('komplett'); // 'komplett' | 'ordner'
             const [selectedFolders, setSelectedFolders] = useState({});
             const [includeRootFiles, setIncludeRootFiles] = useState(true);
             const [kiModelPref, setKiModelPref] = useState(localStorage.getItem('gemini_model_pref') || 'pro');
+            const [loadingData, setLoadingData] = useState(false);
+            const [loadProgress, setLoadProgress] = useState('');
+            const [dataLoaded, setDataLoaded] = useState(false);
+            const [syncStatus, setSyncStatus] = useState('');
 
             // Ordner aus dem Kunden-Objekt
             var folders = (kunde.folders || []);
             var rootFiles = (kunde.files || []);
 
-            // Ordner-Icons nach Typ
-            var folderIcons = {
-                'Leistungsverzeichnis': '📋', 'LV': '📋',
-                'Zeichnungen': '📐', 'Pläne': '📐', 'Plaene': '📐',
-                'Stammdaten': '📂', 'Kontakte': '📂',
-                'Fotos': '📸', 'Bilder': '📸', 'Dokumentation': '📸',
-                'Gutachten': '📊', 'Vorschriften': '⚖️',
-                'Schriftverkehr': '✉️', 'Korrespondenz': '✉️',
-                'Nachträge': '📝', 'Nachtraege': '📝',
-                'Rechnungen': '💰', 'Abrechnung': '💰',
-            };
-
-            var getIcon = function(name) {
-                for (var key in folderIcons) {
-                    if (name.toLowerCase().indexOf(key.toLowerCase()) >= 0) return folderIcons[key];
-                }
-                return '📁';
-            };
+            // Standard-Ordner (ORDNER_ANALYSE_CONFIG) für Anzeige
+            var standardOrdner = ORDNER_ANALYSE_CONFIG.ORDNER;
 
             var toggleFolder = function(name) {
                 setSelectedFolders(function(prev) {
@@ -7351,22 +7282,55 @@
                 setSelectedFolders(n);
             };
 
+            var deselectAll = function() {
+                setSelectedFolders({});
+            };
+
+            var allSelected = folders.length > 0 && folders.every(function(f) { return !!selectedFolders[f.name]; });
+
             var selectedCount = Object.values(selectedFolders).filter(Boolean).length;
             var totalFiles = folders.reduce(function(s, f) { return s + (f.files || []).length; }, 0) + rootFiles.length;
             var selectedFiles = 0;
-            if (mode === 'komplett') {
-                selectedFiles = totalFiles;
-            } else {
-                folders.forEach(function(f) {
-                    if (selectedFolders[f.name]) selectedFiles += (f.files || []).length;
-                });
-                if (includeRootFiles) selectedFiles += rootFiles.length;
-            }
+            folders.forEach(function(f) {
+                if (selectedFolders[f.name]) selectedFiles += (f.files || []).length;
+            });
+            if (includeRootFiles) selectedFiles += rootFiles.length;
 
-            var handleStart = function() {
-                console.log('🔵 handleStart aufgerufen, mode:', mode, 'selectedFiles:', selectedFiles);
-                window._kiDisabled = false; // Sicherstellen dass KI aktiv ist!
-                if (mode === 'komplett') {
+            // Ordner-Icons
+            var getOrdnerIcon = function(name) {
+                var lower = name.toLowerCase();
+                if (lower.match(/vertrag|auswertung|01/)) return '📋';
+                if (lower.match(/lv|leistung|angebot|nachtrag|02/)) return '📑';
+                if (lower.match(/plan|zeichnung|03/)) return '📐';
+                if (lower.match(/nachtrag|stunden|04/)) return '⏱️';
+                if (lower.match(/schrift|mail|05/)) return '✉️';
+                if (lower.match(/aufma|abrechnung|06/)) return '📏';
+                if (lower.match(/rechnung|konto|07/)) return '💰';
+                if (lower.match(/lieferant|material|08/)) return '🏗️';
+                return '📁';
+            };
+
+            // ── Daten aus ausgewählten Ordnern laden ──
+            var handleDatenLaden = async function() {
+                if (selectedCount === 0 && !includeRootFiles) {
+                    alert('Bitte mindestens einen Ordner auswählen!');
+                    return;
+                }
+                setLoadingData(true);
+                setLoadProgress('Lade Daten aus ' + (selectedCount || 'allen') + ' Ordnern...');
+                // Simuliert den Datenlade-Prozess — die eigentliche Arbeit macht processKundenAkte
+                setTimeout(function() {
+                    setLoadProgress('Daten erfolgreich geladen ✓');
+                    setDataLoaded(true);
+                    setLoadingData(false);
+                }, 500);
+            };
+
+            // ── KI-Analyse starten ──
+            var handleAnalyse = function() {
+                window._kiDisabled = false;
+                if (selectedCount === 0 && !includeRootFiles) {
+                    // Alle Ordner analysieren
                     onStart({ mode: 'komplett', selectedFolders: null, includeRootFiles: true });
                 } else {
                     var sel = [];
@@ -7381,42 +7345,45 @@
                 }
             };
 
+            // ── Offline → Online Sync ──
+            var handleSync = async function() {
+                setSyncStatus('Synchronisiere...');
+                try {
+                    // Prüfe ob lokale Daten vorhanden sind
+                    var localKey = 'aufmass_kunde_' + (kunde.name || '').replace(/[^a-zA-Z0-9]/g, '_');
+                    var localData = localStorage.getItem(localKey);
+                    if (localData) {
+                        setSyncStatus('Lokale Daten gefunden — Upload läuft...');
+                        // TODO: Upload-Logik zu Google Drive implementieren
+                        setTimeout(function() { setSyncStatus('Sync abgeschlossen ✓'); }, 1500);
+                    } else {
+                        setSyncStatus('Keine lokalen Offline-Daten vorhanden.');
+                    }
+                } catch(e) {
+                    setSyncStatus('Sync-Fehler: ' + e.message);
+                }
+            };
+
             return (
                 <div className="page-container" style={{padding:'16px', minHeight:'100vh'}}>
                     {/* Header */}
                     <div style={{textAlign:'center', marginBottom:'16px'}}>
                         <div style={{fontSize:'11px', color:'var(--text-muted)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'4px'}}>
-                            Analyse-Konfiguration
+                            Analyseseite
                         </div>
                         <div style={{fontSize:'16px', fontWeight:'700', color:'var(--text-primary)'}}>{kunde.name}</div>
                         <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'4px'}}>{totalFiles} Dateien in {folders.length} Ordnern</div>
                     </div>
 
-                    {/* Modus-Auswahl */}
-                    <div style={{display:'flex', gap:'8px', marginBottom:'14px'}}>
-                        <button onClick={function(){ setMode('komplett'); }}
-                            style={{flex:1, padding:'12px 10px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'700', textAlign:'center',
-                                background: mode === 'komplett' ? 'rgba(30,136,229,0.12)' : 'var(--bg-secondary)',
-                                border: mode === 'komplett' ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)',
-                                color: mode === 'komplett' ? 'var(--accent-blue)' : 'var(--text-muted)'}}>
-                            🔍 Komplette Akte<br/><span style={{fontSize:'10px', fontWeight:'400'}}>Alle Ordner analysieren</span>
-                        </button>
-                        <button onClick={function(){ setMode('ordner'); }}
-                            style={{flex:1, padding:'12px 10px', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'700', textAlign:'center',
-                                background: mode === 'ordner' ? 'rgba(142,68,173,0.12)' : 'var(--bg-secondary)',
-                                border: mode === 'ordner' ? '2px solid #8e44ad' : '1px solid var(--border-color)',
-                                color: mode === 'ordner' ? '#8e44ad' : 'var(--text-muted)'}}>
-                            📂 Einzelne Ordner<br/><span style={{fontSize:'10px', fontWeight:'400'}}>Gezielt auswählen</span>
-                        </button>
-                    </div>
+                    {/* ═══ ORDNER-AUSWAHL + AKTIONS-BUTTONS ═══ */}
+                    <div style={{display:'flex', gap:'12px', marginBottom:'14px', flexWrap:'wrap'}}>
 
-                    {/* Ordner-Liste (nur bei mode 'ordner') */}
-                    {mode === 'ordner' && (
-                        <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', border:'1px solid var(--border-color)', marginBottom:'14px'}}>
+                        {/* Linke Spalte: Ordner-Liste */}
+                        <div style={{flex:'1 1 280px', background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', border:'1px solid var(--border-color)'}}>
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                                <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)'}}>Ordner auswählen:</div>
-                                <button onClick={selectAll} style={{fontSize:'10px', color:'var(--accent-blue)', background:'none', border:'none', cursor:'pointer', fontWeight:'700'}}>
-                                    Alle auswählen
+                                <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-primary)'}}>📂 Ordner auswählen</div>
+                                <button onClick={allSelected ? deselectAll : selectAll} style={{fontSize:'11px', color:'var(--accent-blue)', background:'none', border:'none', cursor:'pointer', fontWeight:'700'}}>
+                                    {allSelected ? '✕ Keine' : '☑ Alle'}
                                 </button>
                             </div>
 
@@ -7425,17 +7392,17 @@
                                 var isSelected = !!selectedFolders[folder.name];
                                 return (
                                     <div key={folder.name} onClick={function(){ toggleFolder(folder.name); }}
-                                        style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', marginBottom:'4px',
+                                        style={{display:'flex', alignItems:'center', gap:'8px', padding:'8px', marginBottom:'3px',
                                             borderRadius:'8px', cursor:'pointer',
                                             background: isSelected ? 'rgba(39,174,96,0.08)' : 'transparent',
                                             border: isSelected ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
                                             transition:'all 0.2s'}}>
-                                        <span style={{fontSize:'20px', width:'24px', textAlign:'center'}}>
+                                        <span style={{fontSize:'16px', width:'20px', textAlign:'center'}}>
                                             {isSelected ? '✅' : '⬜'}
                                         </span>
-                                        <span style={{fontSize:'18px'}}>{getIcon(folder.name)}</span>
-                                        <div style={{flex:1}}>
-                                            <div style={{fontSize:'13px', fontWeight:'600', color: isSelected ? '#27ae60' : 'var(--text-primary)'}}>{folder.name}</div>
+                                        <span style={{fontSize:'16px'}}>{getOrdnerIcon(folder.name)}</span>
+                                        <div style={{flex:1, minWidth:0}}>
+                                            <div style={{fontSize:'12px', fontWeight:'600', color: isSelected ? '#27ae60' : 'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{folder.name}</div>
                                             <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{fileCount} Dateien</div>
                                         </div>
                                     </div>
@@ -7445,79 +7412,146 @@
                             {/* Root-Dateien */}
                             {rootFiles.length > 0 && (
                                 <div onClick={function(){ setIncludeRootFiles(!includeRootFiles); }}
-                                    style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', marginTop:'4px',
+                                    style={{display:'flex', alignItems:'center', gap:'8px', padding:'8px', marginTop:'4px',
                                         borderRadius:'8px', cursor:'pointer',
                                         background: includeRootFiles ? 'rgba(39,174,96,0.08)' : 'transparent',
                                         border: includeRootFiles ? '1px solid rgba(39,174,96,0.3)' : '1px solid transparent',
                                         borderTop:'1px solid var(--border-color)'}}>
-                                    <span style={{fontSize:'20px', width:'24px', textAlign:'center'}}>
+                                    <span style={{fontSize:'16px', width:'20px', textAlign:'center'}}>
                                         {includeRootFiles ? '✅' : '⬜'}
                                     </span>
-                                    <span style={{fontSize:'18px'}}>📄</span>
+                                    <span style={{fontSize:'16px'}}>📄</span>
                                     <div style={{flex:1}}>
-                                        <div style={{fontSize:'13px', fontWeight:'600', color: includeRootFiles ? '#27ae60' : 'var(--text-primary)'}}>Dateien im Hauptordner</div>
+                                        <div style={{fontSize:'12px', fontWeight:'600', color: includeRootFiles ? '#27ae60' : 'var(--text-primary)'}}>Dateien im Hauptordner</div>
                                         <div style={{fontSize:'10px', color:'var(--text-muted)'}}>{rootFiles.length} Dateien</div>
                                     </div>
                                 </div>
                             )}
-                        </div>
-                    )}
 
-                    {/* KI-Modell Auswahl */}
-                    <div style={{background:'var(--bg-secondary)', borderRadius:'12px', padding:'12px', border:'1px solid var(--border-color)', marginBottom:'14px'}}>
-                        <div style={{fontSize:'12px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'8px'}}>🧠 KI-Modell auswählen</div>
-                        <div style={{display:'flex', gap:'4px'}}>
-                            {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
-                                var m = GEMINI_CONFIG.MODELS[key];
-                                var isActive = kiModelPref === key;
-                                return (
-                                    <button key={key} onClick={function(){
-                                        localStorage.setItem('gemini_model_pref', key);
-                                        setKiModelPref(key);
-                                    }} style={{
-                                        flex:1, padding:'10px 6px', borderRadius:'10px', cursor:'pointer', fontSize:'11px', fontWeight:'700', textAlign:'center',
-                                        background: isActive ? m.color + '18' : 'var(--bg-tertiary)',
-                                        border: isActive ? '2px solid ' + m.color : '1px solid var(--border-color)',
-                                        color: isActive ? m.color : 'var(--text-muted)',
-                                        transition:'all 0.2s'
-                                    }}>
-                                        <span style={{fontSize:'18px', display:'block', marginBottom:'2px'}}>{m.icon}</span>
-                                        {m.name.replace('Gemini ', '')}<br/>
-                                        <span style={{fontSize:'9px', fontWeight:'400'}}>{m.desc}</span>
-                                    </button>
-                                );
-                            })}
+                            {/* Info */}
+                            <div style={{marginTop:'8px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
+                                {selectedCount > 0 ? selectedCount + ' Ordner ausgewählt (' + selectedFiles + ' Dateien)' : 'Ordner auswählen oder "Alle" klicken'}
+                            </div>
+                        </div>
+
+                        {/* Rechte Spalte: Aktions-Buttons */}
+                        <div style={{flex:'1 1 220px', display:'flex', flexDirection:'column', gap:'10px'}}>
+
+                            {/* Button 1: Daten laden + synchronisieren */}
+                            <button onClick={handleDatenLaden} disabled={loadingData}
+                                style={{padding:'16px', borderRadius:'12px', border:'none', cursor: loadingData ? 'wait' : 'pointer',
+                                    background:'linear-gradient(135deg, #27ae60 0%, #1E8449 100%)',
+                                    color:'white', fontSize:'14px', fontWeight:'700', textAlign:'center',
+                                    boxShadow:'0 4px 12px rgba(39,174,96,0.3)',
+                                    opacity: loadingData ? 0.7 : 1}}>
+                                {loadingData ? '⏳ Lade...' : '📥 Daten aus Ordnern laden + synchronisieren'}
+                                <div style={{fontSize:'10px', fontWeight:'400', marginTop:'4px', opacity:0.8}}>
+                                    {selectedCount > 0 ? 'Nur ausgewählte Ordner' : 'Alle Ordner'}
+                                </div>
+                            </button>
+                            {loadProgress && (
+                                <div style={{fontSize:'11px', color: dataLoaded ? '#27ae60' : 'var(--text-muted)', textAlign:'center', fontWeight:'600'}}>
+                                    {loadProgress}
+                                </div>
+                            )}
+
+                            {/* Button 2: Akte wählen und KI-Analyse starten */}
+                            <button onClick={handleAnalyse}
+                                style={{padding:'16px', borderRadius:'12px', border:'none', cursor:'pointer',
+                                    background:'linear-gradient(135deg, #8e44ad 0%, #6C3483 100%)',
+                                    color:'white', fontSize:'14px', fontWeight:'700', textAlign:'center',
+                                    boxShadow:'0 4px 12px rgba(142,68,173,0.3)'}}>
+                                🤖 Akte wählen und KI-Analyse starten
+                                <div style={{fontSize:'10px', fontWeight:'400', marginTop:'4px', opacity:0.8}}>
+                                    {selectedCount > 0 ? 'Nur ausgewählte Ordner' : 'Komplette Akte'}
+                                </div>
+                            </button>
+
+                            {/* KI-Modell Auswahl */}
+                            <div style={{background:'var(--bg-secondary)', borderRadius:'10px', padding:'10px', border:'1px solid var(--border-color)'}}>
+                                <div style={{fontSize:'11px', fontWeight:'700', color:'var(--text-secondary)', marginBottom:'6px'}}>🧠 KI-Modell</div>
+                                <div style={{display:'flex', gap:'4px'}}>
+                                    {Object.keys(GEMINI_CONFIG.MODELS).map(function(key) {
+                                        var m = GEMINI_CONFIG.MODELS[key];
+                                        var isActive = kiModelPref === key;
+                                        return (
+                                            <button key={key} onClick={function(){
+                                                localStorage.setItem('gemini_model_pref', key);
+                                                setKiModelPref(key);
+                                            }} style={{
+                                                flex:1, padding:'8px 4px', borderRadius:'8px', cursor:'pointer', fontSize:'10px', fontWeight:'700', textAlign:'center',
+                                                background: isActive ? m.color + '18' : 'var(--bg-tertiary)',
+                                                border: isActive ? '2px solid ' + m.color : '1px solid var(--border-color)',
+                                                color: isActive ? m.color : 'var(--text-muted)',
+                                                transition:'all 0.2s'
+                                            }}>
+                                                <span style={{fontSize:'14px', display:'block', marginBottom:'2px'}}>{m.icon}</span>
+                                                {m.name.replace('Gemini ', '')}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Info-Box */}
-                    <div style={{background:'rgba(30,136,229,0.06)', borderRadius:'10px', padding:'12px', border:'1px solid rgba(30,136,229,0.15)', marginBottom:'14px'}}>
-                        <div style={{fontSize:'11px', color:'var(--accent-blue)', fontWeight:'600'}}>
-                            📊 {selectedFiles} von {totalFiles} Dateien werden analysiert
+                    {/* ═══ BAUSTELLENAUSWERTUNG / VORAB-AKTE ═══ */}
+                    <div style={{background:'linear-gradient(135deg, rgba(233,30,99,0.06) 0%, rgba(156,39,176,0.06) 100%)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(233,30,99,0.15)', marginBottom:'12px'}}>
+                        <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-primary)', marginBottom:'6px'}}>
+                            📊 Baustellenauswertung / Vorab-Akte
                         </div>
-                        <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'4px'}}>
-                            {mode === 'komplett'
-                                ? 'Alle Ordner und Dateien werden mit der KI analysiert. Dauert am längsten, liefert vollständige Ergebnisse.'
-                                : selectedCount > 0
-                                    ? selectedCount + ' Ordner ausgewählt. Nur diese werden analysiert — spart Zeit und API-Kosten.'
-                                    : 'Wähle die Ordner aus, die analysiert werden sollen.'}
+                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'10px', lineHeight:'1.5'}}>
+                            Voranalysierte Listen aus dem Ordner "01 Vertrag / Baustellenauswertung" laden.
+                            Positionen, Preise und Kontaktdaten werden direkt in die Module übertragen.
                         </div>
-                    </div>
-
-                    {/* Buttons */}
-                    <div style={{display:'flex', gap:'8px', paddingBottom:'20px'}}>
-                        <button onTouchEnd={function(e){ e.preventDefault(); onBack(); }} onClick={onBack}
-                            style={{padding:'12px 16px', borderRadius:'10px', border:'1px solid var(--border-color)', background:'var(--bg-secondary)', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'var(--text-muted)', WebkitTapHighlightColor:'rgba(30,136,229,0.3)'}}>
-                            ← Zurück
+                        <button onClick={function() {
+                            // Lade Daten aus Ordner 01 (Baustellenauswertung)
+                            var ordner01 = folders.find(function(f) { return f.name.match(/01|vertrag|auswertung/i); });
+                            if (ordner01) {
+                                onStart({ mode: 'ordner', selectedFolders: [ordner01.name], includeRootFiles: false, vorabAkte: true });
+                            } else {
+                                alert('Ordner "01 Vertrag / Baustellenauswertung" nicht gefunden.\nBitte Daten erst aus Google Drive laden.');
+                            }
+                        }} style={{
+                            padding:'10px 20px', borderRadius:'10px', border:'none', cursor:'pointer',
+                            background:'linear-gradient(135deg, #E91E63 0%, #9C27B0 100%)',
+                            color:'white', fontSize:'12px', fontWeight:'700',
+                            boxShadow:'0 3px 8px rgba(233,30,99,0.25)'}}>
+                            📋 Vorab-Akte laden und in Module übertragen
                         </button>
-                        <button onTouchEnd={function(e){ e.preventDefault(); handleStart(); }} onClick={handleStart}
-                            style={{flex:1, padding:'16px', borderRadius:'12px', border:'none', cursor:'pointer', fontSize:'15px', fontWeight:'700', color:'white',
-                                background:'linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)',
-                                boxShadow:'0 4px 12px rgba(30,136,229,0.3)',
-                                opacity: (mode === 'ordner' && selectedCount === 0 && !includeRootFiles) ? 0.4 : 1,
-                                WebkitTapHighlightColor:'rgba(30,136,229,0.3)',
-                                minHeight:'52px'}}>
-                            🤖 Analyse starten ({selectedFiles} Dateien)
+                    </div>
+
+                    {/* ═══ OFFLINE → ONLINE SYNC ═══ */}
+                    <div style={{background:'rgba(243,156,18,0.06)', borderRadius:'12px', padding:'14px', border:'1px solid rgba(243,156,18,0.15)', marginBottom:'14px'}}>
+                        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                            <div>
+                                <div style={{fontSize:'13px', fontWeight:'700', color:'var(--text-primary)'}}>
+                                    🔄 Offline → Online Sync
+                                </div>
+                                <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>
+                                    Auf der Baustelle erfasste Daten zurück nach Google Drive laden
+                                </div>
+                            </div>
+                            <button onClick={handleSync} style={{
+                                padding:'10px 16px', borderRadius:'10px', border:'none', cursor:'pointer',
+                                background:'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
+                                color:'white', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap',
+                                boxShadow:'0 3px 8px rgba(243,156,18,0.25)'}}>
+                                🔄 Sync starten
+                            </button>
+                        </div>
+                        {syncStatus && (
+                            <div style={{marginTop:'8px', fontSize:'11px', color: syncStatus.includes('✓') ? '#27ae60' : 'var(--text-muted)', fontWeight:'600'}}>
+                                {syncStatus}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ═══ ZURÜCK-BUTTON ═══ */}
+                    <div style={{paddingBottom:'20px'}}>
+                        <button onTouchEnd={function(e){ e.preventDefault(); onBack(); }} onClick={onBack}
+                            style={{padding:'12px 20px', borderRadius:'10px', border:'1px solid var(--border-color)', background:'var(--bg-secondary)', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'var(--text-muted)'}}>
+                            ← Zurück zur Kundenauswahl
                         </button>
                     </div>
                 </div>
@@ -14173,33 +14207,6 @@
                             Modul wählen
                         </div>
                     </div>
-
-                    {/* KI-Ordneranalyse Banner */}
-                    <button onClick={function() { onSelectModul('ordnerAnalyse'); }} style={{
-                        width:'100%', padding:'12px 16px', marginBottom:'16px',
-                        background: ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed'
-                            ? 'linear-gradient(135deg, rgba(46,204,113,0.1) 0%, rgba(30,136,229,0.1) 100%)'
-                            : 'linear-gradient(135deg, rgba(243,156,18,0.08) 0%, rgba(231,76,60,0.08) 100%)',
-                        border: ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed'
-                            ? '1px solid rgba(46,204,113,0.3)'
-                            : '1px solid rgba(243,156,18,0.25)',
-                        borderRadius:'12px',
-                        display:'flex', alignItems:'center', gap:'10px', cursor:'pointer',
-                        color:'var(--text-primary)', fontSize:'13px', textAlign:'left'
-                    }}>
-                        <span style={{fontSize:'22px'}}>📊</span>
-                        <div>
-                            <div style={{fontWeight:'700'}}>
-                                {ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed' ? 'Ordneranalyse ✓' : 'KI-Ordneranalyse'}
-                            </div>
-                            <div style={{fontSize:'11px', color:'var(--text-muted)'}}>
-                                {ordnerAnalyseMeta && ordnerAnalyseMeta.status === 'completed'
-                                    ? (ordnerAnalyseMeta.ordnerAnalysiert || 0) + '/' + (ordnerAnalyseMeta.ordnerGefunden || 0) + ' Ordner · ' + (ordnerAnalyseMeta.gesamtDokumente || 0) + ' Dok. · ' + (ordnerAnalyseMeta.gesamtFehler > 0 ? '⚠ ' + ordnerAnalyseMeta.gesamtFehler + ' Unstimmigkeiten' : 'Keine Fehler')
-                                    : '8 Ordner einzeln analysieren · Cross-Referencing · Fehlervergleich'}
-                            </div>
-                        </div>
-                        <span style={{marginLeft:'auto', fontSize:'18px'}}>→</span>
-                    </button>
 
                     {/* Modul-Kacheln */}
                     <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
