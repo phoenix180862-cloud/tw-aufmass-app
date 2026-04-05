@@ -1978,20 +1978,9 @@
                                 }
 
                                 if (!wordTextOk) {
-                                    // Methode 3: Fallback — Word als Base64 an Gemini senden (Gemini kann docx nativ lesen)
-                                    console.log('  🔍', doc.name, '→ Text-Extraktion fehlgeschlagen, nutze Gemini-Vision für Word');
-                                    try {
-                                        var wordBase64 = await new Promise(function(resolve, reject) {
-                                            var reader = new FileReader();
-                                            reader.onload = function() { resolve(reader.result.split(',')[1]); };
-                                            reader.onerror = function() { reject(new Error('FileReader Fehler')); };
-                                            reader.readAsDataURL(wordBlob);
-                                        });
-                                        if (wordBase64 && wordBase64.length > 100 && pdfBase64List.length < 6) {
-                                            pdfBase64List.push({ name: doc.name, base64: wordBase64, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                                            console.log('  📸', doc.name, '→ Gemini-Inline (' + Math.round(wordBase64.length/1024) + ' KB)');
-                                        }
-                                    } catch(b64Err) { console.warn('  ❌ Word Base64:', doc.name, b64Err.message); }
+                                    // Methode 3: Word als Klartext-Fallback (Gemini unterstützt KEIN .docx als inline_data!)
+                                    console.log('  ⚠️', doc.name, '→ Text-Extraktion fehlgeschlagen. Word wird übersprungen (Gemini unterstützt kein .docx als inline_data)');
+                                    allTexts.push('--- Datei: ' + doc.name + ' (Word, nur Dateiname) ---\nDokument konnte nicht extrahiert werden.');
                                 }
                             } catch(wordErr) { console.warn('  ⚠️ Word-Extraktion:', doc.name, wordErr.message); }
                         } else if (doc.text) {
@@ -2029,14 +2018,14 @@
                     }
                     visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' Dokumente VOLLSTÄNDIG!';
                     visionParts.push({ text: visionPrompt });
-                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 8000);
+                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 16000);
                 } else {
                     // ═══ TEXT-MODUS: Nur extrahierten Text senden ═══
                     var fullText = allTexts.join('\n\n');
                     console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen');
                     apiResult = await window.callGeminiAPI([
                         { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
-                    ], 8000);
+                    ], 16000);
                 }
 
                 if (!apiResult) throw new Error('Keine KI-Antwort — API Key gesetzt?');
@@ -2044,10 +2033,45 @@
                 var cleaned = apiResult.replace(/```json|```/g, '').trim();
                 var parsed;
                 try { parsed = JSON.parse(cleaned); } catch(parseErr) {
-                    console.warn('⚠️ JSON-Parse fehlgeschlagen, versuche Extraktion...', cleaned.substring(0, 200));
+                    console.warn('⚠️ JSON-Parse fehlgeschlagen, versuche Reparatur...', cleaned.substring(0, 300));
+                    // Methode 1: JSON-Block extrahieren
                     var jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-                    else throw new Error('KI-Antwort konnte nicht als JSON geparst werden');
+                    if (jsonMatch) {
+                        try { parsed = JSON.parse(jsonMatch[0]); }
+                        catch(e2) {
+                            // Methode 2: Abgeschnittene JSON reparieren — fehlende Klammern ergänzen
+                            console.warn('⚠️ JSON-Reparatur: Versuche abgeschnittene JSON zu schließen...');
+                            var repaired = jsonMatch[0];
+                            // Offene Strings schließen
+                            var lastQuote = repaired.lastIndexOf('"');
+                            if (lastQuote > 0) {
+                                var afterQuote = repaired.substring(lastQuote + 1);
+                                if (afterQuote.indexOf('"') < 0 && afterQuote.length < 50) {
+                                    repaired = repaired.substring(0, lastQuote + 1);
+                                }
+                            }
+                            // Fehlende Klammern zählen und ergänzen
+                            var openBraces = (repaired.match(/\{/g) || []).length;
+                            var closeBraces = (repaired.match(/\}/g) || []).length;
+                            var openBrackets = (repaired.match(/\[/g) || []).length;
+                            var closeBrackets = (repaired.match(/\]/g) || []).length;
+                            // Trailing comma/colon entfernen
+                            repaired = repaired.replace(/[,:\s]+$/, '');
+                            for (var bi = 0; bi < openBrackets - closeBrackets; bi++) repaired += ']';
+                            for (var ci = 0; ci < openBraces - closeBraces; ci++) repaired += '}';
+                            try {
+                                parsed = JSON.parse(repaired);
+                                console.log('✅ JSON erfolgreich repariert!');
+                            } catch(e3) {
+                                console.error('❌ JSON-Reparatur fehlgeschlagen:', e3.message);
+                                // Methode 3: Leeres Ergebnis mit Warnung
+                                parsed = { warnhinweise: ['JSON-Antwort der KI war unvollständig/abgeschnitten. Bitte erneut analysieren.'], _rawTruncated: true };
+                            }
+                        }
+                    } else {
+                        console.error('❌ Kein JSON-Block gefunden');
+                        parsed = { warnhinweise: ['KI-Antwort enthielt kein JSON.'], _rawError: true };
+                    }
                 }
                 console.log('✅ Ordner', ordnerNr, 'analysiert:', JSON.stringify(parsed).substring(0, 500) + '...');
                 console.log('  📊 DIAGNOSE Ordner', ordnerNr, '— Keys im Ergebnis:', Object.keys(parsed).join(', '));
