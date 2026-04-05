@@ -1757,13 +1757,13 @@
     // KI-ORDNERANALYSE — Ordner-spezifische Prompts (Gemini)
     // ═══════════════════════════════════════════════════════
     var ORDNER_PROMPTS = {
-                '01': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere den folgenden Text aus einer Baustellenauswertung.\n\n═══ HAUPTAUFGABE: KONTAKTDATEN AUSFÜHRLICH ERFASSEN ═══\nSuche AKRIBISCH nach ALLEN beteiligten Personen in diesen 3 Kategorien:\n\n1. BAUHERR — Auftraggeber, Eigentümer, Investor, Bauherrenvertreter\n   → JEDE Person die zum Bauherrn gehört SEPARAT erfassen!\n   → Firma, Name, Funktion, Adresse, Telefon, Mobil, Fax, E-Mail\n\n2. ARCHITEKT — Planer, Planungsbüro, Entwurfsverfasser\n   → Büroname, alle Ansprechpartner mit Kontaktdaten\n\n3. BAULEITUNG — Bauleiter, Oberbauleiter, Projektleiter\n   → Firma, Name, Funktion, alle Telefonnummern und E-Mails\n\nSuche in: Briefköpfen, Fußzeilen, Verteiler, Stempeln, Unterschriften,\nAnschreiben, Protokoll-Teilnehmerlisten, E-Mail-Signaturen!\nJEDE Telefonnummer, JEDE E-Mail, JEDE Adresse muss erfasst werden!\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  \"ordner\": \"01_Baustellenauswertung\",\n  \"personen\": {\n    \"bauherr\": { \"name\":\"\", \"anschrift\":\"\", \"telefon\":null, \"mobil\":null, \"fax\":null, \"email\":null },\n    \"bauherrVertreter\": { \"name\":\"\", \"funktion\":\"\", \"telefon\":null, \"mobil\":null, \"email\":null },\n    \"architekt\": { \"name\":\"\", \"buero\":\"\", \"anschrift\":\"\", \"telefon\":null, \"mobil\":null, \"fax\":null, \"email\":null },\n    \"bauleitung\": { \"name\":\"\", \"firma\":\"\", \"anschrift\":\"\", \"telefon\":null, \"mobil\":null, \"fax\":null, \"email\":null },\n    \"sonstigePersonen\": [{ \"name\":\"\", \"rolle\":\"\", \"firma\":\"\", \"telefon\":\"\", \"mobil\":\"\", \"email\":\"\" }]\n  },\n  \"lvPositionen\": [{ \"posNr\":\"\", \"menge\":0, \"einheit\":\"\", \"leistung\":\"\", \"epPreis\":null, \"gesamtPreis\":null, \"herkunft\":\"01_Baustellenauswertung\" }],\n  \"nachtraege\": [{ \"nachtragNr\":\"\", \"bezeichnung\":\"\", \"positionen\":[], \"summNetto\":null, \"status\":\"offen\" }],\n  \"projektDaten\": { \"bauvorhaben\":\"\", \"baustelleAdresse\":\"\", \"auftragssumme\":null },\n  \"warnhinweise\": [],\n  \"vollstaendigkeit\": { \"personenKomplett\":true, \"lvKomplett\":true, \"fehlendeDaten\":[] }\n}\n\nWICHTIG: Kontaktdaten sind PRIORITÄT #1! Jede gefundene Person mit ALLEN verfügbaren Daten erfassen!',
+        '01': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere den folgenden Text aus einer Baustellenauswertung.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "01_Baustellenauswertung",\n  "personen": {\n    "bauherr": { "name":"", "anschrift":"", "telefon":null, "email":null },\n    "bauherrVertreter": { "name":"", "funktion":"", "telefon":null, "email":null },\n    "architekt": { "name":"", "buero":"", "telefon":null, "email":null },\n    "bauleitung": { "name":"", "firma":"", "telefon":null, "email":null },\n    "sonstigePersonen": []\n  },\n  "lvPositionen": [{ "posNr":"", "menge":0, "einheit":"", "leistung":"", "epPreis":null, "gesamtPreis":null, "herkunft":"01_Baustellenauswertung" }],\n  "nachtraege": [{ "nachtragNr":"", "bezeichnung":"", "positionen":[], "summNetto":null, "status":"offen" }],\n  "projektDaten": { "bauvorhaben":"", "baustelleAdresse":"", "auftragssumme":null },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "personenKomplett":true, "lvKomplett":true, "fehlendeDaten":[] }\n}\n\nWICHTIG: Jede LV-Position MUSS erfasst werden! EP-Preis rechnerisch prüfen!',
 
-'02': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere ALLE Dokumente aus dem Ordner \"Angebote, Nachträge, LV, Verträge\".\n\n⚠⚠⚠ DIESER ORDNER ERFORDERT HÖCHSTE SORGFALT! ⚠⚠⚠\nLeistungsverzeichnisse mit 100-200 Positionen sind NORMAL.\nDu MUSST JEDE EINZELNE Position erfassen — KEINE darf fehlen!\n\n═══ REGELN FÜR POSITIONEN ═══\n1. JEDE Position im LV MUSS erfasst werden — überspringe NICHTS!\n2. Positionsnummer EXAKT übernehmen (z.B. 01.001, 1.01, 01.02.030)\n3. REIHENFOLGE: EXAKT wie im LV — NICHT umsortieren!\n4. ALLE Beschreibungstexte VOLLSTÄNDIG übernehmen (Kurztext UND Langtext)\n5. Menge, Einheit (m2, m, Stück, m3, lfm, pauschal), EP-Preis, GP-Preis EXAKT\n6. EP × Menge = GP rechnerisch prüfen!\n7. DUPLIKATE: Positionen die in ALLEN Feldern (posNr+menge+einheit+text+preise) identisch sind → NUR EINMAL.\n   ABER: Verschiedene Positionsnummern = VERSCHIEDENE Positionen (auch bei gleichem Text)!\n8. Zulagepositionen, Eventualpositionen, Bedarfspositionen, Alternativpositionen MÜSSEN erfasst werden!\n9. Bei mehreren Dokumenten (Haupt-LV + Nachträge): ALLE Positionen aus ALLEN Dokumenten!\n10. Zähle am Ende: Wenn das LV 150 Positionen hat, müssen 150 in deiner Antwort sein!\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  \"ordner\": \"02_Angebote_LV_Vertraege\",\n  \"lvPositionen\": [{ \"posNr\":\"\", \"menge\":0, \"einheit\":\"\", \"leistung\":\"\", \"kurztext\":\"\", \"epPreis\":null, \"gesamtPreis\":null, \"rechnerischGeprueft\":true, \"herkunft\":\"02_Angebote_LV_Vertraege\" }],\n  \"nachtraege\": [{ \"nachtragNr\":\"\", \"bezeichnung\":\"\", \"positionen\":[], \"summNetto\":null, \"status\":\"offen\", \"bezugHauptLV\":\"\" }],\n  \"vertrag\": { \"auftraggeber\":\"\", \"vertragsart\":\"\", \"auftragssumme_netto\":null, \"mwstSatz\":19, \"zahlungsbedingungen\":\"\", \"gewaehrleistung\":{} },\n  \"gesamtPositionsListe\": { \"anzahlLV\":0, \"anzahlNachtraege\":0, \"summeLVNetto\":0, \"gesamtSummeNetto\":0 },\n  \"warnhinweise\": [],\n  \"vollstaendigkeit\": { \"lvKomplett\":true, \"fehlendeDaten\":[] }\n}\n\nKRITISCH: Zähle am Ende die Positionen! Wenn das LV z.B. 150 Positionen hat, müssen auch 150 in deiner Antwort sein!\nBei Nachträgen: Alle Nachtragspositionen SEPARAT im nachtraege-Array erfassen!',
+        '02': 'Du bist ein VOB-Experte für Fliesenlegerarbeiten (DIN 18352).\nAnalysiere alle Dokumente aus dem Ordner "Angebote, Nachträge, LV, Verträge".\n\n⚠ DIESER ORDNER ERFORDERT HÖCHSTE SORGFALT! ⚠\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "02_Angebote_LV_Vertraege",\n  "lvPositionen": [{ "posNr":"", "menge":0, "einheit":"", "leistung":"", "kurztext":"", "epPreis":null, "gesamtPreis":null, "rechnerischGeprueft":true, "herkunft":"02_Angebote_LV_Vertraege" }],\n  "nachtraege": [{ "nachtragNr":"", "bezeichnung":"", "positionen":[], "summNetto":null, "status":"offen", "bezugHauptLV":"" }],\n  "vertrag": { "auftraggeber":"", "vertragsart":"", "auftragssumme_netto":null, "mwstSatz":19, "zahlungsbedingungen":"", "gewaehrleistung":{} },\n  "gesamtPositionsListe": { "anzahlLV":0, "anzahlNachtraege":0, "summeLVNetto":0, "gesamtSummeNetto":0 },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "lvKomplett":true, "fehlendeDaten":[] }\n}\n\nKRITISCH: JEDE Position MUSS erfasst werden! Positionsnummer EXAKT übernehmen!',
 
-        '03': 'Du bist ein Experte für Bauzeichnungen mit Fokus auf Fliesenlegerarbeiten.\nAnalysiere die Zeichnungen/Pläne und extrahiere alle RÄUME.\n\nFOKUS: Raumnummern, Raumbezeichnungen und Geschoss-Zuordnung.\nNUR Räume erfassen — KEINE Maße extrahieren (Maße werden manuell vor Ort aufgenommen).\nBEVORZUGT: Räume in denen Fliesen verlegt werden sollen!\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  \"ordner\": \"03_Zeichnungen\",\n  \"geschosse\": [{ \"geschoss\":\"EG\", \"raeume\": [{ \"raumNr\":\"\", \"raumBezeichnung\":\"\", \"fliesenRelevant\":true }] }],\n  \"zusammenfassung\": { \"gesamtRaeume\":0, \"fliesenRaeume\":0 },\n  \"warnhinweise\": [],\n  \"vollstaendigkeit\": { \"alleRaeumeErfasst\":true, \"fehlendeDaten\":[] }\n}\n\nJeden Raum mit Raumnummer, Bezeichnung (z.B. Bad, Küche, Flur) und Geschoss (EG, OG, UG, DG) erfassen!',
+        '03': 'Du bist ein Experte für Bauzeichnungen mit Fokus auf Fliesenlegerarbeiten.\nAnalysiere die Zeichnungen/Pläne und extrahiere alle Raum-Informationen.\n\nBEVORZUGT: Räume, in denen Fliesen verlegt werden sollen!\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "03_Zeichnungen",\n  "geschosse": [{ "geschoss":"EG", "raeume": [{ "raumNr":"", "raumBezeichnung":"", "fliesenRelevant":true, "masse": { "laenge_m":0, "breite_m":0, "bodenflaeche_m2":0, "wandflaeche_m2":0 }, "fliesenArbeiten": { "boden":{}, "wand":{}, "sockel":{} } }] }],\n  "zusammenfassung": { "gesamtRaeume":0, "fliesenRaeume":0, "gesamtBodenflaeche_m2":0, "gesamtWandflaeche_m2":0 },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "alleRaeumeErfasst":true, "fehlendeDaten":[] }\n}\n\nAlle Maße in METERN (m) und QUADRATMETERN (m²)!',
 
-'04': 'Du bist ein Experte für Baustellenabrechnung.\nAnalysiere alle Stundennachweise und fasse zusammen.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "04_Stundennachweis",\n  "stundenZusammenfassung": { "gesamtStunden":0, "nachMitarbeiter":[], "nachWoche":[] },\n  "materialVerbrauch": { "gesamt":[] },\n  "rechnungsVorbereitung": { "stundenSumme":0, "materialListe":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "lueckenloseDokumentation":true, "fehlendeDaten":[] }\n}',
+        '04': 'Du bist ein Experte für Baustellenabrechnung.\nAnalysiere alle Stundennachweise und fasse zusammen.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "04_Stundennachweis",\n  "stundenZusammenfassung": { "gesamtStunden":0, "nachMitarbeiter":[], "nachWoche":[] },\n  "materialVerbrauch": { "gesamt":[] },\n  "rechnungsVorbereitung": { "stundenSumme":0, "materialListe":[] },\n  "warnhinweise": [],\n  "vollstaendigkeit": { "lueckenloseDokumentation":true, "fehlendeDaten":[] }\n}',
 
         '05': 'Du bist ein Experte für Baustellendokumentation.\nAnalysiere Schriftverkehr, Mails, Protokolle und Bauzeitenplan.\n\nANTWORTE NUR ALS JSON (kein Markdown, keine Backticks).\n\nJSON-STRUKTUR:\n{\n  "ordner": "05_Schriftverkehr",\n  "kontaktdaten": { "neuGefunden":[], "ergaenzungenZuBekannten":[] },\n  "protokolle": [{ "datum":"", "typ":"", "relevantePunkte":[] }],\n  "bauzeitenplan": { "vorhanden":false, "twRelevant":[] },\n  "vereinbarungen": [],\n  "warnhinweise": [],\n  "vollstaendigkeit": { "kontaktdatenKomplett":true, "fehlendeDaten":[] }\n}',
 
@@ -1849,30 +1849,6 @@
             return union === 0 ? 0 : intersection / union;
         },
 
-        // ── Automatische Modellwahl pro Ordner ──
-        getOptimalModel: function(ordnerNr, docCount) {
-            // Kritische Ordner → Pro-Modell für höchste Präzision
-            var kritischeOrdner = ['01', '02']; // Baustellenauswertung + LV/Angebote
-            var mittelOrdner = ['03', '05', '06']; // Zeichnungen, Schriftverkehr, Rechnungen
-            
-            if (kritischeOrdner.indexOf(ordnerNr) >= 0 || docCount > 10) {
-                // Pro für LV-Analyse und Baustellenauswertung — hier zählt Genauigkeit
-                var proModel = GEMINI_CONFIG.MODELS['pro'];
-                console.log('  🧠 Auto-Modell: ' + proModel.name + ' (kritischer Ordner ' + ordnerNr + ')');
-                return proModel.id;
-            } else if (mittelOrdner.indexOf(ordnerNr) >= 0) {
-                // Pro für mittelkritische Ordner
-                var proModel2 = GEMINI_CONFIG.MODELS['pro'];
-                console.log('  🧠 Auto-Modell: ' + proModel2.name + ' (mittel-kritisch ' + ordnerNr + ')');
-                return proModel2.id;
-            } else {
-                // Flash für einfache Ordner (Stunden, Material, Sonstiges)
-                var flashModel = GEMINI_CONFIG.MODELS['flash'];
-                console.log('  ⚡ Auto-Modell: ' + flashModel.name + ' (Standard-Ordner ' + ordnerNr + ')');
-                return flashModel.id;
-            }
-        },
-
         // ── Einzelnen Ordner analysieren ──
         analyzeOrdner: async function(kundenId, ordnerNr, dokumente, onProgress) {
             var prompt = ORDNER_PROMPTS[ordnerNr] || ORDNER_PROMPTS['99'];
@@ -1885,16 +1861,6 @@
             if (onProgress) onProgress('Analysiere ' + ordnerName + ' (' + dokumente.length + ' Dokumente)...');
 
             try {
-                // ═══ AUTO-MODELLWAHL: Optimales Modell je nach Ordner-Typ ═══
-                // Sicher innerhalb try/catch — Fallback auf User-Präferenz
-                var autoModel = null;
-                try {
-                    autoModel = this.getOptimalModel(ordnerNr, dokumente.length);
-                } catch(modelErr) {
-                    console.warn('⚠️ Auto-Modellwahl fehlgeschlagen, nutze User-Präferenz:', modelErr.message);
-                    autoModel = null; // callGeminiAPI nutzt dann die User-Präferenz
-                }
-
                 // Dokument-Texte sammeln
                 var allTexts = [];
                 var pdfBase64List = []; // Für gescannte PDFs → Vision-Fallback
@@ -2063,17 +2029,14 @@
                     }
                     visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' Dokumente VOLLSTÄNDIG!';
                     visionParts.push({ text: visionPrompt });
-                    // Token-Limit: Nur erhöhen wenn Pro-Modell aktiv (Flash hat max 8192)
-                    var maxTokens = (autoModel && autoModel.indexOf('pro') >= 0 && (ordnerNr === '02' || ordnerNr === '01')) ? 16000 : 8000;
-                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], maxTokens, { model: autoModel });
+                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 8000);
                 } else {
                     // ═══ TEXT-MODUS: Nur extrahierten Text senden ═══
                     var fullText = allTexts.join('\n\n');
-                    var maxTokens2 = (autoModel && autoModel.indexOf('pro') >= 0 && (ordnerNr === '02' || ordnerNr === '01')) ? 16000 : 8000;
-                    console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen, maxTokens:', maxTokens2, 'model:', autoModel || 'user-pref');
+                    console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen');
                     apiResult = await window.callGeminiAPI([
                         { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
-                    ], maxTokens2, { model: autoModel });
+                    ], 8000);
                 }
 
                 if (!apiResult) throw new Error('Keine KI-Antwort — API Key gesetzt?');
@@ -2206,8 +2169,6 @@
             console.log('🤖 ORDNERANALYSE GESTARTET');
             console.log('  Kunde:', kundeName);
             console.log('  Drive-Folder-ID:', driveFolderId);
-            console.log('  Modus:', config.mode || 'komplett');
-            if (config.selectedFolders) console.log('  Ausgewählte Ordner:', config.selectedFolders.join(', '));
             console.log('  Gemini API Key:', (localStorage.getItem('gemini_api_key') || '').substring(0, 8) + '...');
             console.log('═══════════════════════════════════════');
             if (onProgress) onProgress({ phase: 'start', message: 'Ordnerstruktur wird geladen...' });
@@ -2239,7 +2200,7 @@
                 });
 
                 // ═══ NEU: Root-Dateien auch analysieren ═══
-                if (contents.files && contents.files.length > 0 && (!config.mode || config.mode === 'komplett' || config.includeRootFiles)) {
+                if (contents.files && contents.files.length > 0) {
                     ordnerMap['00_root'] = { folder: { name: 'Root-Dateien' }, files: contents.files, customName: 'Dateien im Hauptordner' };
                     console.log('  📄 ' + contents.files.length + ' Root-Dateien werden auch analysiert');
                 }
@@ -2248,7 +2209,7 @@
                 if (config.mode === 'ordner' && config.selectedFolders && config.selectedFolders.length > 0) {
                     var filteredMap = {};
                     var selectedNames = config.selectedFolders;
-                    console.log('\n🔍 Einzelordner-Modus: Filtere auf', selectedNames.join(', '));
+                    console.log('🔍 Einzelordner-Modus: Filtere auf', selectedNames.join(', '));
                     for (var mapKey in ordnerMap) {
                         var folderName = ordnerMap[mapKey].folder ? ordnerMap[mapKey].folder.name : '';
                         var customName = ordnerMap[mapKey].customName || '';
@@ -2259,13 +2220,10 @@
                         });
                         if (isSelected) {
                             filteredMap[mapKey] = ordnerMap[mapKey];
-                            console.log('  ✅ Ordner \"' + folderName + '\" → wird analysiert');
-                        } else {
-                            console.log('  ⏭️ Ordner \"' + folderName + '\" → übersprungen (nicht ausgewählt)');
+                            console.log('  ✅ Ordner "' + folderName + '" → analysieren');
                         }
                     }
                     ordnerMap = filteredMap;
-                    console.log('📊 Nach Filter: ' + Object.keys(ordnerMap).length + ' Ordner für Analyse');
                 }
 
                 var mappedCount = Object.keys(ordnerMap).length;
@@ -2415,14 +2373,22 @@
                 // 01 + 02: Nachträge
                 if (e.nachtraege) nachtraege = nachtraege.concat(e.nachtraege);
 
-                // 03: Räume aus Zeichnungen — ABGESPECKT: nur Raumnummer + Bezeichnung + Geschoss
+                // 03: Räume aus Zeichnungen
                 if (e.geschosse) {
                     (e.geschosse || []).forEach(function(g) {
                         (g.raeume || []).forEach(function(r) {
                             if (r.fliesenRelevant !== false) {
                                 raeume.push({
                                     nr: r.raumNr || '', bez: r.raumBezeichnung || '',
-                                    geschoss: g.geschoss || r.geschoss || ''
+                                    geschoss: g.geschoss || r.geschoss || '',
+                                    raumhoehe: r.masse ? r.masse.hoehe_m || 0 : 0,
+                                    fliesenhoehe: r.masse ? r.masse.hoehe_m || 0 : 0,
+                                    waende: r.masse ? [
+                                        {id:'A', l: r.masse.laenge_m || ''},
+                                        {id:'B', l: r.masse.breite_m || ''},
+                                        {id:'C', l: r.masse.laenge_m || ''},
+                                        {id:'D', l: r.masse.breite_m || ''}
+                                    ] : [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}]
                                 });
                             }
                         });
@@ -2438,13 +2404,13 @@
                     });
                 }
 
-                // ═══ GENERISCH (99): Räume als flaches Array — ABGESPECKT ═══
+                // ═══ GENERISCH (99): Räume als flaches Array ═══
                 if (e.raeume && Array.isArray(e.raeume) && e.raeume.length > 0) {
                     e.raeume.forEach(function(r) {
                         if (typeof r === 'string') {
-                            raeume.push({ nr: '', bez: r, geschoss: '' });
+                            raeume.push({ nr: '', bez: r, geschoss: '', raumhoehe: 0, fliesenhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
                         } else if (r.raumBezeichnung || r.raumNr) {
-                            raeume.push({ nr: r.raumNr || '', bez: r.raumBezeichnung || '', geschoss: r.geschoss || '' });
+                            raeume.push({ nr: r.raumNr || '', bez: r.raumBezeichnung || '', geschoss: r.geschoss || '', raumhoehe: 0, fliesenhoehe: 0, waende: [{id:'A',l:''},{id:'B',l:''},{id:'C',l:''},{id:'D',l:''}] });
                         }
                     });
                 }
@@ -2474,31 +2440,16 @@
             }
 
             // ═══ INTELLIGENTE Duplikat-Erkennung ═══
-            // Regel: Positionen die in ALLEN Punkten gleich sind → entfernen
-            // ABER: Verschiedene Positionsnummern = verschiedene Positionen (auch bei gleichem Text)!
+            // Verschiedene PosNr = verschiedene Positionen (auch bei gleichem Text)
             var seenPos = {};
             positionen = positionen.filter(function(p) {
-                // Eindeutiger Schlüssel: PosNr + Einheit + Menge + gekürzte Leistung
                 var key = (p.pos || '').trim() + '|' + (p.einheit || '').trim() + '|' + String(p.menge || 0) + '|' + (p.bez || '').trim().substring(0, 80);
-                if (seenPos[key]) {
-                    console.log('  🔄 Duplikat entfernt:', p.pos, p.bez ? p.bez.substring(0, 40) : '');
-                    return false;
-                }
+                if (seenPos[key]) return false;
                 seenPos[key] = true;
                 return true;
             });
-            // Sortierung: exakt nach Positionsnummer (numerisch)
             positionen.sort(function(a, b) {
                 return (a.pos || '').localeCompare(b.pos || '', 'de', { numeric: true });
-            });
-
-            // ═══ Raum-Deduplizierung ═══
-            var seenRaum = {};
-            raeume = raeume.filter(function(r) {
-                var key = (r.nr || '').trim() + '|' + (r.bez || '').trim().toLowerCase() + '|' + (r.geschoss || '').trim().toLowerCase();
-                if (seenRaum[key]) return false;
-                seenRaum[key] = true;
-                return true;
             });
 
             return {
@@ -7492,7 +7443,7 @@
 
                     addLog(allFolders.length + ' Ordner mit ' + fileCount + ' Dateien gefunden', 'info');
 
-                    // OrdnerAnalyseEngine starten — config mit selectedFolders durchreichen!
+                    // OrdnerAnalyseEngine starten
                     var analyseResult = await window.OrdnerAnalyseEngine.analyzeKundeForApp(
                         kundeForAnalysis,
                         function(p) {
@@ -8150,20 +8101,17 @@
             // ── Übernahme: Pro Tab einzeln oder gesamt ──
             var handleUebernahme = function(tab) {
                 if (onUebernahme) {
-                    var data = {
+                    onUebernahme({
                         adressen: adressen,
                         positionen: positionen,
                         raeume: raeume,
                         endsumme: posEndsumme,
                         angebotssumme: angebotssumme,
                         uebernahmeTyp: tab || 'gesamt'
-                    };
-                    onUebernahme(data);
+                    });
                 }
             };
-
-            // Style für Tab-Übernahme-Button
-            var uebernahmeBtnStyle = { background:'linear-gradient(135deg, #27ae60, #2ecc71)', border:'none', color:'white', padding:'10px 24px', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', boxShadow:'0 2px 12px rgba(46,204,113,0.3)', display:'flex', alignItems:'center', gap:'8px', margin:'16px auto 0' };
+            var uebernahmeBtnStyle = { background:'linear-gradient(135deg, #27ae60, #2ecc71)', border:'none', color:'white', padding:'10px 24px', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', boxShadow:'0 2px 12px rgba(46,204,113,0.3)', display:'inline-flex', alignItems:'center', gap:'8px', margin:'16px auto 0' };
 
             // ── Editierbare Zelle ──
             var EditableCell = function(props) {
@@ -8251,10 +8199,6 @@
                             )
                         );
                     })
-                ,
-                    React.createElement('div', { style:{ textAlign:'center', marginTop:'16px', paddingBottom:'8px' } },
-                        React.createElement('button', { onClick:function(){handleUebernahme('adressen');}, style:uebernahmeBtnStyle }, '📤 Adressen übernehmen → Rechnung / Aufmaß / Stundenzettel')
-                    )
                 );
             };
 
@@ -8308,9 +8252,6 @@
                     ),
                     React.createElement('div', { style:{ marginTop:'12px', textAlign:'center' } },
                         React.createElement('button', { onClick:addPosition, style:Object.assign({},btnSmall,{padding:'8px 20px'}) }, '+ Position hinzufügen')
-                    ),
-                    React.createElement('div', { style:{ textAlign:'center', marginTop:'12px', paddingBottom:'8px' } },
-                        React.createElement('button', { onClick:function(){handleUebernahme('positionen');}, style:uebernahmeBtnStyle }, '📤 Positionen übernehmen → Rechnung / Aufmaß')
                     )
                 );
             };
@@ -8343,9 +8284,6 @@
                     React.createElement('div', { style:{ marginTop:'12px', display:'flex', justifyContent:'space-between', alignItems:'center' } },
                         React.createElement('span', { style:{ fontSize:'12px', opacity:0.5 } }, raeume.length + ' Räume erkannt'),
                         React.createElement('button', { onClick:addRaum, style:Object.assign({},btnSmall,{padding:'8px 20px'}) }, '+ Raum hinzufügen')
-                    ),
-                    React.createElement('div', { style:{ textAlign:'center', marginTop:'12px', paddingBottom:'8px' } },
-                        React.createElement('button', { onClick:function(){handleUebernahme('raeume');}, style:uebernahmeBtnStyle }, '📤 Räume übernehmen → Aufmaß / Stundenzettel')
                     )
                 );
             };
