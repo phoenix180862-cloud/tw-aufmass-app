@@ -1978,9 +1978,20 @@
                                 }
 
                                 if (!wordTextOk) {
-                                    // Methode 3: Word als Klartext-Fallback (Gemini unterstützt KEIN .docx als inline_data!)
-                                    console.log('  ⚠️', doc.name, '→ Text-Extraktion fehlgeschlagen. Word wird übersprungen (Gemini unterstützt kein .docx als inline_data)');
-                                    allTexts.push('--- Datei: ' + doc.name + ' (Word, nur Dateiname) ---\nDokument konnte nicht extrahiert werden.');
+                                    // Methode 3: Fallback — Word als Base64 an Gemini senden (Gemini kann docx nativ lesen)
+                                    console.log('  🔍', doc.name, '→ Text-Extraktion fehlgeschlagen, nutze Gemini-Vision für Word');
+                                    try {
+                                        var wordBase64 = await new Promise(function(resolve, reject) {
+                                            var reader = new FileReader();
+                                            reader.onload = function() { resolve(reader.result.split(',')[1]); };
+                                            reader.onerror = function() { reject(new Error('FileReader Fehler')); };
+                                            reader.readAsDataURL(wordBlob);
+                                        });
+                                        if (wordBase64 && wordBase64.length > 100 && pdfBase64List.length < 6) {
+                                            pdfBase64List.push({ name: doc.name, base64: wordBase64, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                                            console.log('  📸', doc.name, '→ Gemini-Inline (' + Math.round(wordBase64.length/1024) + ' KB)');
+                                        }
+                                    } catch(b64Err) { console.warn('  ❌ Word Base64:', doc.name, b64Err.message); }
                                 }
                             } catch(wordErr) { console.warn('  ⚠️ Word-Extraktion:', doc.name, wordErr.message); }
                         } else if (doc.text) {
@@ -2018,14 +2029,14 @@
                     }
                     visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' Dokumente VOLLSTÄNDIG!';
                     visionParts.push({ text: visionPrompt });
-                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 16000);
+                    apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], 8000);
                 } else {
                     // ═══ TEXT-MODUS: Nur extrahierten Text senden ═══
                     var fullText = allTexts.join('\n\n');
                     console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen');
                     apiResult = await window.callGeminiAPI([
                         { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
-                    ], 16000);
+                    ], 8000);
                 }
 
                 if (!apiResult) throw new Error('Keine KI-Antwort — API Key gesetzt?');
@@ -2033,52 +2044,12 @@
                 var cleaned = apiResult.replace(/```json|```/g, '').trim();
                 var parsed;
                 try { parsed = JSON.parse(cleaned); } catch(parseErr) {
-                    console.warn('⚠️ JSON-Parse fehlgeschlagen, versuche Reparatur...', cleaned.substring(0, 300));
-                    // Methode 1: JSON-Block extrahieren
+                    console.warn('⚠️ JSON-Parse fehlgeschlagen, versuche Extraktion...', cleaned.substring(0, 200));
                     var jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) {
-                        try { parsed = JSON.parse(jsonMatch[0]); }
-                        catch(e2) {
-                            // Methode 2: Abgeschnittene JSON reparieren — fehlende Klammern ergänzen
-                            console.warn('⚠️ JSON-Reparatur: Versuche abgeschnittene JSON zu schließen...');
-                            var repaired = jsonMatch[0];
-                            // Offene Strings schließen
-                            var lastQuote = repaired.lastIndexOf('"');
-                            if (lastQuote > 0) {
-                                var afterQuote = repaired.substring(lastQuote + 1);
-                                if (afterQuote.indexOf('"') < 0 && afterQuote.length < 50) {
-                                    repaired = repaired.substring(0, lastQuote + 1);
-                                }
-                            }
-                            // Fehlende Klammern zählen und ergänzen
-                            var openBraces = (repaired.match(/\{/g) || []).length;
-                            var closeBraces = (repaired.match(/\}/g) || []).length;
-                            var openBrackets = (repaired.match(/\[/g) || []).length;
-                            var closeBrackets = (repaired.match(/\]/g) || []).length;
-                            // Trailing comma/colon entfernen
-                            repaired = repaired.replace(/[,:\s]+$/, '');
-                            for (var bi = 0; bi < openBrackets - closeBrackets; bi++) repaired += ']';
-                            for (var ci = 0; ci < openBraces - closeBraces; ci++) repaired += '}';
-                            try {
-                                parsed = JSON.parse(repaired);
-                                console.log('✅ JSON erfolgreich repariert!');
-                            } catch(e3) {
-                                console.error('❌ JSON-Reparatur fehlgeschlagen:', e3.message);
-                                // Methode 3: Leeres Ergebnis mit Warnung
-                                parsed = { warnhinweise: ['JSON-Antwort der KI war unvollständig/abgeschnitten. Bitte erneut analysieren.'], _rawTruncated: true };
-                            }
-                        }
-                    } else {
-                        console.error('❌ Kein JSON-Block gefunden');
-                        parsed = { warnhinweise: ['KI-Antwort enthielt kein JSON.'], _rawError: true };
-                    }
+                    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+                    else throw new Error('KI-Antwort konnte nicht als JSON geparst werden');
                 }
-                console.log('✅ Ordner', ordnerNr, 'analysiert:', JSON.stringify(parsed).substring(0, 500) + '...');
-                console.log('  📊 DIAGNOSE Ordner', ordnerNr, '— Keys im Ergebnis:', Object.keys(parsed).join(', '));
-                if (parsed.lvPositionen) console.log('  📊 lvPositionen:', parsed.lvPositionen.length);
-                if (parsed.personen) console.log('  📊 personen:', JSON.stringify(parsed.personen).substring(0, 200));
-                if (parsed.geschosse) console.log('  📊 geschosse:', parsed.geschosse.length);
-                if (parsed.raeume) console.log('  📊 raeume:', parsed.raeume.length);
+                console.log('✅ Ordner', ordnerNr, 'analysiert:', JSON.stringify(parsed).substring(0, 200) + '...');
 
                 var result = {
                     status: 'completed',
@@ -2234,24 +2205,17 @@
                     console.log('  📄 ' + contents.files.length + ' Root-Dateien werden auch analysiert');
                 }
 
-                // ═══ EINZELORDNER-FILTER: Nur ausgewählte Ordner analysieren ═══
+                // ═══ EINZELORDNER-FILTER ═══
                 if (config.mode === 'ordner' && config.selectedFolders && config.selectedFolders.length > 0) {
                     var filteredMap = {};
-                    var selectedNames = config.selectedFolders;
-                    console.log('🔍 Einzelordner-Modus: Filtere auf', selectedNames.join(', '));
-                    for (var mapKey in ordnerMap) {
-                        var folderName = ordnerMap[mapKey].folder ? ordnerMap[mapKey].folder.name : '';
-                        var customName = ordnerMap[mapKey].customName || '';
-                        var isSelected = selectedNames.some(function(sel) {
-                            return sel === folderName || sel === customName ||
-                                   folderName.toLowerCase().indexOf(sel.toLowerCase()) >= 0 ||
-                                   sel.toLowerCase().indexOf(folderName.toLowerCase()) >= 0;
-                        });
-                        if (isSelected) {
-                            filteredMap[mapKey] = ordnerMap[mapKey];
-                            console.log('  ✅ Ordner "' + folderName + '" → analysieren');
+                    config.selectedFolders.forEach(function(sel) {
+                        for (var k in ordnerMap) {
+                            var fn = ordnerMap[k].folder ? ordnerMap[k].folder.name : '';
+                            if (fn === sel || fn.toLowerCase().indexOf(sel.toLowerCase()) >= 0 || sel.toLowerCase().indexOf(fn.toLowerCase()) >= 0) {
+                                filteredMap[k] = ordnerMap[k];
+                            }
                         }
-                    }
+                    });
                     ordnerMap = filteredMap;
                 }
 
@@ -2468,27 +2432,13 @@
                 }
             }
 
-            // ═══ INTELLIGENTE Duplikat-Erkennung ═══
-            // Verschiedene PosNr = verschiedene Positionen (auch bei gleichem Text)
+            // Duplikate bei Positionen entfernen (gleiche posNr)
             var seenPos = {};
             positionen = positionen.filter(function(p) {
-                var key = (p.pos || '').trim() + '|' + (p.einheit || '').trim() + '|' + String(p.menge || 0) + '|' + (p.bez || '').trim().substring(0, 80);
-                if (seenPos[key]) return false;
-                seenPos[key] = true;
+                if (!p.pos || seenPos[p.pos]) return false;
+                seenPos[p.pos] = true;
                 return true;
             });
-            positionen.sort(function(a, b) {
-                return (a.pos || '').localeCompare(b.pos || '', 'de', { numeric: true });
-            });
-
-            console.log('═══ CONSOLIDATE ERGEBNIS ═══');
-            console.log('  Positionen:', positionen.length);
-            console.log('  Kundendaten:', JSON.stringify(kundendaten).substring(0, 300));
-            console.log('  Räume:', raeume.length);
-            console.log('  Nachträge:', nachtraege.length);
-            console.log('  Quellen:', quellenInfo.length);
-            if (positionen.length > 0) console.log('  Erste Position:', JSON.stringify(positionen[0]));
-            if (raeume.length > 0) console.log('  Erster Raum:', JSON.stringify(raeume[0]));
 
             return {
                 positionen: positionen,
@@ -7547,16 +7497,6 @@
                         meta: analyseResult.meta || null
                     };
 
-                    console.log('═══ ANALYSE-SEITE ERGEBNIS ═══');
-                    console.log('  Positionen:', (result.positionen || []).length);
-                    console.log('  Kundendaten:', JSON.stringify(result.kundendaten || {}).substring(0, 300));
-                    console.log('  Räume:', (result.raeume || []).length);
-                    console.log('  OrdnerAnalysen Keys:', Object.keys(result._ordnerAnalysen || {}).join(', '));
-                    for (var oaKey in (result._ordnerAnalysen || {})) {
-                        var oa = result._ordnerAnalysen[oaKey];
-                        console.log('  Ordner', oaKey, '→ Status:', oa.status, ', Docs:', oa.dokumenteAnalysiert, ', Ergebnis-Keys:', Object.keys(oa.ergebnis || {}).join(', '));
-                    }
-
                     setAnalyseResult(result);
 
                 } catch(err) {
@@ -7837,15 +7777,6 @@
 
             // ── Daten aus Analyse-Ergebnis parsen ──
             useEffect(function() {
-                console.log('═══ ERGEBNIS-SEITE: analyseResult erhalten ═══');
-                console.log('  analyseResult vorhanden:', !!analyseResult);
-                if (analyseResult) {
-                    console.log('  Keys:', Object.keys(analyseResult).join(', '));
-                    console.log('  positionen:', (analyseResult.positionen || []).length);
-                    console.log('  kundendaten:', JSON.stringify(analyseResult.kundendaten || {}).substring(0, 200));
-                    console.log('  raeume:', (analyseResult.raeume || []).length);
-                    console.log('  _ordnerAnalysen:', Object.keys(analyseResult._ordnerAnalysen || {}).join(', '));
-                }
                 if (!analyseResult) return;
                 // Adressen parsen
                 var kd = analyseResult.kundendaten || {};
@@ -8155,20 +8086,18 @@
                 setSavingPdf(false);
             };
 
-            // ── Übernahme: Pro Tab einzeln oder gesamt ──
-            var handleUebernahme = function(tab) {
+            // ── Übernahme ──
+            var handleUebernahme = function() {
                 if (onUebernahme) {
                     onUebernahme({
                         adressen: adressen,
                         positionen: positionen,
                         raeume: raeume,
                         endsumme: posEndsumme,
-                        angebotssumme: angebotssumme,
-                        uebernahmeTyp: tab || 'gesamt'
+                        angebotssumme: angebotssumme
                     });
                 }
             };
-            var uebernahmeBtnStyle = { background:'linear-gradient(135deg, #27ae60, #2ecc71)', border:'none', color:'white', padding:'10px 24px', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', boxShadow:'0 2px 12px rgba(46,204,113,0.3)', display:'inline-flex', alignItems:'center', gap:'8px', margin:'16px auto 0' };
 
             // ── Editierbare Zelle ──
             var EditableCell = function(props) {
@@ -8378,7 +8307,7 @@
                 React.createElement('div', { style:{ position:'sticky', bottom:0, padding:'12px 20px', background:'linear-gradient(transparent, var(--bg-primary) 20%)', borderTop:'1px solid rgba(255,255,255,0.06)', display:'flex', gap:'10px', justifyContent:'center', flexWrap:'wrap' } },
                     React.createElement('button', { onClick:onBack, style:{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', color:'#e0e6ff', padding:'10px 20px', borderRadius:'10px', fontSize:'13px', fontWeight:'600', cursor:'pointer' } }, '← Zurück'),
                     React.createElement('button', { onClick:savePdfToDrive, disabled:savingPdf, style:{ background:'linear-gradient(135deg, #2c3e50, #34495e)', border:'none', color:'white', padding:'10px 20px', borderRadius:'10px', fontSize:'13px', fontWeight:'600', cursor:'pointer', opacity:savingPdf?0.6:1 } }, savingPdf ? '⏳ Speichert...' : '💾 PDFs in Drive speichern'),
-                    React.createElement('button', { onClick:function(){handleUebernahme('gesamt');}, style:{ background:'linear-gradient(135deg, #27ae60, #2ecc71)', border:'none', color:'white', padding:'10px 24px', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 2px 12px rgba(46,204,113,0.3)' } }, '📤 Alles übernehmen → Module'),
+                    React.createElement('button', { onClick:handleUebernahme, style:{ background:'linear-gradient(135deg, #27ae60, #2ecc71)', border:'none', color:'white', padding:'10px 24px', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', boxShadow:'0 2px 12px rgba(46,204,113,0.3)' } }, '📤 Übernahme zur weiteren Bearbeitung'),
                     saveMsg ? React.createElement('div', { style:{ width:'100%', textAlign:'center', fontSize:'12px', padding:'6px', color: saveMsg.indexOf('✅')>=0?'#2ecc71': saveMsg.indexOf('❌')>=0?'#e74c3c':'#f39c12' } }, saveMsg) : null
                 )
             );
@@ -19896,12 +19825,6 @@
                             kunde={selectedKunde}
                             analyseConfig={analyseConfig}
                             onAnalyseComplete={function(result) {
-                                console.log('═══ onAnalyseComplete CALLBACK ═══');
-                                console.log('  result:', !!result);
-                                console.log('  positionen:', (result.positionen || []).length);
-                                console.log('  kundendaten:', JSON.stringify(result.kundendaten || {}).substring(0, 200));
-                                console.log('  raeume:', (result.raeume || []).length);
-                                console.log('  _ordnerAnalysen:', Object.keys(result._ordnerAnalysen || {}).join(', '));
                                 console.log('✅ KI-Analyse abgeschlossen auf separater Seite:', (result.positionen || []).length, 'Positionen');
 
                                 // Ergebnis verarbeiten (gleiche Logik wie handleLoadAkteWithConfig)
