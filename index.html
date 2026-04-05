@@ -2161,10 +2161,9 @@
         },
 
         // ── Hauptfunktion: Alle 8 Ordner analysieren ──
-        analyzeKunde: async function(kundenId, kundeName, driveFolderId, onProgress, config) {
+        analyzeKunde: async function(kundenId, kundeName, driveFolderId, onProgress) {
             var self = this;
             var startTime = Date.now();
-            config = config || {};
             console.log('═══════════════════════════════════════');
             console.log('🤖 ORDNERANALYSE GESTARTET');
             console.log('  Kunde:', kundeName);
@@ -2203,20 +2202,6 @@
                 if (contents.files && contents.files.length > 0) {
                     ordnerMap['00_root'] = { folder: { name: 'Root-Dateien' }, files: contents.files, customName: 'Dateien im Hauptordner' };
                     console.log('  📄 ' + contents.files.length + ' Root-Dateien werden auch analysiert');
-                }
-
-                // ═══ EINZELORDNER-FILTER ═══
-                if (config.mode === 'ordner' && config.selectedFolders && config.selectedFolders.length > 0) {
-                    var filteredMap = {};
-                    config.selectedFolders.forEach(function(sel) {
-                        for (var k in ordnerMap) {
-                            var fn = ordnerMap[k].folder ? ordnerMap[k].folder.name : '';
-                            if (fn === sel || fn.toLowerCase().indexOf(sel.toLowerCase()) >= 0 || sel.toLowerCase().indexOf(fn.toLowerCase()) >= 0) {
-                                filteredMap[k] = ordnerMap[k];
-                            }
-                        }
-                    });
-                    ordnerMap = filteredMap;
                 }
 
                 var mappedCount = Object.keys(ordnerMap).length;
@@ -2453,14 +2438,14 @@
         },
 
         // ── Haupt-Wrapper: Analyse + Konsolidierung für die App ──
-        analyzeKundeForApp: async function(kunde, onProgress, config) {
+        analyzeKundeForApp: async function(kunde, onProgress) {
             var kundenId = kunde._driveFolderId || kunde.id || kunde.name;
             var kundeName = kunde.name || kunde.auftraggeber || 'Unbekannt';
             var driveFolderId = kunde._driveFolderId;
 
             if (!driveFolderId) throw new Error('Kein Google Drive Ordner verknüpft');
 
-            var analyseResult = await this.analyzeKunde(kundenId, kundeName, driveFolderId, onProgress, config);
+            var analyseResult = await this.analyzeKunde(kundenId, kundeName, driveFolderId, onProgress);
             var consolidated = this.consolidateResults(analyseResult.analyseErgebnisse);
             consolidated.crossRef = analyseResult.crossRef;
             consolidated.meta = analyseResult.meta;
@@ -7469,8 +7454,7 @@
                                     addLog(msg, 'info');
                                 }
                             }
-                        },
-                        config
+                        }
                     );
 
                     if (window._analyseAbbrechen) {
@@ -19421,8 +19405,7 @@
                             function(p) {
                                 if (p && p.message) setLoadProgress('🤖 ' + p.message);
                                 else if (typeof p === 'string') setLoadProgress('🤖 ' + p);
-                            },
-                            config
+                            }
                         );
                         setOrdnerAnalyseMeta(analyseResult.meta || null);
 
