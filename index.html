@@ -1881,13 +1881,20 @@
             var startTime = Date.now();
             var ordnerCfg = ORDNER_ANALYSE_CONFIG.ORDNER[ordnerNr] || ORDNER_ANALYSE_CONFIG.ORDNER['99'] || { name: 'Ordner ' + ordnerNr };
             var ordnerName = ordnerCfg.name;
-            
-            // ═══ AUTO-MODELLWAHL: Optimales Modell je nach Ordner-Typ ═══
-            var autoModel = this.getOptimalModel(ordnerNr, dokumente.length);
             console.log('📂 analyzeOrdner', ordnerNr, ordnerName, '— Dokumente:', dokumente.length, dokumente.map(function(d){return d.name + '(' + d.type + ')';}).join(', '));
             if (onProgress) onProgress('Analysiere ' + ordnerName + ' (' + dokumente.length + ' Dokumente)...');
 
             try {
+                // ═══ AUTO-MODELLWAHL: Optimales Modell je nach Ordner-Typ ═══
+                // Sicher innerhalb try/catch — Fallback auf User-Präferenz
+                var autoModel = null;
+                try {
+                    autoModel = this.getOptimalModel(ordnerNr, dokumente.length);
+                } catch(modelErr) {
+                    console.warn('⚠️ Auto-Modellwahl fehlgeschlagen, nutze User-Präferenz:', modelErr.message);
+                    autoModel = null; // callGeminiAPI nutzt dann die User-Präferenz
+                }
+
                 // Dokument-Texte sammeln
                 var allTexts = [];
                 var pdfBase64List = []; // Für gescannte PDFs → Vision-Fallback
@@ -2056,14 +2063,14 @@
                     }
                     visionPrompt += '\n\nAnalysiere die ' + pdfBase64List.length + ' Dokumente VOLLSTÄNDIG!';
                     visionParts.push({ text: visionPrompt });
-                    // Dynamische Token-Limits: Ordner 02 (LV) braucht mehr für 200+ Positionen
-                    var maxTokens = (ordnerNr === '02' || ordnerNr === '01') ? 16000 : 8000;
+                    // Token-Limit: Nur erhöhen wenn Pro-Modell aktiv (Flash hat max 8192)
+                    var maxTokens = (autoModel && autoModel.indexOf('pro') >= 0 && (ordnerNr === '02' || ordnerNr === '01')) ? 16000 : 8000;
                     apiResult = await window.callGeminiAPI([{ role: 'user', parts: visionParts }], maxTokens, { model: autoModel });
                 } else {
                     // ═══ TEXT-MODUS: Nur extrahierten Text senden ═══
                     var fullText = allTexts.join('\n\n');
-                    var maxTokens2 = (ordnerNr === '02' || ordnerNr === '01') ? 16000 : 8000;
-                    console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen, maxTokens:', maxTokens2);
+                    var maxTokens2 = (autoModel && autoModel.indexOf('pro') >= 0 && (ordnerNr === '02' || ordnerNr === '01')) ? 16000 : 8000;
+                    console.log('🤖 Text-Modus:', allTexts.length, 'Texte,', fullText.length, 'Zeichen, maxTokens:', maxTokens2, 'model:', autoModel || 'user-pref');
                     apiResult = await window.callGeminiAPI([
                         { role: 'user', parts: [{ text: prompt + '\n\n--- DOKUMENTE ---\n\n' + fullText }] }
                     ], maxTokens2, { model: autoModel });
